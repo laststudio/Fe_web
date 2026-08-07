@@ -1,5 +1,9 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { flushSync } from 'react-dom'
 import './App.css'
+import { ApiError, createCaptcha, getCurrentUser, login, register, type AuthSession, type CaptchaChallenge } from './api/auth'
+import AdminPage from './admin/AdminPage'
+import { clearAuthSession, readAuthSession, saveAuthSession } from './utils/auth-session'
 
 type IconProps = {
   name: string
@@ -7,8 +11,15 @@ type IconProps = {
   filled?: boolean
 }
 
-type Page = 'current' | 'history' | 'settings'
+type Page = 'current' | 'history' | 'settings' | 'admin'
 type Status = 'parsed' | 'parsing' | 'unread'
+type TransitionKind = 'page' | 'auth-mode' | 'shell'
+type ViewTransition = {
+  finished: Promise<void>
+}
+type ViewTransitionDocument = Document & {
+  startViewTransition?: (update: () => void) => ViewTransition
+}
 
 type Assignment = {
   title: string
@@ -50,22 +61,47 @@ const groups: { label: string; items: Assignment[] }[] = [
   },
 ]
 
-const navItems: { icon: string; label: string; page: Page }[] = [
+const baseNavItems: { icon: string; label: string; page: Page }[] = [
   { icon: 'assignment', label: '当前作业', page: 'current' },
   { icon: 'history', label: '历史作业', page: 'history' },
   { icon: 'settings', label: '设置', page: 'settings' },
 ]
+const adminNavItem: { icon: string; label: string; page: Page } = { icon: 'admin_panel_settings', label: '后台管理', page: 'admin' }
 
 const answerSteps = ['2x + 5 = 15', '2x = 15 - 5', '2x = 10', 'x = 10 / 2', 'x = 5']
 const logoSrc = '/fe_logo.png'
 const assignmentPanelStorageKey = 'fe-web.assignment-panel-open'
+const usernamePattern = /^[a-zA-Z0-9_]+$/
+
+function runPageTransition(update: () => void, kind: TransitionKind = 'page') {
+  const transitionDocument = document as ViewTransitionDocument
+
+  if (!transitionDocument.startViewTransition || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    update()
+    return
+  }
+
+  document.documentElement.dataset.viewTransition = kind
+  const transition = transitionDocument.startViewTransition(() => {
+    flushSync(update)
+  })
+  void transition.finished.finally(() => {
+    delete document.documentElement.dataset.viewTransition
+  })
+}
 
 function readStoredAssignmentPanelState() {
   if (typeof window === 'undefined') {
     return true
   }
 
-  return window.localStorage.getItem(assignmentPanelStorageKey) !== 'false'
+  const storedState = window.localStorage.getItem(assignmentPanelStorageKey)
+
+  if (storedState !== null) {
+    return storedState !== 'false'
+  }
+
+  return !window.matchMedia('(max-width: 760px)').matches
 }
 
 function Icon({ name, className = '', filled = false }: IconProps) {
@@ -127,6 +163,8 @@ function AssignmentPanel({
   isOpen,
   activePage,
   isLoggedIn,
+  username,
+  showAdmin,
   menuOnly = false,
   onClose,
   onLogin,
@@ -137,6 +175,8 @@ function AssignmentPanel({
   isOpen: boolean
   activePage: Page
   isLoggedIn: boolean
+  username?: string
+  showAdmin: boolean
   menuOnly?: boolean
   onClose: () => void
   onLogin: () => void
@@ -144,6 +184,8 @@ function AssignmentPanel({
   onNavigate: (page: Page) => void
   onToggle: () => void
 }) {
+  const navigationItems = showAdmin ? [...baseNavItems, adminNavItem] : baseNavItems
+
   return (
     <>
       <section
@@ -153,7 +195,10 @@ function AssignmentPanel({
         aria-label="作业列表"
       >
         <div className="assignment-panel__head">
-          <strong>作业列表</strong>
+          <span className="assignment-panel__title">
+            <strong>作业索引</strong>
+            <small>3 份作业</small>
+          </span>
           <button className="icon-button assignment-collapse" type="button" onClick={onToggle} aria-label="折叠作业列表">
             <Icon name="keyboard_double_arrow_left" />
           </button>
@@ -164,7 +209,7 @@ function AssignmentPanel({
 
         <div className="mobile-drawer-menu">
           <nav className="mobile-drawer-menu__nav" aria-label="移动端主导航">
-            {navItems.map((item) => (
+            {navigationItems.map((item) => (
               <button
                 className={`side-link ${activePage === item.page ? 'side-link--active' : ''}`}
                 type="button"
@@ -181,7 +226,7 @@ function AssignmentPanel({
               <>
                 <div className="login-state" role="status">
                   <Icon name="check_circle" filled />
-                  登录成功
+                  {username || '登录成功'}
                 </div>
                 <button className="side-logout-button" type="button" onClick={onLogout}>
                   <Icon name="logout" />
@@ -252,9 +297,20 @@ function CurrentAssignmentPage({ onOpenAssignments }: { onOpenAssignments: () =>
       </div>
 
       <article className="answer-paper">
-        <h1>数学周测 #4</h1>
+        <header className="answer-paper__head">
+          <span className="paper-kicker">已解析 · 20 题</span>
+          <h1>数学周测 #4</h1>
+          <div className="paper-meta">
+            <span>提交于 10 分钟前</span>
+            <span>八年级数学</span>
+          </div>
+        </header>
         <section className="question-block">
-          <h2>问题 1：求解 2x + 5 = 15 中的 x</h2>
+          <div className="question-heading">
+            <span className="question-number">01</span>
+            <h2>求解 2x + 5 = 15 中的 x</h2>
+            <span className="score-mark" aria-label="本题得分 5 分">5 / 5</span>
+          </div>
           <div className="options">
             {['A. 3', 'B. 5', 'C. 10', 'D. 15'].map((option) => (
               <label className={`option ${option === 'B. 5' ? 'option--selected' : ''}`} key={option}>
@@ -276,6 +332,10 @@ function CurrentAssignmentPage({ onOpenAssignments }: { onOpenAssignments: () =>
               </pre>
               <p>因此，正确的选项是 B。</p>
             </div>
+          </div>
+          <div className="review-stamp" aria-hidden="true">
+            <Icon name="done_all" />
+            <span>已核对</span>
           </div>
         </section>
       </article>
@@ -340,10 +400,422 @@ function SettingsPage({ onOpenAssignments }: { onOpenAssignments: () => void }) 
   )
 }
 
+function LoginPage({ canReturnToWorkspace, onBack, onAuthenticated }: {
+  canReturnToWorkspace: boolean
+  onBack: () => void
+  onAuthenticated: (session: AuthSession, remember: boolean) => void
+}) {
+  const [mode, setMode] = useState<'login' | 'register'>(() => window.location.hash === '#register' ? 'register' : 'login')
+  const [account, setAccount] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [rememberLogin, setRememberLogin] = useState(true)
+  const [error, setError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [captcha, setCaptcha] = useState<CaptchaChallenge | null>(null)
+  const [captchaAnswer, setCaptchaAnswer] = useState('')
+  const [captchaPurpose, setCaptchaPurpose] = useState<'login' | 'register' | null>(null)
+  const [loginCaptchaRequired, setLoginCaptchaRequired] = useState(false)
+  const [isCaptchaLoading, setIsCaptchaLoading] = useState(false)
+
+  const loadCaptcha = useCallback(async (purpose: 'login' | 'register') => {
+    setIsCaptchaLoading(true)
+    setCaptchaPurpose(purpose)
+    setCaptchaAnswer('')
+    try {
+      const nextCaptcha = await createCaptcha(purpose)
+      setCaptcha(nextCaptcha)
+    } catch (caughtError) {
+      setCaptcha(null)
+      setError(caughtError instanceof ApiError ? caughtError.message : '验证码加载失败，请稍后重试')
+    } finally {
+      setIsCaptchaLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    const requiredPurpose = mode === 'register' ? 'register' : loginCaptchaRequired ? 'login' : null
+    if (requiredPurpose && captchaPurpose !== requiredPurpose && !isCaptchaLoading) {
+      void loadCaptcha(requiredPurpose)
+    }
+  }, [mode, loginCaptchaRequired, captchaPurpose, isCaptchaLoading, loadCaptcha])
+
+  useEffect(() => {
+    function syncModeWithHash() {
+      setMode(window.location.hash === '#register' ? 'register' : 'login')
+    }
+
+    window.addEventListener('hashchange', syncModeWithHash)
+    return () => window.removeEventListener('hashchange', syncModeWithHash)
+  }, [])
+
+  function changeMode(nextMode: 'login' | 'register') {
+    if (nextMode === mode) {
+      return
+    }
+
+    runPageTransition(() => {
+      setMode(nextMode)
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${nextMode}`)
+      setPassword('')
+      setConfirmPassword('')
+      setShowPassword(false)
+      setCaptcha(null)
+      setCaptchaAnswer('')
+      setCaptchaPurpose(null)
+      setError('')
+    }, 'auth-mode')
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    const username = account.trim()
+
+    if (!username || !password) {
+      setError('请输入账号和密码')
+      return
+    }
+
+    if (mode === 'register') {
+      if (username.length < 3 || username.length > 50 || !usernamePattern.test(username)) {
+        setError('用户名需要为 3 至 50 位字母、数字或下划线')
+        return
+      }
+      if (password.length < 10 || password.length > 72) {
+        setError('密码长度需要为 10 至 72 位')
+        return
+      }
+      if (password !== confirmPassword) {
+        setError('两次输入的密码不一致')
+        return
+      }
+    }
+
+    const requiredCaptchaPurpose = mode === 'register' ? 'register' : loginCaptchaRequired ? 'login' : null
+    if (requiredCaptchaPurpose && (!captcha || captchaPurpose !== requiredCaptchaPurpose || captchaAnswer.trim().length !== 5)) {
+      setError('请输入 5 位验证码')
+      return
+    }
+    if (captcha && Date.parse(captcha.expiresAt) <= Date.now()) {
+      setError('验证码已过期，请输入新验证码')
+      await loadCaptcha(requiredCaptchaPurpose || mode)
+      return
+    }
+
+    setError('')
+    setIsSubmitting(true)
+
+    try {
+      if (mode === 'register') {
+        await register(username, password, confirmPassword, {
+          id: captcha!.captchaId,
+          answer: captchaAnswer.trim(),
+        })
+      }
+      const session = await login(
+        username,
+        password,
+        loginCaptchaRequired && captcha ? { id: captcha.captchaId, answer: captchaAnswer.trim() } : undefined,
+      )
+      onAuthenticated(session, rememberLogin)
+    } catch (caughtError) {
+      if (caughtError instanceof ApiError) {
+        setError(caughtError.message)
+        if (mode === 'login' && (caughtError.captchaRequired || caughtError.message.includes('验证码'))) {
+          setLoginCaptchaRequired(true)
+          await loadCaptcha('login')
+        } else if (mode === 'register' || loginCaptchaRequired) {
+          await loadCaptcha(mode === 'register' ? 'register' : 'login')
+        }
+      } else {
+        setError('认证失败，请稍后重试')
+      }
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <main className="login-page">
+      <section className="login-context" aria-label="账号说明">
+        {canReturnToWorkspace && (
+          <button className="login-back" type="button" onClick={onBack}>
+            <Icon name="arrow_back" />
+            返回工作台
+          </button>
+        )}
+
+        <div className="login-brand">
+          <img src={logoSrc} alt="" aria-hidden="true" />
+          <span>
+            <strong>Fuck ets100</strong>
+            <small>答案工作台</small>
+          </span>
+        </div>
+
+        <div className="login-context__copy">
+          <span className="login-context__index">{mode === 'login' ? 'STUDENT ACCESS / 01' : 'CREATE ACCOUNT / 02'}</span>
+          <h1>把作业答案，<br />整理成能读懂的批注。</h1>
+          <p>同步作业、查看解析，并在同一处完成答案核对。</p>
+        </div>
+
+        <div className="login-proof" aria-label="工作台状态">
+          <span>
+            <strong>20</strong>
+            <small>本周解析</small>
+          </span>
+          <span>
+            <strong>JWT</strong>
+            <small>会话校验</small>
+          </span>
+          <span>
+            <strong>LIVE</strong>
+            <small>云端同步</small>
+          </span>
+        </div>
+      </section>
+
+      <section className="login-entry" aria-label={mode === 'login' ? '账号登录' : '账号注册'}>
+        <div className="login-form-wrap">
+          <div className="auth-mode-switch" aria-label="选择账号操作">
+            <button className={mode === 'login' ? 'auth-mode-switch__active' : ''} type="button" onClick={() => changeMode('login')}>
+              登录
+            </button>
+            <button className={mode === 'register' ? 'auth-mode-switch__active' : ''} type="button" onClick={() => changeMode('register')}>
+              注册
+            </button>
+          </div>
+
+          <header className="login-form-head">
+            <span className="login-form-head__mark">{mode === 'login' ? '账号验证' : '创建账号'}</span>
+            <h2>{mode === 'login' ? '登录工作台' : '注册工作台'}</h2>
+            <p>{mode === 'login' ? '使用你的账号继续。' : '创建账号后将自动登录工作台。'}</p>
+          </header>
+
+          <form className="login-form" onSubmit={handleSubmit} noValidate>
+            <label className="login-field">
+              <span>账号</span>
+              <span className="login-field__control">
+                <Icon name="person" />
+                <input
+                  autoComplete="username"
+                  inputMode="text"
+                  placeholder="输入用户名"
+                  value={account}
+                  disabled={isSubmitting}
+                  onChange={(event) => {
+                    setAccount(event.target.value)
+                    setError('')
+                  }}
+                />
+              </span>
+            </label>
+
+            <label className="login-field">
+              <span>密码</span>
+              <span className="login-field__control">
+                <Icon name="lock" />
+                <input
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                  placeholder={mode === 'login' ? '输入登录密码' : '10 至 72 位密码'}
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  disabled={isSubmitting}
+                  onChange={(event) => {
+                    setPassword(event.target.value)
+                    setError('')
+                  }}
+                />
+                <button
+                  className="password-toggle"
+                  type="button"
+                  onClick={() => setShowPassword((current) => !current)}
+                  aria-label={showPassword ? '隐藏密码' : '显示密码'}
+                  disabled={isSubmitting}
+                >
+                  <Icon name={showPassword ? 'visibility_off' : 'visibility'} />
+                </button>
+              </span>
+            </label>
+
+            {mode === 'register' && (
+              <label className="login-field auth-field-enter">
+                <span>确认密码</span>
+                <span className="login-field__control">
+                  <Icon name="lock_reset" />
+                  <input
+                    autoComplete="new-password"
+                    placeholder="再次输入密码"
+                    type={showPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    disabled={isSubmitting}
+                    onChange={(event) => {
+                      setConfirmPassword(event.target.value)
+                      setError('')
+                    }}
+                  />
+                </span>
+              </label>
+            )}
+
+            {(mode === 'register' || loginCaptchaRequired) && (
+              <label className="login-field auth-field-enter">
+                <span>验证码</span>
+                <span className="captcha-control">
+                  <span className="login-field__control captcha-input">
+                    <Icon name="verified_user" />
+                    <input
+                      autoComplete="off"
+                      inputMode="text"
+                      maxLength={5}
+                      placeholder="5 位字符"
+                      value={captchaAnswer}
+                      disabled={isSubmitting || isCaptchaLoading}
+                      onChange={(event) => {
+                        setCaptchaAnswer(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5))
+                        setError('')
+                      }}
+                    />
+                  </span>
+                  <button
+                    className="captcha-image"
+                    type="button"
+                    onClick={() => void loadCaptcha(mode === 'register' ? 'register' : 'login')}
+                    disabled={isSubmitting || isCaptchaLoading}
+                    aria-label="刷新验证码"
+                    title="点击刷新验证码"
+                  >
+                    {captcha && !isCaptchaLoading ? (
+                      <img src={captcha.imageUrl} alt="验证码" />
+                    ) : (
+                      <Icon name="refresh" className={isCaptchaLoading ? 'auth-submit-spin' : ''} />
+                    )}
+                  </button>
+                </span>
+              </label>
+            )}
+
+            <div className="login-options">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={rememberLogin}
+                  onChange={(event) => setRememberLogin(event.target.checked)}
+                  disabled={isSubmitting}
+                />
+                <span>记住登录状态</span>
+              </label>
+              {mode === 'login' ? (
+                <button type="button" onClick={() => setError('请联系老师或管理员重置密码')}>忘记密码</button>
+              ) : (
+                <small>用户名仅支持字母、数字和下划线</small>
+              )}
+            </div>
+
+            <div className={`login-error ${error ? 'login-error--visible' : ''}`} role="alert">
+              {error || '账号验证信息完整'}
+            </div>
+
+            <button className="login-submit" type="submit" disabled={isSubmitting}>
+              {isSubmitting ? (
+                <>
+                  {mode === 'login' ? '正在登录' : '正在注册'}
+                  <Icon name="progress_activity" className="auth-submit-spin" />
+                </>
+              ) : (
+                <>
+                  {mode === 'login' ? '登录' : '注册并登录'}
+                  <Icon name="arrow_forward" />
+                </>
+              )}
+            </button>
+          </form>
+
+          <footer className="login-form-foot">
+            <Icon name="shield_lock" />
+            登录信息仅用于连接作业服务
+          </footer>
+        </div>
+      </section>
+    </main>
+  )
+}
+
 function App() {
   const [activePage, setActivePage] = useState<Page>('current')
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [authSession, setAuthSession] = useState<AuthSession | null>(readAuthSession)
   const [isAssignmentPanelOpen, setIsAssignmentPanelOpen] = useState(readStoredAssignmentPanelState)
+  const [isLoginPageOpen, setIsLoginPageOpen] = useState(() => ['#login', '#register'].includes(window.location.hash))
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false)
+
+  useEffect(() => {
+    function syncLoginPageWithHash() {
+      if (!authSession) {
+        if (!['#login', '#register'].includes(window.location.hash)) {
+          window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#login`)
+        }
+        setIsLoginPageOpen(true)
+        return
+      }
+
+      setIsLoginPageOpen(['#login', '#register'].includes(window.location.hash))
+    }
+
+    syncLoginPageWithHash()
+    window.addEventListener('hashchange', syncLoginPageWithHash)
+    return () => window.removeEventListener('hashchange', syncLoginPageWithHash)
+  }, [authSession])
+
+  useEffect(() => {
+    if (!isLogoutConfirmOpen) {
+      return
+    }
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setIsLogoutConfirmOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [isLogoutConfirmOpen])
+
+  useEffect(() => {
+    const accessToken = authSession?.accessToken
+
+    if (!accessToken) {
+      return
+    }
+
+    let isCurrent = true
+
+    getCurrentUser(accessToken)
+      .then((user) => {
+        if (!isCurrent) {
+          return
+        }
+        setAuthSession((currentSession) => currentSession ? { ...currentSession, user } : null)
+      })
+      .catch((caughtError) => {
+        if (!isCurrent || !(caughtError instanceof ApiError) || ![401, 404].includes(caughtError.status)) {
+          return
+        }
+        clearAuthSession()
+        runPageTransition(() => {
+          setAuthSession(null)
+          setActivePage('current')
+          setIsLoginPageOpen(true)
+          window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#login`)
+        }, 'shell')
+      })
+
+    return () => {
+      isCurrent = false
+    }
+  }, [authSession?.accessToken])
 
   function setAssignmentPanelOpen(nextOpen: boolean) {
     setIsAssignmentPanelOpen(nextOpen)
@@ -361,25 +833,104 @@ function App() {
   const pageUsesAssignmentPanel = activePage === 'current' || activePage === 'history'
   const mobileMenuIsAvailable = true
 
+  function openLoginPage() {
+    if (isLoginPageOpen) {
+      return
+    }
+
+    runPageTransition(() => {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#login`)
+      setIsLoginPageOpen(true)
+    }, 'shell')
+  }
+
+  function closeLoginPage() {
+    if (!authSession) {
+      return
+    }
+
+    runPageTransition(() => {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+      setIsLoginPageOpen(false)
+    }, 'shell')
+  }
+
+  function clearSessionAndOpenLogin() {
+    clearAuthSession()
+    runPageTransition(() => {
+      setAuthSession(null)
+      setActivePage('current')
+      setIsAssignmentPanelOpen(false)
+      setIsLogoutConfirmOpen(false)
+      setIsLoginPageOpen(true)
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#login`)
+    }, 'shell')
+  }
+
+  function requestLogout() {
+    setIsLogoutConfirmOpen(true)
+  }
+
+  function navigateToPage(page: Page, closeAssignmentPanel = false) {
+    if (page === activePage) {
+      if (closeAssignmentPanel) {
+        setAssignmentPanelOpen(false)
+      }
+      return
+    }
+
+    runPageTransition(() => {
+      setActivePage(page)
+      if (closeAssignmentPanel) {
+        setAssignmentPanelOpen(false)
+      }
+    })
+  }
+
+  const hasAdminAccess = authSession ? [0, 1, 2].includes(authSession.user.role) : false
+  const navigationItems = hasAdminAccess ? [...baseNavItems, adminNavItem] : baseNavItems
+
+  if (!authSession || isLoginPageOpen) {
+    return (
+      <LoginPage
+        canReturnToWorkspace={Boolean(authSession)}
+        onBack={closeLoginPage}
+        onAuthenticated={(session, remember) => {
+          saveAuthSession(session, remember)
+          runPageTransition(() => {
+            setAuthSession(session)
+            setIsLoginPageOpen(false)
+            window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+          }, 'shell')
+        }}
+      />
+    )
+  }
+
   return (
     <main className="workspace-shell">
       <header className="topbar">
         <div className="brand-lockup">
           <img className="brand-logo" src={logoSrc} alt="" aria-hidden="true" />
-          <strong>Fuck ets100</strong>
+          <span className="brand-copy">
+            <strong>Fuck ets100</strong>
+            <small>答案工作台</small>
+          </span>
+        </div>
+        <div className="topbar__status" role="status">
+          <span className={`live-dot ${authSession ? '' : 'live-dot--idle'}`} />
+          {authSession ? `${authSession.user.name} 已登录` : '尚未登录'}
         </div>
       </header>
 
       <div className="workspace-body">
         <aside className="side-nav">
           <nav className="side-nav__links" aria-label="主导航">
-            {navItems.map((item) => (
+            {navigationItems.map((item) => (
               <button
                 className={`side-link ${activePage === item.page ? 'side-link--active' : ''}`}
                 type="button"
-                onClick={() => {
-                  setActivePage(item.page)
-                }}
+                onClick={() => navigateToPage(item.page)}
                 key={item.page}
               >
                 <Icon name={item.icon} />
@@ -392,19 +943,19 @@ function App() {
             <a href="https://lastudio.cc" target="_blank" rel="noreferrer">
               lastudio.cc
             </a>
-            {isLoggedIn ? (
+            {authSession ? (
               <>
                 <div className="login-state" role="status">
                   <Icon name="check_circle" filled />
-                  登录成功
+                  {authSession.user.name}
                 </div>
-                <button className="side-logout-button" type="button" onClick={() => setIsLoggedIn(false)}>
+                <button className="side-logout-button" type="button" onClick={requestLogout}>
                   <Icon name="logout" />
                   退出
                 </button>
               </>
             ) : (
-              <button className="side-login-button" type="button" onClick={() => setIsLoggedIn(true)}>
+                <button className="side-login-button" type="button" onClick={openLoginPage}>
                 <Icon name="login" />
                 登录
               </button>
@@ -417,15 +968,14 @@ function App() {
             <AssignmentPanel
               isOpen={isAssignmentPanelOpen}
               activePage={activePage}
-              isLoggedIn={isLoggedIn}
+              isLoggedIn={Boolean(authSession)}
+              username={authSession?.user.name}
+              showAdmin={hasAdminAccess}
               menuOnly={!pageUsesAssignmentPanel}
               onClose={() => setAssignmentPanelOpen(false)}
-              onLogin={() => setIsLoggedIn(true)}
-              onLogout={() => setIsLoggedIn(false)}
-              onNavigate={(page) => {
-                setActivePage(page)
-                setAssignmentPanelOpen(false)
-              }}
+              onLogin={openLoginPage}
+              onLogout={requestLogout}
+              onNavigate={(page) => navigateToPage(page, true)}
               onToggle={toggleAssignmentPanel}
             />
             {isAssignmentPanelOpen && (
@@ -437,7 +987,39 @@ function App() {
         {activePage === 'current' && <CurrentAssignmentPage key="current" onOpenAssignments={() => setAssignmentPanelOpen(true)} />}
         {activePage === 'history' && <HistoryPage key="history" onOpenAssignments={() => setAssignmentPanelOpen(true)} />}
         {activePage === 'settings' && <SettingsPage key="settings" onOpenAssignments={() => setAssignmentPanelOpen(true)} />}
+        {activePage === 'admin' && authSession && hasAdminAccess && (
+          <AdminPage
+            key="admin"
+            session={authSession}
+            onOpenMenu={() => setAssignmentPanelOpen(true)}
+            onSessionExpired={clearSessionAndOpenLogin}
+          />
+        )}
       </div>
+
+      {isLogoutConfirmOpen && (
+        <div
+          className="logout-dialog-layer"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setIsLogoutConfirmOpen(false)
+            }
+          }}
+        >
+          <section className="logout-dialog" role="dialog" aria-modal="true" aria-labelledby="logout-dialog-title">
+            <span className="logout-dialog__icon"><Icon name="logout" /></span>
+            <div>
+              <h2 id="logout-dialog-title">退出当前账号？</h2>
+              <p>退出后需要重新登录才能继续访问工作台。</p>
+            </div>
+            <div className="logout-dialog__actions">
+              <button type="button" onClick={() => setIsLogoutConfirmOpen(false)}>取消</button>
+              <button className="logout-dialog__confirm" type="button" onClick={clearSessionAndOpenLogin}>确认退出</button>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   )
 }
