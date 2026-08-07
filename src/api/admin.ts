@@ -56,8 +56,23 @@ function jsonRequest(accessToken: string, method: string, body: unknown): Reques
   })
 }
 
+async function getAllPages<T extends { id: number }>(accessToken: string, path: string) {
+  const items: T[] = []
+  let beforeId: number | undefined
+
+  do {
+    const params = new URLSearchParams({ limit: '100' })
+    if (beforeId !== undefined) params.set('before_id', String(beforeId))
+    const page = await apiRequest<T[]>(`${path}?${params}`, authorized(accessToken))
+    items.push(...page)
+    beforeId = page.length === 100 ? page.at(-1)?.id : undefined
+  } while (beforeId !== undefined)
+
+  return items
+}
+
 export function getUsers(accessToken: string) {
-  return apiRequest<User[]>('/admin/get_user_list', authorized(accessToken))
+  return getAllPages<User>(accessToken, '/admin/get_user_list')
 }
 
 export function createUser(accessToken: string, username: string, password: string) {
@@ -85,11 +100,11 @@ export function changeUserPassword(accessToken: string, id: number, password: st
 }
 
 export function getUserRecords(accessToken: string) {
-  return apiRequest<UserRecord[]>('/admin/get_user_records', authorized(accessToken))
+  return getAllPages<UserRecord>(accessToken, '/admin/get_user_records')
 }
 
 export function getCards(accessToken: string) {
-  return apiRequest<AdminCard[]>('/admin/cards', authorized(accessToken))
+  return getAllPages<AdminCard>(accessToken, '/admin/cards')
 }
 
 export function generateCards(accessToken: string, input: CardBatchInput) {
@@ -101,7 +116,7 @@ export function disableCard(accessToken: string, cardId: number) {
 }
 
 export function getCardRequests(accessToken: string) {
-  return apiRequest<CardRequest[]>('/card_requests', authorized(accessToken))
+  return getAllPages<CardRequest>(accessToken, '/card_requests')
 }
 
 export function applyForCards(accessToken: string, input: CardBatchInput) {

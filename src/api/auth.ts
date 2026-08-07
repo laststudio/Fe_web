@@ -33,6 +33,31 @@ export type CaptchaChallenge = {
   expiresAt: string
 }
 
+export type Membership = {
+  user_id: number
+  member_level: number
+  expire_time: string | null
+}
+
+export type FeNotice = {
+  isForce: boolean
+  isKillSwitchOn: boolean
+  noticeMessage: string
+  announcementTitle: string
+  announcementMessage: string
+  announcementUrl: string
+  changelogTitle: string
+  changelogUrl: string
+  changelogSummary: string
+  verificationCode: string
+  verificationTitle: string
+  verificationMessage: string
+  donateEnabled: boolean
+  latestVersionCode: number
+  updateUrl: string
+  updateMessage: string
+}
+
 type CaptchaChallengeResponse = {
   captcha_id: string
   image_url: string
@@ -167,4 +192,49 @@ export async function getCurrentUser(accessToken: string): Promise<User> {
   return apiRequest<User>('/user/me', {
     headers: { Authorization: `Bearer ${accessToken}` },
   })
+}
+
+export async function getMembership(accessToken: string): Promise<Membership> {
+  return apiRequest<Membership>('/user/membership', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+}
+
+export async function redeemCard(accessToken: string, code: string): Promise<{
+  message: string
+  member_level: number
+  expire_time: string
+}> {
+  return apiRequest<{ message: string; member_level: number; expire_time: string }>('/user/cards/redeem', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ code }),
+  })
+}
+
+export async function changeMyPassword(
+  accessToken: string,
+  oldPassword: string,
+  newPassword: string,
+  confirmPassword: string,
+): Promise<{ status: string }> {
+  return apiRequest<{ status: string }>('/user/change_my_password', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      old_passwd: oldPassword,
+      new_passwd: newPassword,
+      new_passwd2: confirmPassword,
+    }),
+  })
+}
+
+export async function getFeNotice(): Promise<FeNotice> {
+  return apiRequest<FeNotice>('/notice/Fe')
 }

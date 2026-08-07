@@ -513,10 +513,15 @@ function CreateUserDialog({ isSubmitting, onClose, onSubmit }: {
     <AdminDialog title="创建普通用户" onClose={onClose}>
       <form className="admin-form" onSubmit={(event) => {
         event.preventDefault()
-        onSubmit(username.trim(), password)
+        const normalizedUsername = username.trim().toLowerCase()
+        if (!/^[a-z0-9_]{3,50}$/.test(normalizedUsername)) return
+        onSubmit(normalizedUsername, password)
       }}>
-        <label><span>用户名</span><input required maxLength={50} value={username} onChange={(event) => setUsername(event.target.value)} placeholder="输入用户名" /></label>
-        <label><span>初始密码</span><input required minLength={10} maxLength={72} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="10 至 72 位密码" type="password" /></label>
+        <label><span>用户名</span><input required minLength={3} maxLength={50} pattern="[A-Za-z0-9_]+" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="3 至 50 位字母、数字或下划线" /></label>
+        <label><span>初始密码</span><input required minLength={10} maxLength={72} value={password} onChange={(event) => {
+          setPassword(event.target.value)
+          event.currentTarget.setCustomValidity(new TextEncoder().encode(event.target.value).length > 72 ? '密码编码后不能超过 72 字节' : '')
+        }} placeholder="10 至 72 位密码" type="password" /></label>
         <div className="admin-dialog-actions"><button type="button" onClick={onClose}>取消</button><button className="admin-dialog-primary" type="submit" disabled={isSubmitting}>创建用户</button></div>
       </form>
     </AdminDialog>
@@ -553,7 +558,10 @@ function UserActionDialog({ action, currentRole, user, isSubmitting, onClose, on
         <div className="admin-dialog-subject"><Icon name="person" /><span><strong>{user.name}</strong><small>用户 ID #{user.id}</small></span></div>
         {action === 'role' && <label><span>角色</span><select value={role} onChange={(event) => setRole(Number(event.target.value))}>{roleOptions.map((value) => <option value={value} key={value}>{roleLabels[value]}</option>)}</select></label>}
         {action === 'level' && <><label><span>会员等级</span><input min="0" type="number" value={level} onChange={(event) => setLevel(Number(event.target.value))} /></label><label><span>到期时间</span><input required type="datetime-local" value={expireTime} onChange={(event) => setExpireTime(event.target.value)} /></label></>}
-        {action === 'password' && <label><span>新密码</span><input required minLength={10} maxLength={72} type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="10 至 72 位密码" /></label>}
+        {action === 'password' && <label><span>新密码</span><input required minLength={10} maxLength={72} type="password" value={password} onChange={(event) => {
+          setPassword(event.target.value)
+          event.currentTarget.setCustomValidity(new TextEncoder().encode(event.target.value).length > 72 ? '密码编码后不能超过 72 字节' : '')
+        }} placeholder="10 至 72 位密码" /></label>}
         {action === 'delete' && <p className="admin-delete-warning">删除后该用户将无法登录，关联记录会保留用户 ID。此操作不可撤销。</p>}
         <div className="admin-dialog-actions"><button type="button" onClick={onClose}>取消</button><button className={action === 'delete' ? 'admin-dialog-danger' : 'admin-dialog-primary'} type="submit" disabled={isSubmitting}>{action === 'delete' ? '确认删除' : '保存修改'}</button></div>
       </form>

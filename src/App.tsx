@@ -1,9 +1,21 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useEffectEvent, useState, type FormEvent } from 'react'
 import { flushSync } from 'react-dom'
 import './App.css'
-import { ApiError, createCaptcha, getCurrentUser, login, register, type AuthSession, type CaptchaChallenge } from './api/auth'
+import {
+  ApiError,
+  changeMyPassword,
+  createCaptcha,
+  getCurrentUser,
+  getMembership,
+  login,
+  redeemCard,
+  register,
+  type AuthSession,
+  type CaptchaChallenge,
+  type Membership,
+} from './api/auth'
 import AdminPage from './admin/AdminPage'
-import { clearAuthSession, readAuthSession, saveAuthSession } from './utils/auth-session'
+import { clearAuthSession, readAuthSession, saveAuthSession, updateAuthSession } from './utils/auth-session'
 
 type IconProps = {
   name: string
@@ -11,7 +23,7 @@ type IconProps = {
   filled?: boolean
 }
 
-type Page = 'current' | 'history' | 'settings' | 'admin'
+type Page = 'current' | 'history' | 'settings' | 'account' | 'admin'
 type Status = 'parsed' | 'parsing' | 'unread'
 type TransitionKind = 'page' | 'auth-mode' | 'shell'
 type ViewTransition = {
@@ -64,14 +76,31 @@ const groups: { label: string; items: Assignment[] }[] = [
 const baseNavItems: { icon: string; label: string; page: Page }[] = [
   { icon: 'assignment', label: '当前作业', page: 'current' },
   { icon: 'history', label: '历史作业', page: 'history' },
-  { icon: 'settings', label: '设置', page: 'settings' },
+  { icon: 'settings', label: '业务设置', page: 'settings' },
 ]
 const adminNavItem: { icon: string; label: string; page: Page } = { icon: 'admin_panel_settings', label: '后台管理', page: 'admin' }
+const accountRoleLabels: Record<number, string> = {
+  0: '超级管理员',
+  1: '管理员',
+  2: '代理',
+  3: '普通用户',
+  4: '受限用户',
+}
 
 const answerSteps = ['2x + 5 = 15', '2x = 15 - 5', '2x = 10', 'x = 10 / 2', 'x = 5']
 const logoSrc = '/fe_logo.png'
+const officialWebsiteUrl = 'https://lastudio.cc'
 const assignmentPanelStorageKey = 'fe-web.assignment-panel-open'
 const usernamePattern = /^[a-zA-Z0-9_]+$/
+
+function passwordFitsBackendLimit(password: string) {
+  return password.length >= 10 && password.length <= 72 && new TextEncoder().encode(password).length <= 72
+}
+
+function formatCardCode(value: string) {
+  const characters = value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 16)
+  return characters.match(/.{1,4}/g)?.join('-') ?? ''
+}
 
 function runPageTransition(update: () => void, kind: TransitionKind = 'page') {
   const transitionDocument = document as ViewTransitionDocument
@@ -164,6 +193,7 @@ function AssignmentPanel({
   activePage,
   isLoggedIn,
   username,
+  memberLevel,
   showAdmin,
   menuOnly = false,
   onClose,
@@ -176,6 +206,7 @@ function AssignmentPanel({
   activePage: Page
   isLoggedIn: boolean
   username?: string
+  memberLevel?: number
   showAdmin: boolean
   menuOnly?: boolean
   onClose: () => void
@@ -220,14 +251,23 @@ function AssignmentPanel({
                 <span>{item.label}</span>
               </button>
             ))}
+            <a className="side-link side-link--external" href={officialWebsiteUrl} target="_blank" rel="noopener noreferrer">
+              <Icon name="language" />
+              <span>访问官网</span>
+              <Icon name="open_in_new" className="side-link__external-icon" />
+            </a>
           </nav>
           <div className="mobile-drawer-menu__account">
             {isLoggedIn ? (
               <>
-                <div className="login-state" role="status">
-                  <Icon name="check_circle" filled />
-                  {username || '登录成功'}
-                </div>
+                <button className={`mobile-account-link ${activePage === 'account' ? 'mobile-account-link--active' : ''}`} type="button" onClick={() => onNavigate('account')}>
+                  <span className="mobile-account-link__avatar">{(username || 'U').slice(0, 1).toUpperCase()}</span>
+                  <span>
+                    <strong>{username || '当前账号'}</strong>
+                    <small>L{memberLevel ?? 0} · 查看个人中心</small>
+                  </span>
+                  <Icon name="chevron_right" />
+                </button>
                 <button className="side-logout-button" type="button" onClick={onLogout}>
                   <Icon name="logout" />
                   退出
@@ -369,31 +409,246 @@ function HistoryPage({ onOpenAssignments }: { onOpenAssignments: () => void }) {
   )
 }
 
+function formatAccountDate(value: string | null) {
+  if (!value) return '未设置'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date)
+}
+
+function formatMembershipExpiry(membership: Membership | null) {
+  if (!membership?.expire_time) return '未设置'
+  const formatted = formatAccountDate(membership.expire_time)
+  return membership.member_level === 0 && Date.parse(membership.expire_time) <= Date.now()
+    ? `已于 ${formatted} 到期`
+    : formatted
+}
+
+function AccountPage({ session, onOpenMenu, onSessionUpdated, onSessionExpired }: {
+  session: AuthSession
+  onOpenMenu: () => void
+  onSessionUpdated: (session: AuthSession) => void
+  onSessionExpired: () => void
+}) {
+  const [profile, setProfile] = useState(session.user)
+  const [membership, setMembership] = useState<Membership | null>(null)
+  const [cardCode, setCardCode] = useState('')
+  const [oldPassword, setOldPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+
+  const expireSession = useEffectEvent(onSessionExpired)
+  const updateSession = useEffectEvent(onSessionUpdated)
+
+  useEffect(() => {
+    let isCurrent = true
+
+    Promise.all([getCurrentUser(session.accessToken), getMembership(session.accessToken)])
+      .then(([nextProfile, nextMembership]) => {
+        if (!isCurrent) return
+        setProfile(nextProfile)
+        setMembership(nextMembership)
+        updateSession({ ...session, user: nextProfile })
+      })
+      .catch((caughtError) => {
+        if (!isCurrent) return
+        if (caughtError instanceof ApiError && [401, 404].includes(caughtError.status)) {
+          expireSession()
+          return
+        }
+        setError(caughtError instanceof Error ? caughtError.message : '账号信息加载失败')
+      })
+      .finally(() => {
+        if (isCurrent) setIsLoading(false)
+      })
+
+    return () => {
+      isCurrent = false
+    }
+  }, [session.accessToken])
+
+  async function handleRedeem(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const normalizedCode = cardCode.trim().toUpperCase()
+    if (normalizedCode.length !== 19) {
+      setError('卡密需要为 19 位，格式为 XXXX-XXXX-XXXX-XXXX')
+      return
+    }
+
+    setIsSubmitting(true)
+    setError('')
+    setMessage('')
+    try {
+      const result = await redeemCard(session.accessToken, normalizedCode)
+      const nextMembership = {
+        user_id: session.user.id,
+        member_level: result.member_level,
+        expire_time: result.expire_time,
+      }
+      setMembership(nextMembership)
+      setCardCode('')
+      onSessionUpdated({
+        ...session,
+        user: { ...session.user, member_level: result.member_level },
+      })
+      setMessage(result.message)
+    } catch (caughtError) {
+      if (caughtError instanceof ApiError && [401, 404].includes(caughtError.status) && caughtError.message.includes('用户')) {
+        onSessionExpired()
+        return
+      }
+      setError(caughtError instanceof Error ? caughtError.message : '卡密兑换失败')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  async function handlePasswordChange(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!passwordFitsBackendLimit(newPassword)) {
+      setError('新密码需要为 10 至 72 位，且编码后不超过 72 字节')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setError('两次输入的新密码不一致')
+      return
+    }
+
+    setIsSubmitting(true)
+    setError('')
+    setMessage('')
+    try {
+      await changeMyPassword(session.accessToken, oldPassword, newPassword, confirmPassword)
+      onSessionExpired()
+    } catch (caughtError) {
+      if (caughtError instanceof ApiError && [401, 404].includes(caughtError.status)) {
+        onSessionExpired()
+        return
+      }
+      setError(caughtError instanceof Error ? caughtError.message : '密码修改失败')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <section className="account-page page-surface-enter" aria-label="个人中心">
+      <div className="page-toolbar">
+        <button className="mobile-assignment-toggle" type="button" onClick={onOpenMenu} aria-label="打开菜单">
+          <Icon name="menu" />
+        </button>
+      </div>
+      <div className="account-page__inner">
+        <header className="account-hero">
+          <div className="account-avatar" aria-hidden="true">{profile.name.slice(0, 1).toUpperCase()}</div>
+          <div className="account-hero__identity">
+            <span className="account-eyebrow">PERSONAL CENTER</span>
+            <h1>{profile.name}</h1>
+            <p>管理你的身份、会员权益和账号连接。</p>
+          </div>
+          <div className="account-hero__meta">
+            <span><small>用户 ID</small><strong>#{profile.id}</strong></span>
+            <span><small>账号角色</small><strong>{accountRoleLabels[profile.role] || `角色 ${profile.role}`}</strong></span>
+            <span><small>创建来源</small><strong>{profile.created_by ? `管理员 #${profile.created_by}` : '自主注册'}</strong></span>
+            <span><small>创建时间</small><strong>{formatAccountDate(profile.create_time ?? null)}</strong></span>
+          </div>
+        </header>
+        {(error || message) && (
+          <div className={`account-message ${error ? 'account-message--error' : ''}`} role={error ? 'alert' : 'status'}>
+            <Icon name={error ? 'error' : 'check_circle'} />
+            {error || message}
+          </div>
+        )}
+        <div className="account-layout">
+          <div className="account-layout__main">
+            <section className="account-section" aria-labelledby="membership-title">
+              <header>
+                <span className="account-section__icon"><Icon name="workspace_premium" /></span>
+                <span><small>MEMBERSHIP</small><h2 id="membership-title">会员权益</h2></span>
+                <strong className="membership-level">L{membership?.member_level ?? profile.member_level}</strong>
+              </header>
+              <dl className="membership-details">
+                <div><dt>当前状态</dt><dd>{(membership?.member_level ?? profile.member_level) > 0 ? '会员有效' : '普通账户'}</dd></div>
+                <div><dt>会员到期</dt><dd>{isLoading ? '正在读取' : formatMembershipExpiry(membership)}</dd></div>
+              </dl>
+              <form className="account-form account-form--inline" onSubmit={handleRedeem}>
+                <label><span>兑换卡密</span><input value={cardCode} onChange={(event) => {
+                  setCardCode(formatCardCode(event.target.value))
+                  setError('')
+                  setMessage('')
+                }} placeholder="XXXX-XXXX-XXXX-XXXX" autoComplete="off" disabled={isSubmitting} /></label>
+                <button type="submit" disabled={isSubmitting || isLoading}><Icon name="redeem" />兑换卡密</button>
+              </form>
+            </section>
+            <section className="account-section" aria-labelledby="security-title">
+              <header>
+                <span className="account-section__icon"><Icon name="shield_lock" /></span>
+                <span><small>SECURITY</small><h2 id="security-title">登录与安全</h2></span>
+              </header>
+              <form className="account-form" onSubmit={handlePasswordChange}>
+                <label><span>当前密码</span><input required type="password" autoComplete="current-password" value={oldPassword} onChange={(event) => {
+                  setOldPassword(event.target.value)
+                  setError('')
+                  setMessage('')
+                }} /></label>
+                <div className="account-form__grid">
+                  <label><span>新密码</span><input required minLength={10} maxLength={72} type="password" autoComplete="new-password" value={newPassword} onChange={(event) => {
+                    setNewPassword(event.target.value)
+                    setError('')
+                    setMessage('')
+                  }} placeholder="10 至 72 位" /></label>
+                  <label><span>确认新密码</span><input required maxLength={72} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => {
+                    setConfirmPassword(event.target.value)
+                    setError('')
+                    setMessage('')
+                  }} /></label>
+                </div>
+                <button type="submit" disabled={isSubmitting}><Icon name="key" />修改密码并重新登录</button>
+              </form>
+            </section>
+          </div>
+          <aside className="account-connections" aria-labelledby="connections-title">
+            <header><small>CONNECTIONS</small><h2 id="connections-title">账号连接</h2></header>
+            <div className="account-connection">
+              <span className="account-connection__icon"><Icon name="mail" /></span>
+              <span><strong>邮箱账号</strong><small>用于找回密码和接收通知</small></span>
+              <em>未绑定</em>
+            </div>
+            <div className="account-connection">
+              <span className="account-connection__icon"><Icon name="school" /></span>
+              <span><strong>ETS 账号</strong><small>用于同步课程和作业身份</small></span>
+              <em>未绑定</em>
+            </div>
+            <p>账号连接将在后端开放对应接口后启用。</p>
+          </aside>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function SettingsPage({ onOpenAssignments }: { onOpenAssignments: () => void }) {
   return (
     <section className="page-panel page-surface-enter" aria-label="设置">
       <div className="page-toolbar">
-        <button className="mobile-assignment-toggle" type="button" onClick={onOpenAssignments} aria-label="打开菜单">
-          <Icon name="menu" />
-        </button>
+        <button className="mobile-assignment-toggle" type="button" onClick={onOpenAssignments} aria-label="打开菜单"><Icon name="menu" /></button>
       </div>
       <div className="page-panel__inner">
-        <h1>设置</h1>
+        <h1>业务设置</h1>
         <div className="settings-list">
-          <label>
-            <span>
-              <strong>自动解析</strong>
-              <small>新作业出现后自动进入解析队列</small>
-            </span>
-            <input type="checkbox" defaultChecked />
-          </label>
-          <label>
-            <span>
-              <strong>答案高亮</strong>
-              <small>阅读答案时突出显示标准答案</small>
-            </span>
-            <input type="checkbox" defaultChecked />
-          </label>
+          <label><span><strong>自动解析</strong><small>新作业出现后自动进入解析队列</small></span><input type="checkbox" defaultChecked /></label>
+          <label><span><strong>答案高亮</strong><small>阅读答案时突出显示标准答案</small></span><input type="checkbox" defaultChecked /></label>
         </div>
       </div>
     </section>
@@ -483,8 +738,8 @@ function LoginPage({ canReturnToWorkspace, onBack, onAuthenticated }: {
         setError('用户名需要为 3 至 50 位字母、数字或下划线')
         return
       }
-      if (password.length < 10 || password.length > 72) {
-        setError('密码长度需要为 10 至 72 位')
+      if (!passwordFitsBackendLimit(password)) {
+        setError('密码需要为 10 至 72 位，且编码后不超过 72 字节')
         return
       }
       if (password !== confirmPassword) {
@@ -559,6 +814,11 @@ function LoginPage({ canReturnToWorkspace, onBack, onAuthenticated }: {
           <span className="login-context__index">{mode === 'login' ? 'STUDENT ACCESS / 01' : 'CREATE ACCOUNT / 02'}</span>
           <h1>把作业答案，<br />整理成能读懂的批注。</h1>
           <p>同步作业、查看解析，并在同一处完成答案核对。</p>
+          <a className="login-site-link" href={officialWebsiteUrl} target="_blank" rel="noopener noreferrer">
+            <Icon name="language" />
+            访问 LA Studio 官网
+            <Icon name="open_in_new" />
+          </a>
         </div>
 
         <div className="login-proof" aria-label="工作台状态">
@@ -734,8 +994,15 @@ function LoginPage({ canReturnToWorkspace, onBack, onAuthenticated }: {
           </form>
 
           <footer className="login-form-foot">
-            <Icon name="shield_lock" />
-            登录信息仅用于连接作业服务
+            <span>
+              <Icon name="shield_lock" />
+              登录信息仅用于连接作业服务
+            </span>
+            <a href={officialWebsiteUrl} target="_blank" rel="noopener noreferrer">
+              <Icon name="language" />
+              访问官网
+              <Icon name="open_in_new" />
+            </a>
           </footer>
         </div>
       </section>
@@ -917,10 +1184,21 @@ function App() {
             <small>答案工作台</small>
           </span>
         </div>
-        <div className="topbar__status" role="status">
-          <span className={`live-dot ${authSession ? '' : 'live-dot--idle'}`} />
-          {authSession ? `${authSession.user.name} 已登录` : '尚未登录'}
-        </div>
+        <button
+          className={`account-trigger ${activePage === 'account' ? 'account-trigger--active' : ''}`}
+          type="button"
+          onClick={() => navigateToPage('account')}
+          aria-label={`打开 ${authSession.user.name} 的个人中心`}
+          title="个人中心"
+        >
+          <span className="account-trigger__avatar">{authSession.user.name.slice(0, 1).toUpperCase()}</span>
+          <span className="account-trigger__copy">
+            <small>个人中心</small>
+            <strong>{authSession.user.name}</strong>
+          </span>
+          <span className="account-trigger__level">L{authSession.user.member_level}</span>
+          <Icon name="chevron_right" />
+        </button>
       </header>
 
       <div className="workspace-body">
@@ -939,27 +1217,18 @@ function App() {
             ))}
           </nav>
           <div className="side-nav__footer">
-            <strong>Fuck ets100</strong>
-            <a href="https://lastudio.cc" target="_blank" rel="noreferrer">
-              lastudio.cc
+            <a className="official-site-link" href={officialWebsiteUrl} target="_blank" rel="noopener noreferrer">
+              <Icon name="language" />
+              <span>
+                访问官网
+                <small>lastudio.cc</small>
+              </span>
+              <Icon name="open_in_new" className="official-site-link__external" />
             </a>
-            {authSession ? (
-              <>
-                <div className="login-state" role="status">
-                  <Icon name="check_circle" filled />
-                  {authSession.user.name}
-                </div>
-                <button className="side-logout-button" type="button" onClick={requestLogout}>
-                  <Icon name="logout" />
-                  退出
-                </button>
-              </>
-            ) : (
-                <button className="side-login-button" type="button" onClick={openLoginPage}>
-                <Icon name="login" />
-                登录
-              </button>
-            )}
+            <button className="side-logout-button" type="button" onClick={requestLogout}>
+              <Icon name="logout" />
+              退出登录
+            </button>
           </div>
         </aside>
 
@@ -970,6 +1239,7 @@ function App() {
               activePage={activePage}
               isLoggedIn={Boolean(authSession)}
               username={authSession?.user.name}
+              memberLevel={authSession?.user.member_level}
               showAdmin={hasAdminAccess}
               menuOnly={!pageUsesAssignmentPanel}
               onClose={() => setAssignmentPanelOpen(false)}
@@ -986,7 +1256,21 @@ function App() {
 
         {activePage === 'current' && <CurrentAssignmentPage key="current" onOpenAssignments={() => setAssignmentPanelOpen(true)} />}
         {activePage === 'history' && <HistoryPage key="history" onOpenAssignments={() => setAssignmentPanelOpen(true)} />}
-        {activePage === 'settings' && <SettingsPage key="settings" onOpenAssignments={() => setAssignmentPanelOpen(true)} />}
+        {activePage === 'settings' && (
+          <SettingsPage key="settings" onOpenAssignments={() => setAssignmentPanelOpen(true)} />
+        )}
+        {activePage === 'account' && (
+          <AccountPage
+            key="account"
+            session={authSession}
+            onOpenMenu={() => setAssignmentPanelOpen(true)}
+            onSessionUpdated={(session) => {
+              setAuthSession(session)
+              updateAuthSession(session)
+            }}
+            onSessionExpired={clearSessionAndOpenLogin}
+          />
+        )}
         {activePage === 'admin' && authSession && hasAdminAccess && (
           <AdminPage
             key="admin"

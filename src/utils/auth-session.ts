@@ -28,6 +28,13 @@ export function saveAuthSession(session: AuthSession, remember: boolean) {
   storage.setItem(authSessionStorageKey, JSON.stringify(session))
 }
 
+export function updateAuthSession(session: AuthSession) {
+  const storage = window.localStorage.getItem(authSessionStorageKey) !== null
+    ? window.localStorage
+    : window.sessionStorage
+  storage.setItem(authSessionStorageKey, JSON.stringify(session))
+}
+
 export function clearAuthSession() {
   window.localStorage.removeItem(authSessionStorageKey)
   window.sessionStorage.removeItem(authSessionStorageKey)
