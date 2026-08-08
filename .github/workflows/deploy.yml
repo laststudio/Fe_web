@@ -49,10 +49,10 @@ jobs:
           npm run lint
           npm run build
           test -s dist/index.html
-          ! rg -l 'localhost|127\.0\.0\.1' dist
-          rg -l 'api\.lastudio\.cc' dist >/dev/null
-          rg -l 'auth\.lastudio\.cc' dist >/dev/null
-          rg -l 'fe-web\.lastudio\.cc/auth/callback' dist >/dev/null
+          ! grep -RIlE 'localhost|127\.0\.0\.1' dist
+          grep -RIlF 'api.lastudio.cc' dist >/dev/null
+          grep -RIlF 'auth.lastudio.cc' dist >/dev/null
+          grep -RIlF 'fe-web.lastudio.cc/auth/callback' dist >/dev/null
 
       - name: Package immutable release
         run: |
