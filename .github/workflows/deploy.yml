@@ -1,0 +1,93 @@
+name: Deploy Fe Web
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Confirm production deployment
+        required: true
+        type: choice
+        options:
+          - CANCEL
+          - DEPLOY
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fe-web-production
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    if: inputs.confirm == 'DEPLOY'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    env:
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate and build
+        run: |
+          npm run lint
+          npm run build
+          test -s dist/index.html
+          ! rg -l 'localhost|127\.0\.0\.1' dist
+          rg -l 'api\.lastudio\.cc' dist >/dev/null
+          rg -l 'auth\.lastudio\.cc' dist >/dev/null
+          rg -l 'fe-web\.lastudio\.cc/auth/callback' dist >/dev/null
+
+      - name: Package immutable release
+        run: |
+          release_id="gh-${GITHUB_SHA::12}-${GITHUB_RUN_ID}"
+          mkdir -p artifact/payload/fe-web
+          cp -a dist/. artifact/payload/fe-web/
+          RELEASE_ID="$release_id" python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          Path('artifact/manifest.json').write_text(json.dumps({
+              'kind': 'fe-web',
+              'release_id': os.environ['RELEASE_ID'],
+              'sha': os.environ['GITHUB_SHA'],
+              'run_id': os.environ['GITHUB_RUN_ID'],
+          }))
+          PY
+          tar -czf deployment.tar.gz -C artifact manifest.json payload
+
+      - name: Deploy through restricted SSH channel
+        run: |
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_PORT"
+          test -n "$DEPLOY_USER"
+          test -n "$DEPLOY_SSH_KEY"
+          test -n "$DEPLOY_KNOWN_HOSTS"
+          install -d -m 0700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/deploy_key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 0600 "$HOME/.ssh/deploy_key" "$HOME/.ssh/known_hosts"
+          ssh -i "$HOME/.ssh/deploy_key" \
+            -p "$DEPLOY_PORT" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o RequestTTY=no \
+            "$DEPLOY_USER@$DEPLOY_HOST" deploy < deployment.tar.gz

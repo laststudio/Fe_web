@@ -5,6 +5,7 @@
 html {
   color: #172033;
   background: #f4f7fb;
+  scrollbar-gutter: stable;
   font-family: Inter, Manrope, "PingFang SC", "Microsoft YaHei", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
