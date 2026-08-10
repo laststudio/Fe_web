@@ -12,7 +12,7 @@ export default function AuthGate({ message, onAuthenticate }: AuthGateProps) {
         <h1 id="auth-gate-title">作业答案工作台</h1>
         <p>{message || '登录统一账号后继续查看当前作业、历史作业和作业设置。'}</p>
         <button type="button" onClick={onAuthenticate}>前往统一认证</button>
-        <a href="https://lastudio.cc/account" target="_blank" rel="noopener noreferrer">账号管理</a>
+        <a href="https://lastudio.cc/">返回 LA Studio 官网</a>
       </section>
     </main>
   )

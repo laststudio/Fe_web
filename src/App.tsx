@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import { ApiError, getCurrentUser, setUnauthorizedHandler } from './api/auth'
 import AuthGate from './auth/AuthGate'
@@ -6,6 +6,7 @@ import Callback from './auth/Callback'
 import { oauthConfig } from './auth/config'
 import { startAuthorization } from './auth/oauth'
 import type { AuthSession } from './auth/types'
+import { transitionRoute, transitionTo } from './navigation/controller'
 
 type Page = '/' | '/history' | '/settings'
 type Status = 'parsed' | 'parsing' | 'unread'
@@ -119,18 +120,23 @@ function App() {
   const [session, setSession] = useState<AuthSession | null>(null)
   const [authMessage, setAuthMessage] = useState('')
   const [isAssignmentPanelOpen, setIsAssignmentPanelOpen] = useState(readStoredAssignmentPanelState)
+  const authorizationStarted = useRef(false)
   const page = currentPage(pathname)
 
   useEffect(() => {
-    const onPopState = () => setPathname(window.location.pathname)
+    const onPopState = () => {
+      const nextPathname = window.location.pathname
+      transitionRoute(() => setPathname(nextPathname))
+    }
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
   }, [])
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
+      authorizationStarted.current = false
       setSession(null)
-      setAuthMessage('登录状态已失效，请重新登录。')
+      setAuthMessage('')
     })
     return () => setUnauthorizedHandler(null)
   }, [])
@@ -138,8 +144,9 @@ function App() {
   useEffect(() => {
     if (!session) return
     const timer = window.setTimeout(() => {
+      authorizationStarted.current = false
       setSession(null)
-      setAuthMessage('登录状态已过期，请重新登录。')
+      setAuthMessage('')
     }, Math.max(0, session.expiresAt - Date.now()))
     return () => window.clearTimeout(timer)
   }, [session])
@@ -149,17 +156,30 @@ function App() {
     let active = true
     void getCurrentUser(session.accessToken).catch((error: unknown) => {
       if (active && error instanceof ApiError && error.status === 401) {
+        authorizationStarted.current = false
         setSession(null)
-        setAuthMessage('登录状态已失效，请重新登录。')
+        setAuthMessage('')
       }
     })
     return () => { active = false }
   }, [page, session])
 
+  useEffect(() => {
+    if (!page || session || authMessage || authorizationStarted.current || pathname === '/auth/callback') return
+    authorizationStarted.current = true
+    void startAuthorization(page).catch((error: unknown) => {
+      authorizationStarted.current = false
+      setAuthMessage(error instanceof Error ? error.message : '无法连接统一认证，请稍后重试。')
+    })
+  }, [authMessage, page, pathname, session])
+
   function navigate(nextPage: Page, closePanel = false) {
-    if (nextPage !== window.location.pathname) window.history.pushState(null, '', nextPage)
-    setPathname(nextPage)
-    if (closePanel) setPanelOpen(false)
+    if (nextPage === window.location.pathname) { if (closePanel) setPanelOpen(false); return }
+    transitionRoute(() => {
+      window.history.pushState(null, '', nextPage)
+      setPathname(nextPage)
+      if (closePanel) setPanelOpen(false)
+    })
   }
 
   function setPanelOpen(nextOpen: boolean) {
@@ -169,14 +189,20 @@ function App() {
 
   function beginAuthentication() {
     setAuthMessage('')
-    void startAuthorization(page || '/')
+    authorizationStarted.current = true
+    void startAuthorization(page || '/').catch((error: unknown) => {
+      authorizationStarted.current = false
+      setAuthMessage(error instanceof Error ? error.message : '无法连接统一认证，请稍后重试。')
+    })
   }
 
   if (pathname === '/auth/callback') {
     return <Callback onAuthenticated={(nextSession, returnTo) => {
       setSession(nextSession)
-      window.history.replaceState(null, '', returnTo)
-      setPathname(returnTo)
+      transitionRoute(() => {
+        window.history.replaceState(null, '', returnTo)
+        setPathname(returnTo)
+      })
     }} onFailure={(message) => {
       setAuthMessage(message)
       window.history.replaceState(null, '', '/')
@@ -189,12 +215,14 @@ function App() {
     return <AuthGate message="页面不存在，请从作业工作台重新开始。" onAuthenticate={beginAuthentication} />
   }
 
-  if (!session) return <AuthGate message={authMessage || undefined} onAuthenticate={beginAuthentication} />
+  if (!session) return authMessage
+    ? <AuthGate message={authMessage} onAuthenticate={beginAuthentication} />
+    : <main className="auth-callback"><p role="status">正在连接统一认证...</p></main>
 
   return <main className="workspace-shell">
-    <header className="topbar"><div className="brand-lockup"><img className="brand-logo" src={logoSrc} alt="" aria-hidden="true" /><span><strong>Fuck ets100</strong><small>答案工作台</small></span></div><div className="topbar__links"><a href="https://lastudio.cc/account" target="_blank" rel="noopener noreferrer">账号管理<Icon name="open_in_new" /></a><a href="https://lastudio.cc/admin" target="_blank" rel="noopener noreferrer">后台管理<Icon name="open_in_new" /></a></div></header>
+    <header className="topbar"><div className="brand-lockup"><img className="brand-logo" src={logoSrc} alt="" aria-hidden="true" /><span><strong>Fuck ets100</strong><small>答案工作台</small></span></div><div className="topbar__links"><a href="https://lastudio.cc/account">账号管理<Icon name="person" /></a><a href="https://lastudio.cc/admin">后台管理<Icon name="admin_panel_settings" /></a></div></header>
     <div className="workspace-body">
-      <aside className="side-nav"><nav className="side-nav__links" aria-label="主导航">{navigationItems.map((item) => <button className={`side-link ${page === item.page ? 'side-link--active' : ''}`} type="button" onClick={() => navigate(item.page)} key={item.page}><Icon name={item.icon} /><span>{item.label}</span></button>)}</nav><div className="side-nav__footer"><button className="side-link" type="button" onClick={() => { setSession(null); setAuthMessage('已退出当前作业站。') }}><Icon name="logout" /><span>退出本站</span></button><a className="side-link" href={oauthConfig.logoutUrl}><Icon name="logout" /><span>全局退出</span></a></div></aside>
+      <aside className="side-nav"><nav className="side-nav__links" aria-label="主导航">{navigationItems.map((item) => <button className={`side-link ${page === item.page ? 'side-link--active' : ''}`} type="button" onClick={() => navigate(item.page)} key={item.page}><Icon name={item.icon} /><span>{item.label}</span></button>)}</nav><div className="side-nav__footer"><button className="side-link" type="button" onClick={() => transitionTo(oauthConfig.logoutUrl)}><Icon name="logout" /><span>退出并返回官网</span></button></div></aside>
       <AssignmentPanel isOpen={isAssignmentPanelOpen} activePage={page} onClose={() => setPanelOpen(false)} onNavigate={navigate} onToggle={() => setPanelOpen(!isAssignmentPanelOpen)} />
       {page === '/' && <CurrentAssignmentPage onOpenAssignments={() => setPanelOpen(true)} />}
       {page === '/history' && <HistoryPage onOpenAssignments={() => setPanelOpen(true)} />}

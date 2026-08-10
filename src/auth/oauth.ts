@@ -1,6 +1,7 @@
 import { oauthConfig, oauthTransactionMaxAgeMs, oauthTransactionStorageKey } from './config'
 import { createCodeChallenge, createRandomValue } from './pkce'
 import type { OAuthTokenResponse, OAuthTransaction } from './types'
+import { beginNavigationActivity, transitionTo } from '../navigation/controller'
 
 export function normalizeReturnTo(value: string | null | undefined) {
   if (value === '/' || value === '/history' || value === '/settings') return value
@@ -32,27 +33,33 @@ function readTransaction(): OAuthTransaction | null {
 }
 
 export async function startAuthorization(returnTo: string) {
-  const verifier = createRandomValue(64)
-  const state = createRandomValue(32)
-  const transaction: OAuthTransaction = {
-    state,
-    verifier,
-    returnTo: normalizeReturnTo(returnTo),
-    createdAt: Date.now(),
-  }
-  const codeChallenge = await createCodeChallenge(verifier)
-  window.sessionStorage.setItem(oauthTransactionStorageKey, JSON.stringify(transaction))
+  const finishActivity = beginNavigationActivity()
+  try {
+    const verifier = createRandomValue(64)
+    const state = createRandomValue(32)
+    const transaction: OAuthTransaction = {
+      state,
+      verifier,
+      returnTo: normalizeReturnTo(returnTo),
+      createdAt: Date.now(),
+    }
+    const codeChallenge = await createCodeChallenge(verifier)
+    window.sessionStorage.setItem(oauthTransactionStorageKey, JSON.stringify(transaction))
 
-  const params = new URLSearchParams({
-    response_type: 'code',
-    client_id: oauthConfig.clientId,
-    redirect_uri: oauthConfig.redirectUri,
-    scope: oauthConfig.scope,
-    state,
-    code_challenge: codeChallenge,
-    code_challenge_method: 'S256',
-  })
-  window.location.assign(`${oauthConfig.authorizeUrl}?${params}`)
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: oauthConfig.clientId,
+      redirect_uri: oauthConfig.redirectUri,
+      scope: oauthConfig.scope,
+      state,
+      code_challenge: codeChallenge,
+      code_challenge_method: 'S256',
+    })
+    transitionTo(`${oauthConfig.authorizeUrl}?${params}`)
+  } catch (error) {
+    finishActivity()
+    throw error
+  }
 }
 
 export async function consumeAuthorizationCallback(search: string) {
