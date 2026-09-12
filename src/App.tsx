@@ -27,7 +27,6 @@ import type { AuthSession } from './auth/types'
 import { transitionRoute, transitionTo } from './navigation/controller'
 
 type Page = '/' | '/history' | '/settings'
-type Status = 'parsed' | 'parsing' | 'unread'
 
 const logoSrc = '/fe_logo.png'
 const sidebarCollapsedStorageKey = 'fe-web.sidebar-collapsed'
@@ -126,30 +125,6 @@ function isMatchingOption(option: string, answers: string[]): boolean {
   return false
 }
 
-function StatusPill({ status }: { status: Status }) {
-  if (status === 'parsing') {
-    return (
-      <span className="status-pill status-pill--parsing">
-        <Icon name="sync" className="status-pill__spin" />
-        解析中
-      </span>
-    )
-  }
-  if (status === 'unread') {
-    return (
-      <span className="status-pill status-pill--unread">
-        <span className="status-dot" />
-        待解析
-      </span>
-    )
-  }
-  return (
-    <span className="status-pill status-pill--parsed">
-      <span className="status-dot" />
-      已解析
-    </span>
-  )
-}
 
 function AnnouncementModal({
   config,
@@ -260,227 +235,45 @@ function RiskWarningModal({
   )
 }
 
-function AssignmentIndexCard({
-  accountInfo,
-  homeworks,
-  selectedId,
-  parsingId,
-  homeworkError,
-  isCloudModeEnabled = true,
-  cloudModeDenyReason,
-  onRetry,
-  onSelectHomework,
-}: {
-  accountInfo: PlatformAccountInfo | null
-  homeworks: HomeworkItem[]
-  selectedId: string | null
-  parsingId: string | null
-  homeworkError?: string | null
-  isCloudModeEnabled?: boolean
-  cloudModeDenyReason?: string
-  onRetry?: () => void
-  onSelectHomework: (item: HomeworkItem) => void
-}) {
-  const [query, setQuery] = useState('')
-
-  const filtered = homeworks.filter((hw) => {
-    if (!query.trim()) return true
-    const q = query.toLowerCase()
-    return (
-      hw.name.toLowerCase().includes(q) ||
-      (hw.subject_name && hw.subject_name.toLowerCase().includes(q))
-    )
-  })
-
-  const pendingList = filtered.filter((h) => !h.parsed && h.id !== parsingId)
-  const parsingList = filtered.filter((h) => h.id === parsingId)
-  const parsedList = filtered.filter((h) => h.parsed && h.id !== parsingId)
-
-  return (
-    <div className="fe-card fe-list-card">
-      <div className="fe-list-card__head">
-        <div className="fe-list-card__title">
-          <strong>作业索引</strong>
-          <small>
-            {accountInfo?.bound
-              ? `账号: ${accountInfo.account_display || '已连接'} · 共 ${homeworks.length} 份`
-              : '未绑定 ETS100 账号'}
-          </small>
-        </div>
-        {onRetry && (
-          <button
-            className="control-icon-button"
-            style={{ width: 34, height: 34 }}
-            onClick={onRetry}
-            title="刷新作业列表"
-            type="button"
-          >
-            <Icon name="refresh" />
-          </button>
-        )}
-      </div>
-
-      <div className="fe-list-card__search">
-        <label className="control-toolbar">
-          <Icon name="search" />
-          <input
-            placeholder="搜索作业名称或学科..."
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </label>
-      </div>
-
-      <div className="fe-list-card__body">
-        {!isCloudModeEnabled ? (
-          <div className="fe-empty-state" style={{ margin: '30px auto' }}>
-            <div className="fe-empty-state__icon" style={{ background: '#fef2f2', color: '#b91c1c' }}>
-              <Icon name="cloud_off" />
-            </div>
-            <h2>云端模式已停用</h2>
-            <p>{cloudModeDenyReason || '管理员已暂停云端作业拉取服务。'}</p>
-          </div>
-        ) : homeworkError ? (
-          <div className="fe-empty-state" style={{ margin: '30px auto' }}>
-            <div className="fe-empty-state__icon" style={{ background: '#fef2f2', color: '#b91c1c' }}>
-              <Icon name="error_outline" />
-            </div>
-            <h2>作业同步失败</h2>
-            <p>{homeworkError}</p>
-            {onRetry && (
-              <button type="button" className="control-primary" onClick={onRetry}>
-                重新尝试
-              </button>
-            )}
-          </div>
-        ) : !accountInfo?.bound ? (
-          <div className="fe-empty-state" style={{ margin: '30px auto' }}>
-            <div className="fe-empty-state__icon">
-              <Icon name="no_accounts" />
-            </div>
-            <h2>未绑定 ETS100</h2>
-            <p>请先前往官网账号中心绑定您的 ETS100 手机号与密码。</p>
-            <a href="https://lastudio.cc/account" target="_blank" rel="noreferrer" className="control-primary" style={{ textDecoration: 'none' }}>
-              前往账号中心绑定
-            </a>
-          </div>
-        ) : homeworks.length === 0 ? (
-          <div className="fe-empty-state" style={{ margin: '30px auto' }}>
-            <div className="fe-empty-state__icon">
-              <Icon name="inbox" />
-            </div>
-            <h2>暂无当前作业</h2>
-            <p>当前没有待完成的作业。</p>
-          </div>
-        ) : (
-          <>
-            {parsingList.length > 0 && (
-              <details className="fe-group" open>
-                <summary>
-                  <span>正在解析 ({parsingList.length})</span>
-                  <Icon name="keyboard_arrow_down" />
-                </summary>
-                <div className="fe-group__items">
-                  {parsingList.map((item) => (
-                    <button
-                      key={item.id}
-                      className={`fe-homework-item ${item.id === selectedId ? 'is-selected' : ''}`}
-                      type="button"
-                      onClick={() => onSelectHomework(item)}
-                    >
-                      <div className="fe-homework-item__head">
-                        <span className="fe-homework-item__title">{item.name}</span>
-                        <span className="fe-homework-item__time is-new">
-                          {formatTime(item.end_time || item.create_time)}
-                        </span>
-                      </div>
-                      <div className="fe-homework-item__meta">
-                        <span>{item.subject_name || '英语'}</span>
-                        <StatusPill status="parsing" />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </details>
-            )}
-
-            {pendingList.length > 0 && (
-              <details className="fe-group" open>
-                <summary>
-                  <span>待解析作业 ({pendingList.length})</span>
-                  <Icon name="keyboard_arrow_down" />
-                </summary>
-                <div className="fe-group__items">
-                  {pendingList.map((item) => (
-                    <button
-                      key={item.id}
-                      className={`fe-homework-item ${item.id === selectedId ? 'is-selected' : ''}`}
-                      type="button"
-                      onClick={() => onSelectHomework(item)}
-                    >
-                      <div className="fe-homework-item__head">
-                        <span className="fe-homework-item__title">{item.name}</span>
-                        <span className="fe-homework-item__time">
-                          {formatTime(item.end_time || item.create_time)}
-                        </span>
-                      </div>
-                      <div className="fe-homework-item__meta">
-                        <span>{item.subject_name || '英语'}</span>
-                        <StatusPill status="unread" />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </details>
-            )}
-
-            {parsedList.length > 0 && (
-              <details className="fe-group" open>
-                <summary>
-                  <span>已解析作业 ({parsedList.length})</span>
-                  <Icon name="keyboard_arrow_down" />
-                </summary>
-                <div className="fe-group__items">
-                  {parsedList.map((item) => (
-                    <button
-                      key={item.id}
-                      className={`fe-homework-item ${item.id === selectedId ? 'is-selected' : ''}`}
-                      type="button"
-                      onClick={() => onSelectHomework(item)}
-                    >
-                      <div className="fe-homework-item__head">
-                        <span className="fe-homework-item__title">{item.name}</span>
-                        <span className="fe-homework-item__time">
-                          {formatTime(item.end_time || item.create_time)}
-                        </span>
-                      </div>
-                      <div className="fe-homework-item__meta">
-                        <span>{item.subject_name || '英语'}</span>
-                        <StatusPill status="parsed" />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </details>
-            )}
-          </>
-        )}
-      </div>
-    </div>
-  )
+type QuestionGroup = {
+  originalText: string | null
+  questions: Question[]
 }
 
-function QuestionItem({ question }: { question: Question }) {
+function groupQuestionsByPassage(questions: Question[]): QuestionGroup[] {
+  const groups: QuestionGroup[] = []
+  for (const q of questions) {
+    const normText = q.originalText?.trim() || null
+    const last = groups[groups.length - 1]
+    if (normText && last && last.originalText === normText) {
+      last.questions.push(q)
+    } else {
+      groups.push({ originalText: normText, questions: [q] })
+    }
+  }
+  return groups
+}
+
+function QuestionCard({
+  question,
+  showOriginalText = false,
+}: {
+  question: Question
+  showOriginalText?: boolean
+}) {
+  const isLangDu = Boolean(question.typeName && question.typeName.includes('朗读'))
+
   return (
-    <section className="question-block">
-      <div className="question-heading">
-        <span className="question-number">{String(question.order).padStart(2, '0')}</span>
-        <h2>{question.questionText || question.typeName || `第 ${question.order} 题`}</h2>
-        <span className="type-mark">{question.typeName}</span>
+    <div className="fe-question-card">
+      <div className="fe-question-head">
+        <span className="fe-q-badge">Q{question.order}</span>
+        <div className="fe-q-title">
+          <h4>{question.questionText || question.typeName || `第 ${question.order} 题`}</h4>
+          {question.typeName && <span className="fe-q-type">{question.typeName}</span>}
+        </div>
       </div>
 
-      {question.originalText && (
+      {showOriginalText && question.originalText && (
         <div className="reading-passage">
           <div className="reading-passage__title">
             <Icon name="menu_book" /> 原文 / 听力材料
@@ -511,7 +304,7 @@ function QuestionItem({ question }: { question: Question }) {
       <div className="answer-box">
         <h3>
           <Icon name="check_circle" filled />
-          参考答案
+          {isLangDu ? '朗读说明 / 答案提示' : '参考答案'}
         </h3>
         <div className="answer-box__content">
           {question.answers && question.answers.length > 0 ? (
@@ -522,7 +315,9 @@ function QuestionItem({ question }: { question: Question }) {
               </div>
             ))
           ) : (
-            <p className="no-answer">暂无标准文本答案</p>
+            <p className="no-answer">
+              {isLangDu ? '以原文准确朗读发音、连读与语调为准（该题型无需提交文本答案）' : '暂无标准答案'}
+            </p>
           )}
 
           {question.important && question.important.length > 0 && (
@@ -539,224 +334,340 @@ function QuestionItem({ question }: { question: Question }) {
           )}
         </div>
       </div>
-      <div className="review-stamp" aria-hidden="true">
-        <Icon name="verified" />
-        <span>Fe 核对</span>
-      </div>
-    </section>
+    </div>
   )
 }
 
-function SectionGroup({ section }: { section: Section }) {
-  if (!section.questions || section.questions.length === 0) return null
+function MergedQuestionGroup({ group }: { group: QuestionGroup }) {
+  const hasPassage = Boolean(group.originalText)
+
   return (
-    <div className="section-group">
-      <div className="section-header">
-        <h3>{section.caption || section.typeName || '试题部分'}</h3>
-        <span className="section-count">{section.questions.length} 题</span>
-      </div>
-      <div className="section-questions">
-        {section.questions.map((q) => (
-          <QuestionItem question={q} key={q.order} />
+    <div className={`fe-question-group ${hasPassage ? 'is-merged-passage' : ''}`}>
+      {hasPassage && (
+        <div className="fe-passage-card">
+          <div className="fe-passage-head">
+            <Icon name="menu_book" filled />
+            <strong>原文 / 听力材料 ({group.questions.length} 题)</strong>
+          </div>
+          <div className="fe-passage-body">
+            <p>{cleanAnswerText(group.originalText!)}</p>
+          </div>
+        </div>
+      )}
+
+      <div className="fe-group-questions">
+        {group.questions.map((q) => (
+          <QuestionCard question={q} key={q.order} showOriginalText={!hasPassage} />
         ))}
       </div>
     </div>
   )
 }
 
-function HomeworkReaderCard({
-  accountInfo,
-  selectedHomework,
+function SectionBlock({ section }: { section: Section }) {
+  if (!section.questions || section.questions.length === 0) return null
+  const groups = groupQuestionsByPassage(section.questions)
+
+  return (
+    <div className="fe-section-block">
+      <div className="fe-section-header">
+        <div className="fe-section-title">
+          <span className="fe-section-bar" />
+          <h3>{section.caption || section.typeName || '试题部分'}</h3>
+          {section.category && <span className="fe-category-badge">{section.category}</span>}
+        </div>
+        <span className="fe-section-count">{section.questions.length} 道题目</span>
+      </div>
+
+      <div className="fe-section-groups">
+        {groups.map((grp, gIdx) => (
+          <MergedQuestionGroup group={grp} key={gIdx} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function PaperReaderView({
+  homework,
   paper,
   isLoadingPaper,
-  parsingMessage,
-  homeworkError,
-  parseError,
-  isAnswerParserEnabled = true,
-  answerParserDenyReason,
   isCopyExportEnabled = true,
   copyExportDenyReason,
-  onRequestParse,
+  isAnswerParserEnabled = true,
+  answerParserDenyReason,
+  onBack,
   onCopyAnswer,
   onExportAnswer,
-  onRetry,
+  onReParse,
 }: {
-  accountInfo: PlatformAccountInfo | null
-  selectedHomework: HomeworkItem | null
+  homework: HomeworkItem
   paper: Paper | null
   isLoadingPaper: boolean
-  parsingMessage: string | null
-  homeworkError?: string | null
-  parseError?: string | null
-  isAnswerParserEnabled?: boolean
-  answerParserDenyReason?: string
   isCopyExportEnabled?: boolean
   copyExportDenyReason?: string
-  onRequestParse: (hw: HomeworkItem) => void
+  isAnswerParserEnabled?: boolean
+  answerParserDenyReason?: string
+  onBack: () => void
   onCopyAnswer: () => void
   onExportAnswer: () => void
-  onRetry?: () => void
+  onReParse: () => void
 }) {
   return (
-    <div className="fe-card fe-reader-card">
-      <div className="fe-reader-toolbar">
-        <div className="fe-reader-toolbar-group">
-          {paper && (
-            <>
-              <button
-                className="control-secondary"
-                type="button"
-                onClick={onCopyAnswer}
-                disabled={!isCopyExportEnabled}
-                title={isCopyExportEnabled ? '复制格式化答案文本到剪贴板' : (copyExportDenyReason || '答案导出功能当前不可用')}
-              >
-                <Icon name="content_copy" />
-                <span>复制答案</span>
-              </button>
-              <button
-                className="control-secondary"
-                type="button"
-                onClick={onExportAnswer}
-                disabled={!isCopyExportEnabled}
-                title={isCopyExportEnabled ? '导出 TXT 文件到本地' : (copyExportDenyReason || '答案导出功能当前不可用')}
-              >
-                <Icon name="download" />
-                <span>导出 TXT</span>
-              </button>
-            </>
-          )}
+    <div className="fe-reader-view">
+      <div className="fe-reader-header-card">
+        <div className="fe-reader-top-nav">
+          <button className="control-secondary fe-back-btn" type="button" onClick={onBack}>
+            <Icon name="arrow_back" />
+            <span>返回作业列表</span>
+          </button>
+
+          <div className="fe-reader-actions">
+            {paper && (
+              <>
+                <button
+                  className="control-secondary"
+                  type="button"
+                  onClick={onCopyAnswer}
+                  disabled={!isCopyExportEnabled}
+                  title={isCopyExportEnabled ? '复制整套答案文本到剪贴板' : (copyExportDenyReason || '答案导出已停用')}
+                >
+                  <Icon name="content_copy" />
+                  <span>复制答案</span>
+                </button>
+                <button
+                  className="control-secondary"
+                  type="button"
+                  onClick={onExportAnswer}
+                  disabled={!isCopyExportEnabled}
+                  title={isCopyExportEnabled ? '导出为本地 TXT 文本' : (copyExportDenyReason || '答案导出已停用')}
+                >
+                  <Icon name="download" />
+                  <span>导出 TXT</span>
+                </button>
+              </>
+            )}
+            <button
+              className="control-secondary"
+              type="button"
+              onClick={onReParse}
+              disabled={!isAnswerParserEnabled}
+              title={isAnswerParserEnabled ? '重新从云端解析试卷' : (answerParserDenyReason || '答案解析已停用')}
+            >
+              <Icon name="refresh" />
+              <span>重新解析</span>
+            </button>
+          </div>
         </div>
 
-        <div className="fe-reader-toolbar-group">
-          {selectedHomework && (
-            <button
-              className="control-primary"
-              type="button"
-              onClick={() => isAnswerParserEnabled && onRequestParse(selectedHomework)}
-              disabled={!isAnswerParserEnabled}
-              title={isAnswerParserEnabled ? (selectedHomework.parsed ? '重新提取并解析' : '开始解析') : (answerParserDenyReason || '答案解析功能当前不可用')}
-            >
-              <Icon name={isAnswerParserEnabled ? (selectedHomework.parsed ? 'refresh' : 'bolt') : 'lock'} />
-              <span>{isAnswerParserEnabled ? (selectedHomework.parsed ? '重新解析' : '开始解析答案') : (answerParserDenyReason || '答案解析已停用')}</span>
-            </button>
-          )}
+        <div className="fe-reader-title-area">
+          <h2>{paper?.title || paper?.paperName || homework.name}</h2>
+          <div className="fe-reader-meta-row">
+            <span className="fe-subject-tag">{homework.subject_name || '英语'}</span>
+            {paper && <span className="admin-pill-badge is-muted">共 {paper.totalQuestions} 题</span>}
+            <span className="fe-homework-meta">
+              截止时间：{formatTime(homework.end_time || homework.create_time)}
+            </span>
+          </div>
         </div>
       </div>
 
-      <div className="fe-reader-body">
-        {!accountInfo?.bound ? (
-          <div className="fe-empty-state">
-            <div className="fe-empty-state__icon">
-              <Icon name="link_off" />
-            </div>
-            <h2>未绑定 ETS100 账号</h2>
-            <p>请先在官网账号中心绑定您的 ETS100 手机号与密码，绑定完成后即可在此快速查看与解析作业。</p>
-            <a href="https://lastudio.cc/account" target="_blank" rel="noreferrer" className="control-primary" style={{ textDecoration: 'none' }}>
-              <Icon name="open_in_new" /> 前往账号中心绑定
-            </a>
+      {isLoadingPaper ? (
+        <div className="fe-empty-state" style={{ margin: '50px auto' }}>
+          <div className="fe-empty-state__icon spinning">
+            <Icon name="hourglass_top" />
           </div>
-        ) : parsingMessage ? (
-          <div className="fe-empty-state">
-            <div className="fe-empty-state__icon spinning">
-              <Icon name="sync" />
-            </div>
-            <h2>正在解析试卷答案</h2>
-            <p>{parsingMessage}</p>
-            <p style={{ color: 'var(--control-muted)', fontSize: 13 }}>正在同步试卷与答案内容，请稍候...</p>
+          <h2>正在加载试卷及标准答案...</h2>
+          <p style={{ color: 'var(--control-muted)', fontSize: 13 }}>正在读取试卷题目与解析内容，请稍候...</p>
+        </div>
+      ) : !paper ? (
+        <div className="fe-empty-state" style={{ margin: '50px auto' }}>
+          <div className="fe-empty-state__icon" style={{ background: '#fef2f2', color: '#b91c1c' }}>
+            <Icon name="error_outline" />
           </div>
-        ) : isLoadingPaper ? (
-          <div className="fe-empty-state">
-            <div className="fe-empty-state__icon spinning">
-              <Icon name="hourglass_top" />
-            </div>
-            <h2>正在加载试卷详情...</h2>
-          </div>
-        ) : selectedHomework && !selectedHomework.parsed && !paper ? (
-          <div className="fe-empty-state">
-            <div className="fe-empty-state__icon">
-              <Icon name="description" />
-            </div>
-            <h2>{selectedHomework.name}</h2>
-            <p>
-              {selectedHomework.subject_name || '英语'} · 截止：
-              {formatTime(selectedHomework.end_time || selectedHomework.create_time)}
-            </p>
-            {parseError ? (
-              <div style={{ margin: '12px auto 16px', padding: '10px 16px', background: '#fef2f2', border: '1px solid #fee2e2', borderRadius: 8, color: '#b91c1c', fontSize: 13 }}>
-                <span>解析失败：{parseError}</span>
-              </div>
-            ) : (
-              <p style={{ color: 'var(--control-muted)', fontSize: 13.5 }}>点击下方按钮开始解析标准答案。</p>
-            )}
-            <button
-              className="control-primary"
-              style={{ padding: '10px 24px', fontSize: 13.5 }}
-              type="button"
-              disabled={!isAnswerParserEnabled}
-              onClick={() => isAnswerParserEnabled && onRequestParse(selectedHomework)}
-              title={!isAnswerParserEnabled ? (answerParserDenyReason || '答案解析功能当前不可用') : undefined}
-            >
-              <Icon name={isAnswerParserEnabled ? 'bolt' : 'lock'} />{' '}
-              {isAnswerParserEnabled
-                ? (parseError ? '重新重试解析' : '开始解析答案')
-                : (answerParserDenyReason || '答案解析功能已停用')}
-            </button>
-          </div>
-        ) : homeworkError && !selectedHomework ? (
-          <div className="fe-empty-state">
-            <div className="fe-empty-state__icon">
-              <Icon name="error_outline" />
-            </div>
-            <h2>无法获取作业列表</h2>
-            <p>{homeworkError}</p>
-            <p style={{ color: 'var(--control-muted)', fontSize: 13 }}>请确认在 E听说客户端中是否加入了有效班级，或在设置中点击重新同步。</p>
-            {onRetry && (
-              <button className="control-primary" type="button" onClick={onRetry}>
-                <Icon name="refresh" /> 重新尝试
-              </button>
-            )}
-          </div>
-        ) : !paper ? (
-          <div className="fe-empty-state">
-            <div className="fe-empty-state__icon">
-              <Icon name="auto_stories" />
-            </div>
-            <h2>请选择作业</h2>
-            <p>从左侧点击一份作业即可自动解析并查看标准答案。</p>
-          </div>
-        ) : (
-          <article className="answer-paper">
-            <header className="answer-paper__head">
-              <span className="paper-kicker">共 {paper.totalQuestions} 题</span>
-              <h1>{paper.title || paper.paperName}</h1>
-            </header>
+          <h2>未能加载试卷详情</h2>
+          <p>可能由于网络超时或解析数据丢失。</p>
+          <button className="control-primary" type="button" onClick={onReParse}>
+            <Icon name="refresh" /> 重新解析
+          </button>
+        </div>
+      ) : (
+        <div className="fe-reader-content">
+          {paper.sections.map((sec, idx) => (
+            <SectionBlock section={sec} key={idx} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
-            <div className="answer-paper__content">
-              {paper.sections.map((sec, idx) => (
-                <SectionGroup section={sec} key={idx} />
-              ))}
-            </div>
-          </article>
+function HomeworkCard({
+  item,
+  index,
+  isParsing,
+  parseError,
+  isAnswerParserEnabled = true,
+  answerParserDenyReason,
+  onOpen,
+  onTriggerParse,
+}: {
+  item: HomeworkItem
+  index: number
+  isParsing: boolean
+  parseError?: string | null
+  isAnswerParserEnabled?: boolean
+  answerParserDenyReason?: string
+  onOpen: (hw: HomeworkItem) => void
+  onTriggerParse: (hw: HomeworkItem) => void
+}) {
+  return (
+    <div
+      className={`fe-homework-card ${isParsing ? 'is-parsing' : ''} ${item.parsed ? 'is-parsed' : ''}`}
+      onClick={() => {
+        if (item.parsed) {
+          onOpen(item)
+        } else if (!isParsing) {
+          onTriggerParse(item)
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          if (item.parsed) onOpen(item)
+          else if (!isParsing) onTriggerParse(item)
+        }
+      }}
+    >
+      <div className="fe-homework-card__left">
+        <div className="fe-homework-order">
+          {isParsing ? (
+            <Icon name="sync" className="status-pill__spin" />
+          ) : item.parsed ? (
+            <Icon name="check" filled />
+          ) : (
+            `#${index + 1}`
+          )}
+        </div>
+        <div className="fe-homework-info">
+          <div className="fe-homework-title-row">
+            <span className="fe-homework-name">{item.name}</span>
+            <span className="fe-subject-tag">{item.subject_name || '英语'}</span>
+          </div>
+          <div className="fe-homework-meta">
+            <span>截止: {formatTime(item.end_time || item.create_time)}</span>
+            {isParsing ? (
+              <span style={{ color: 'var(--control-blue)', fontWeight: 600 }}>正在解析试卷与答案...</span>
+            ) : item.parsed ? (
+              <span style={{ color: 'var(--control-green)', fontWeight: 600 }}>已就绪 · 点击查看答案</span>
+            ) : parseError ? (
+              <span style={{ color: '#dc2626', fontWeight: 600 }}>解析失败: {parseError}</span>
+            ) : (
+              <span>未解析</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="fe-homework-card__right">
+        {isParsing ? (
+          <span className="status-pill status-pill--parsing">
+            <Icon name="sync" className="status-pill__spin" />
+            解析中
+          </span>
+        ) : item.parsed ? (
+          <button
+            className="control-primary"
+            type="button"
+            style={{ padding: '7px 16px', fontSize: 13 }}
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpen(item)
+            }}
+          >
+            <Icon name="visibility" />
+            <span>查看答案</span>
+          </button>
+        ) : parseError ? (
+          <button
+            className="control-secondary"
+            type="button"
+            style={{ color: '#dc2626', borderColor: '#fca5a5', padding: '7px 14px', fontSize: 12.5 }}
+            onClick={(e) => {
+              e.stopPropagation()
+              onTriggerParse(item)
+            }}
+          >
+            <Icon name="refresh" />
+            <span>重试解析</span>
+          </button>
+        ) : (
+          <button
+            className="control-secondary"
+            type="button"
+            style={{ padding: '7px 14px', fontSize: 12.5 }}
+            disabled={!isAnswerParserEnabled}
+            title={!isAnswerParserEnabled ? (answerParserDenyReason || '解析功能已停用') : undefined}
+            onClick={(e) => {
+              e.stopPropagation()
+              onTriggerParse(item)
+            }}
+          >
+            <Icon name="bolt" />
+            <span>开始解析</span>
+          </button>
         )}
       </div>
     </div>
   )
 }
 
-function HistoryPage({
+function HomeworkListView({
+  activeTab,
+  onTabChange,
+  accountInfo,
+  homeworks,
   historyHomeworks,
-  isLoading,
-  onSelectHomework,
+  isLoadingHomeworks,
+  isLoadingHistory,
+  homeworkError,
+  parsingId,
+  parseErrors,
+  isCloudModeEnabled = true,
+  cloudModeDenyReason,
+  isAnswerParserEnabled = true,
+  answerParserDenyReason,
+  onRefresh,
+  onOpenHomework,
+  onTriggerParse,
 }: {
+  activeTab: 'current' | 'history'
+  onTabChange: (tab: 'current' | 'history') => void
+  accountInfo: PlatformAccountInfo | null
+  homeworks: HomeworkItem[]
   historyHomeworks: HomeworkItem[]
-  isLoading: boolean
-  onSelectHomework: (item: HomeworkItem) => void
+  isLoadingHomeworks: boolean
+  isLoadingHistory: boolean
+  homeworkError?: string | null
+  parsingId: string | null
+  parseErrors: Record<string, string>
+  isCloudModeEnabled?: boolean
+  cloudModeDenyReason?: string
+  isAnswerParserEnabled?: boolean
+  answerParserDenyReason?: string
+  onRefresh: () => void
+  onOpenHomework: (hw: HomeworkItem) => void
+  onTriggerParse: (hw: HomeworkItem) => void
 }) {
-  const [historyQuery, setHistoryQuery] = useState('')
+  const [query, setQuery] = useState('')
+  const currentList = activeTab === 'current' ? homeworks : historyHomeworks
+  const isLoading = activeTab === 'current' ? isLoadingHomeworks : isLoadingHistory
 
-  const filtered = historyHomeworks.filter((hw) => {
-    if (!historyQuery.trim()) return true
-    const q = historyQuery.toLowerCase()
+  const filtered = currentList.filter((hw) => {
+    if (!query.trim()) return true
+    const q = query.toLowerCase()
     return (
       hw.name.toLowerCase().includes(q) ||
       (hw.subject_name && hw.subject_name.toLowerCase().includes(q))
@@ -764,62 +675,131 @@ function HistoryPage({
   })
 
   return (
-    <div className="fe-history-container">
-      <div className="fe-history-toolbar">
-        <div className="control-toolbar">
-          <label>
-            <Icon name="search" />
-            <input
-              placeholder="搜索历史作业名称或学科..."
-              type="search"
-              value={historyQuery}
-              onChange={(e) => setHistoryQuery(e.target.value)}
-            />
-          </label>
+    <div className="fe-homework-container">
+      {/* List Toolbar with Segmented Switch */}
+      <div className="fe-list-toolbar">
+        <div className="fe-list-toolbar__left">
+          <div className="fe-segmented-control" role="tablist">
+            <button
+              className={activeTab === 'current' ? 'is-active' : ''}
+              onClick={() => onTabChange('current')}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'current'}
+            >
+              <Icon name="assignment" />
+              <span>当前作业 ({homeworks.length})</span>
+            </button>
+            <button
+              className={activeTab === 'history' ? 'is-active' : ''}
+              onClick={() => onTabChange('history')}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'history'}
+            >
+              <Icon name="history" />
+              <span>历史作业 ({historyHomeworks.length})</span>
+            </button>
+          </div>
+
+          <div className="control-toolbar" style={{ width: 'auto', minWidth: 240 }}>
+            <label>
+              <Icon name="search" />
+              <input
+                placeholder={`搜索${activeTab === 'history' ? '历史' : '当前'}作业名称或学科...`}
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </label>
+          </div>
         </div>
-        <span className="admin-pill-badge is-muted">
-          共 {filtered.length} 份归档记录
-        </span>
+
+        <div className="fe-list-toolbar__right">
+          <span className="admin-pill-badge is-muted">
+            {accountInfo?.bound ? `已连接 · 共 ${filtered.length} 份` : '未绑定 ETS100'}
+          </span>
+          <button
+            className="control-icon-button"
+            onClick={onRefresh}
+            title="重新同步作业列表"
+            type="button"
+          >
+            <Icon name="refresh" />
+          </button>
+        </div>
       </div>
 
-      <div className="fe-history-list">
-        {isLoading ? (
-          <div className="fe-empty-state" style={{ margin: '40px auto' }}>
-            <div className="fe-empty-state__icon spinning">
-              <Icon name="sync" />
-            </div>
-            <h2>正在拉取历史作业记录...</h2>
+      {/* Body Area */}
+      {!isCloudModeEnabled ? (
+        <div className="fe-empty-state">
+          <div className="fe-empty-state__icon" style={{ background: '#fef2f2', color: '#b91c1c' }}>
+            <Icon name="cloud_off" />
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="fe-empty-state" style={{ margin: '40px auto' }}>
-            <div className="fe-empty-state__icon">
-              <Icon name="history_toggle_drop" />
-            </div>
-            <h2>暂无已归档的历史作业</h2>
-            <p>完成并归档的试卷将显示在此处以供查阅。</p>
+          <h2>云端模式已停用</h2>
+          <p>{cloudModeDenyReason || '管理员已暂停云端作业拉取服务。'}</p>
+        </div>
+      ) : homeworkError ? (
+        <div className="fe-empty-state">
+          <div className="fe-empty-state__icon" style={{ background: '#fef2f2', color: '#b91c1c' }}>
+            <Icon name="error_outline" />
           </div>
-        ) : (
-          filtered.map((hw) => (
-            <button
+          <h2>作业同步失败</h2>
+          <p>{homeworkError}</p>
+          <button type="button" className="control-primary" onClick={onRefresh}>
+            重新尝试
+          </button>
+        </div>
+      ) : !accountInfo?.bound ? (
+        <div className="fe-empty-state">
+          <div className="fe-empty-state__icon">
+            <Icon name="no_accounts" />
+          </div>
+          <h2>未绑定 ETS100</h2>
+          <p>请先前往官网账号中心绑定您的 ETS100 手机号与密码。</p>
+          <a
+            href="https://lastudio.cc/account"
+            target="_blank"
+            rel="noreferrer"
+            className="control-primary"
+            style={{ textDecoration: 'none' }}
+          >
+            前往账号中心绑定
+          </a>
+        </div>
+      ) : isLoading ? (
+        <div className="fe-empty-state" style={{ margin: '50px auto' }}>
+          <div className="fe-empty-state__icon spinning">
+            <Icon name="sync" />
+          </div>
+          <h2>正在同步{activeTab === 'history' ? '历史' : '当前'}作业列表...</h2>
+          <p style={{ color: 'var(--control-muted)', fontSize: 13 }}>正在从 ETS100 云端拉取最新作业，请稍候...</p>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="fe-empty-state" style={{ margin: '50px auto' }}>
+          <div className="fe-empty-state__icon">
+            <Icon name={activeTab === 'history' ? 'history_toggle_drop' : 'inbox'} />
+          </div>
+          <h2>暂无{activeTab === 'history' ? '已归档的历史' : '待完成的当前'}作业</h2>
+          <p>{activeTab === 'history' ? '往期完成的试卷将归档在此处。' : '当前没有待完成的作业。'}</p>
+        </div>
+      ) : (
+        <div className="fe-homework-list">
+          {filtered.map((hw, idx) => (
+            <HomeworkCard
               key={hw.id}
-              className="fe-history-item"
-              type="button"
-              onClick={() => onSelectHomework(hw)}
-            >
-              <div>
-                <strong>{hw.name}</strong>
-                <small>
-                  {hw.subject_name || '英语'} · 截止: {formatTime(hw.end_time || hw.create_time)}
-                </small>
-              </div>
-              <div className="fe-history-item__right">
-                <StatusPill status={hw.parsed ? 'parsed' : 'unread'} />
-                <Icon name="chevron_right" />
-              </div>
-            </button>
-          ))
-        )}
-      </div>
+              item={hw}
+              index={idx}
+              isParsing={hw.id === parsingId}
+              parseError={parseErrors[hw.id]}
+              isAnswerParserEnabled={isAnswerParserEnabled}
+              answerParserDenyReason={answerParserDenyReason}
+              onOpen={onOpenHomework}
+              onTriggerParse={onTriggerParse}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -1112,17 +1092,24 @@ function App() {
   const [accountInfo, setAccountInfo] = useState<PlatformAccountInfo | null>(null)
   const [homeworks, setHomeworks] = useState<HomeworkItem[]>([])
   const [historyHomeworks, setHistoryHomeworks] = useState<HomeworkItem[]>([])
+  const [isLoadingHomeworks, setIsLoadingHomeworks] = useState(false)
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
-  const [selectedHomework, setSelectedHomework] = useState<HomeworkItem | null>(null)
-  const [currentPaper, setCurrentPaper] = useState<Paper | null>(null)
+  const [activeTab, setActiveTab] = useState<'current' | 'history'>(() => pathname === '/history' ? 'history' : 'current')
+
+  // Viewing Paper State (Full-width reader view)
+  const [viewingPaper, setViewingPaper] = useState<{ homework: HomeworkItem; paper: Paper | null } | null>(null)
+  const [paperCache, setPaperCache] = useState<Record<string, Paper>>({})
   const [isLoadingPaper, setIsLoadingPaper] = useState(false)
+
+  // Parsing state & error tracking per homework
   const [parsingId, setParsingId] = useState<string | null>(null)
-  const [parsingMessage, setParsingMessage] = useState<string | null>(null)
+  const [parseErrors, setParseErrors] = useState<Record<string, string>>({})
+
+  // Modals & UI feedback
   const [showRiskModal, setShowRiskModal] = useState<HomeworkItem | null>(null)
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [homeworkError, setHomeworkError] = useState<string | null>(null)
-  const [parseError, setParseError] = useState<string | null>(null)
 
   // Software Config & Features State
   const [softwareConfig, setSoftwareConfig] = useState<SoftwareConfig | null>(null)
@@ -1267,6 +1254,14 @@ function App() {
   }, [authMessage, page, pathname, session])
 
   useEffect(() => {
+    if (pathname === '/history') {
+      setActiveTab('history')
+    } else if (pathname === '/') {
+      setActiveTab('current')
+    }
+  }, [pathname])
+
+  useEffect(() => {
     if (!session) return
     let active = true
 
@@ -1280,23 +1275,18 @@ function App() {
             return
           }
           try {
+            setIsLoadingHomeworks(true)
             const res = await getHomeworkList(session.accessToken, '1')
             if (!active) return
             setHomeworkError(null)
             setHomeworks(res.homeworks || [])
-            if (res.homeworks && res.homeworks.length > 0) {
-              const firstParsed = res.homeworks.find((h) => h.parsed)
-              const firstHw = firstParsed || res.homeworks[0]
-              setSelectedHomework(firstHw)
-              if (firstHw.parsed) {
-                void loadPaperDetail(session.accessToken, firstHw.id)
-              }
-            }
           } catch (err) {
             if (!active) return
             const msg = err instanceof Error ? err.message : '获取作业列表失败'
             console.error('Failed to load homework list:', err)
             setHomeworkError(msg)
+          } finally {
+            if (active) setIsLoadingHomeworks(false)
           }
         }
       })
@@ -1311,9 +1301,11 @@ function App() {
   }, [session, softwareConfig, softwareFeatures])
 
   useEffect(() => {
-    if (!session || page !== '/history') return
+    if (!session || (page !== '/history' && activeTab !== 'history')) return
     if (!isFeatureEnabled('cloud_mode')) return
+    if (historyHomeworks.length > 0) return
     let active = true
+    setIsLoadingHistory(true)
 
     Promise.all([
       getHomeworkList(session.accessToken, '2').catch(() => ({ homeworks: [] })),
@@ -1333,7 +1325,7 @@ function App() {
     return () => {
       active = false
     }
-  }, [session, page, softwareConfig, softwareFeatures])
+  }, [session, page, activeTab, historyHomeworks.length, softwareConfig, softwareFeatures])
 
   useEffect(() => {
     return () => {
@@ -1343,36 +1335,38 @@ function App() {
     }
   }, [])
 
-  async function loadPaperDetail(token: string, homeworkId: string) {
+  async function loadPaperDetail(token: string, homework: HomeworkItem): Promise<Paper | null> {
+    if (paperCache[homework.id]) {
+      return paperCache[homework.id]
+    }
     setIsLoadingPaper(true)
     try {
-      const detail = await getHomeworkDetail(token, homeworkId)
-      setCurrentPaper(detail)
+      const detail = await getHomeworkDetail(token, homework.id)
+      setPaperCache((prev) => ({ ...prev, [homework.id]: detail }))
+      return detail
     } catch (err) {
       console.error('Failed to load paper detail:', err)
-      setCurrentPaper(null)
+      return null
     } finally {
       setIsLoadingPaper(false)
     }
   }
 
   // Fe user operation flow: click homework -> show answers if parsed, or trigger parse if unparsed!
-  function handleSelectHomework(item: HomeworkItem) {
-    setSelectedHomework(item)
-    setParseError(null)
-    if (item.parsed) {
-      if (session) {
-        void loadPaperDetail(session.accessToken, item.id)
-      }
-      if (page !== '/') {
-        navigate('/')
-      }
-    } else {
-      setCurrentPaper(null)
-      if (page !== '/') {
-        navigate('/')
-      }
+  async function handleOpenHomework(item: HomeworkItem) {
+    if (!item.parsed) {
       handleTriggerParse(item)
+      return
+    }
+    const cached = paperCache[item.id]
+    if (cached) {
+      setViewingPaper({ homework: item, paper: cached })
+      return
+    }
+    setViewingPaper({ homework: item, paper: null })
+    if (session) {
+      const detail = await loadPaperDetail(session.accessToken, item)
+      setViewingPaper((curr) => (curr?.homework.id === item.id ? { homework: item, paper: detail } : curr))
     }
   }
 
@@ -1402,8 +1396,11 @@ function App() {
   async function executeParse(item: HomeworkItem) {
     if (!session) return
     setParsingId(item.id)
-    setParsingMessage(`正在解析《${item.name}》答案...`)
-    setParseError(null)
+    setParseErrors((prev) => {
+      const next = { ...prev }
+      delete next[item.id]
+      return next
+    })
 
     try {
       const resp = await startParseHomework(session.accessToken, {
@@ -1414,19 +1411,20 @@ function App() {
 
       if (resp.status === 'COMPLETED' && resp.result) {
         setParsingId(null)
-        setParsingMessage(null)
-        setParseError(null)
-        setCurrentPaper(resp.result)
+        const paperResult = resp.result
+        setPaperCache((prev) => ({ ...prev, [item.id]: paperResult }))
         setHomeworks((prev) =>
           prev.map((h) => (h.id === item.id ? { ...h, parsed: true } : h))
         )
-        showToast('解析完成！')
+        setHistoryHomeworks((prev) =>
+          prev.map((h) => (h.id === item.id ? { ...h, parsed: true } : h))
+        )
+        showToast(`《${item.name}》答案解析完成！`)
         return
       }
 
       if (resp.task_id) {
         const taskId = resp.task_id
-        setParsingMessage('正在解析试卷，请稍候...')
 
         if (pollingTimerRef.current) {
           window.clearInterval(pollingTimerRef.current)
@@ -1438,23 +1436,23 @@ function App() {
             if (task.status === 'COMPLETED') {
               if (pollingTimerRef.current) window.clearInterval(pollingTimerRef.current)
               setParsingId(null)
-              setParsingMessage(null)
-              setParseError(null)
               if (task.result) {
-                setCurrentPaper(task.result)
+                setPaperCache((prev) => ({ ...prev, [item.id]: task.result! }))
               } else {
-                void loadPaperDetail(session.accessToken, item.id)
+                void loadPaperDetail(session.accessToken, item)
               }
               setHomeworks((prev) =>
                 prev.map((h) => (h.id === item.id ? { ...h, parsed: true } : h))
               )
-              showToast('解析完成！')
+              setHistoryHomeworks((prev) =>
+                prev.map((h) => (h.id === item.id ? { ...h, parsed: true } : h))
+              )
+              showToast(`《${item.name}》答案解析完成！`)
             } else if (task.status === 'FAILED') {
               if (pollingTimerRef.current) window.clearInterval(pollingTimerRef.current)
               setParsingId(null)
-              setParsingMessage(null)
               const failMsg = task.error || '解析失败'
-              setParseError(failMsg)
+              setParseErrors((prev) => ({ ...prev, [item.id]: failMsg }))
               showToast(`解析失败: ${failMsg}`)
             }
           } catch (err) {
@@ -1464,20 +1462,18 @@ function App() {
       }
     } catch (err: unknown) {
       setParsingId(null)
-      setParsingMessage(null)
       const errorMsg = err instanceof Error ? err.message : '发起解析失败'
-      setParseError(errorMsg)
+      setParseErrors((prev) => ({ ...prev, [item.id]: errorMsg }))
       showToast(errorMsg)
     }
   }
 
-  async function handleCopyAnswer() {
+  async function handleCopyAnswer(paper: Paper) {
     if (!isFeatureEnabled('copy_export')) {
       showToast(getFeatureDenyReason('copy_export', '答案导出功能已停用'))
       return
     }
-    if (!currentPaper) return
-    const text = formatPaperAsText(currentPaper)
+    const text = formatPaperAsText(paper)
     try {
       await navigator.clipboard.writeText(text)
       showToast('已复制格式化答案至剪贴板！')
@@ -1492,18 +1488,17 @@ function App() {
     }
   }
 
-  function handleExportAnswer() {
+  function handleExportAnswer(paper: Paper) {
     if (!isFeatureEnabled('copy_export')) {
       showToast(getFeatureDenyReason('copy_export', '答案导出功能已停用'))
       return
     }
-    if (!currentPaper) return
-    const text = formatPaperAsText(currentPaper)
+    const text = formatPaperAsText(paper)
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${currentPaper.title || currentPaper.paperName || '作业答案'}.txt`
+    a.download = `${paper.title || paper.paperName || '作业答案'}.txt`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -1523,15 +1518,27 @@ function App() {
             return
           }
           try {
+            setIsLoadingHomeworks(true)
             const res = await getHomeworkList(session.accessToken, '1')
             setHomeworkError(null)
             setHomeworks(res.homeworks || [])
+            if (activeTab === 'history') {
+              setIsLoadingHistory(true)
+              const [res2, res3] = await Promise.all([
+                getHomeworkList(session.accessToken, '2').catch(() => ({ homeworks: [] })),
+                getHomeworkList(session.accessToken, '3').catch(() => ({ homeworks: [] })),
+              ])
+              setHistoryHomeworks([...(res2.homeworks || []), ...(res3.homeworks || [])])
+              setIsLoadingHistory(false)
+            }
             showToast('已重新同步作业列表')
           } catch (err) {
             const msg = err instanceof Error ? err.message : '获取作业列表失败'
             console.error('Failed to refresh homework data:', err)
             setHomeworkError(msg)
             showToast(`作业列表同步失败: ${msg}`)
+          } finally {
+            setIsLoadingHomeworks(false)
           }
         }
       })
@@ -1541,9 +1548,21 @@ function App() {
       })
   }
 
+  function handleTabChange(tab: 'current' | 'history') {
+    setActiveTab(tab)
+    setViewingPaper(null)
+    const targetPage = tab === 'history' ? '/history' : '/'
+    if (pathname !== targetPage) {
+      navigate(targetPage)
+    }
+  }
+
   function navigate(nextPage: Page) {
+    setViewingPaper(null)
     if (nextPage === '/history') {
-      setIsLoadingHistory(true)
+      setActiveTab('history')
+    } else if (nextPage === '/') {
+      setActiveTab('current')
     }
     setMobileNavOpen(false)
     if (nextPage === window.location.pathname) {
@@ -1779,8 +1798,8 @@ function App() {
           {/* Page Heading */}
           <header className="control-page-heading">
             <div>
-              <h1>{meta.title}</h1>
-              <span>{meta.caption}</span>
+              <h1>{viewingPaper ? `试卷阅读 · ${viewingPaper.homework.name}` : meta.title}</h1>
+              <span>{viewingPaper ? '查看作业结构、题目解析与标准答案' : meta.caption}</span>
             </div>
           </header>
 
@@ -1835,49 +1854,7 @@ function App() {
           />
 
           {/* Page Work area */}
-          {page === '/' && (
-            <div className="fe-split-workspace">
-              <AssignmentIndexCard
-                accountInfo={accountInfo}
-                homeworks={homeworks}
-                selectedId={selectedHomework?.id || null}
-                parsingId={parsingId}
-                homeworkError={homeworkError}
-                isCloudModeEnabled={isFeatureEnabled('cloud_mode')}
-                cloudModeDenyReason={getFeatureDenyReason('cloud_mode')}
-                onRetry={refreshAccountAndHomeworks}
-                onSelectHomework={handleSelectHomework}
-              />
-
-              <HomeworkReaderCard
-                accountInfo={accountInfo}
-                selectedHomework={selectedHomework}
-                paper={currentPaper}
-                isLoadingPaper={isLoadingPaper}
-                parsingMessage={parsingMessage}
-                homeworkError={homeworkError}
-                parseError={parseError}
-                isAnswerParserEnabled={isFeatureEnabled('answer_parser')}
-                answerParserDenyReason={getFeatureDenyReason('answer_parser')}
-                isCopyExportEnabled={isFeatureEnabled('copy_export')}
-                copyExportDenyReason={getFeatureDenyReason('copy_export')}
-                onRequestParse={handleTriggerParse}
-                onCopyAnswer={handleCopyAnswer}
-                onExportAnswer={handleExportAnswer}
-                onRetry={refreshAccountAndHomeworks}
-              />
-            </div>
-          )}
-
-          {page === '/history' && (
-            <HistoryPage
-              historyHomeworks={historyHomeworks}
-              isLoading={isLoadingHistory}
-              onSelectHomework={handleSelectHomework}
-            />
-          )}
-
-          {page === '/settings' && (
+          {page === '/settings' ? (
             <SettingsPage
               currentUser={currentUser}
               accountInfo={accountInfo}
@@ -1885,6 +1862,40 @@ function App() {
               softwareFeatures={softwareFeatures}
               onRefreshSession={refreshAccountAndHomeworks}
               onOpenAnnouncement={() => setShowAnnouncementModal(true)}
+            />
+          ) : viewingPaper ? (
+            <PaperReaderView
+              homework={viewingPaper.homework}
+              paper={viewingPaper.paper}
+              isLoadingPaper={isLoadingPaper}
+              isCopyExportEnabled={isFeatureEnabled('copy_export')}
+              copyExportDenyReason={getFeatureDenyReason('copy_export')}
+              isAnswerParserEnabled={isFeatureEnabled('answer_parser')}
+              answerParserDenyReason={getFeatureDenyReason('answer_parser')}
+              onBack={() => setViewingPaper(null)}
+              onCopyAnswer={() => viewingPaper.paper && handleCopyAnswer(viewingPaper.paper)}
+              onExportAnswer={() => viewingPaper.paper && handleExportAnswer(viewingPaper.paper)}
+              onReParse={() => handleTriggerParse(viewingPaper.homework)}
+            />
+          ) : (
+            <HomeworkListView
+              activeTab={activeTab}
+              onTabChange={handleTabChange}
+              accountInfo={accountInfo}
+              homeworks={homeworks}
+              historyHomeworks={historyHomeworks}
+              isLoadingHomeworks={isLoadingHomeworks}
+              isLoadingHistory={isLoadingHistory}
+              homeworkError={homeworkError}
+              parsingId={parsingId}
+              parseErrors={parseErrors}
+              isCloudModeEnabled={isFeatureEnabled('cloud_mode')}
+              cloudModeDenyReason={getFeatureDenyReason('cloud_mode')}
+              isAnswerParserEnabled={isFeatureEnabled('answer_parser')}
+              answerParserDenyReason={getFeatureDenyReason('answer_parser')}
+              onRefresh={refreshAccountAndHomeworks}
+              onOpenHomework={handleOpenHomework}
+              onTriggerParse={handleTriggerParse}
             />
           )}
         </section>
