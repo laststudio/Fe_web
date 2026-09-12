@@ -499,6 +499,7 @@ function CurrentAssignmentPage({
   isLoadingPaper,
   parsingMessage,
   homeworkError,
+  parseError,
   onOpenAssignments,
   onRequestParse,
   onCopyAnswer,
@@ -511,6 +512,7 @@ function CurrentAssignmentPage({
   isLoadingPaper: boolean
   parsingMessage: string | null
   homeworkError?: string | null
+  parseError?: string | null
   onOpenAssignments: () => void
   onRequestParse: (hw: HomeworkItem) => void
   onCopyAnswer: () => void
@@ -606,13 +608,19 @@ function CurrentAssignmentPage({
             学科：{selectedHomework.subject_name || '英语'} · 截止：
             {formatTime(selectedHomework.end_time || selectedHomework.create_time)}
           </p>
-          <p className="empty-state__hint">该作业尚未解析答案，点击下方按钮开始云端快速解析。</p>
+          {parseError ? (
+            <div className="panel-empty-alert panel-empty-alert--error" style={{ margin: '12px auto 16px', maxWidth: '480px', width: '100%' }}>
+              <span>解析失败：{parseError}</span>
+            </div>
+          ) : (
+            <p className="empty-state__hint">该作业尚未解析答案，点击下方按钮开始云端快速解析。</p>
+          )}
           <button
             className="primary-button parse-action-btn"
             type="button"
             onClick={() => onRequestParse(selectedHomework)}
           >
-            <Icon name="bolt" /> 发起云端解析
+            <Icon name="bolt" /> {parseError ? '重新发起解析' : '发起云端解析'}
           </button>
         </div>
       </section>
@@ -905,6 +913,7 @@ function App() {
   const [showRiskModal, setShowRiskModal] = useState<HomeworkItem | null>(null)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [homeworkError, setHomeworkError] = useState<string | null>(null)
+  const [parseError, setParseError] = useState<string | null>(null)
 
   const pollingTimerRef = useRef<number | null>(null)
 
@@ -1062,6 +1071,7 @@ function App() {
 
   function handleSelectHomework(item: HomeworkItem) {
     setSelectedHomework(item)
+    setParseError(null)
     if (item.parsed && session) {
       void loadPaperDetail(session.accessToken, item.id)
       if (page !== '/') {
@@ -1098,6 +1108,7 @@ function App() {
     if (!session) return
     setParsingId(item.id)
     setParsingMessage('正在启动云端解析任务...')
+    setParseError(null)
 
     try {
       const resp = await startParseHomework(session.accessToken, {
@@ -1109,6 +1120,7 @@ function App() {
       if (resp.status === 'COMPLETED' && resp.result) {
         setParsingId(null)
         setParsingMessage(null)
+        setParseError(null)
         setCurrentPaper(resp.result)
         setHomeworks((prev) =>
           prev.map((h) => (h.id === item.id ? { ...h, parsed: true } : h))
@@ -1136,6 +1148,7 @@ function App() {
               if (pollingTimerRef.current) window.clearInterval(pollingTimerRef.current)
               setParsingId(null)
               setParsingMessage(null)
+              setParseError(null)
               if (task.result) {
                 setCurrentPaper(task.result)
               } else {
@@ -1149,7 +1162,9 @@ function App() {
               if (pollingTimerRef.current) window.clearInterval(pollingTimerRef.current)
               setParsingId(null)
               setParsingMessage(null)
-              showToast(`解析失败: ${task.error || '未知错误'}`)
+              const failMsg = task.error || '解析失败'
+              setParseError(failMsg)
+              showToast(`解析失败: ${failMsg}`)
             }
           } catch (err) {
             console.error('Task poll error:', err)
@@ -1159,7 +1174,9 @@ function App() {
     } catch (err: unknown) {
       setParsingId(null)
       setParsingMessage(null)
-      showToast(err instanceof Error ? err.message : '发起解析请求失败')
+      const errorMsg = err instanceof Error ? err.message : '发起解析请求失败'
+      setParseError(errorMsg)
+      showToast(errorMsg)
     }
   }
 
@@ -1378,6 +1395,7 @@ function App() {
             isLoadingPaper={isLoadingPaper}
             parsingMessage={parsingMessage}
             homeworkError={homeworkError}
+            parseError={parseError}
             onOpenAssignments={() => setPanelOpen(true)}
             onRequestParse={handleTriggerParse}
             onCopyAnswer={handleCopyAnswer}
