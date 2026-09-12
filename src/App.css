@@ -115,8 +115,10 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 
 .panel-empty-alert { padding: 32px 16px; text-align: center; color: var(--muted); }
 .panel-empty-alert .material-symbols-outlined { font-size: 40px; color: #abb2c9; margin-bottom: 8px; }
+.panel-empty-alert--error .material-symbols-outlined { color: #d9383a; }
+.panel-empty-alert--error p { color: #d9383a; font-weight: 500; }
 .panel-empty-alert p { margin: 0 0 16px; font-size: 14px; }
-.panel-action-btn { display: inline-block; padding: 8px 16px; border-radius: 8px; background: var(--primary); color: #fff; text-decoration: none; font-size: 13px; font-weight: 600; }
+.panel-action-btn { display: inline-block; padding: 8px 16px; border-radius: 8px; background: var(--primary); color: #fff; text-decoration: none; font-size: 13px; font-weight: 600; cursor: pointer; border: none; }
 
 /* Main Reader & Page Panels */
 .reader-panel, .page-panel { min-width: 0; flex: 1; overflow-y: auto; background: var(--surface); display: flex; flex-direction: column; }

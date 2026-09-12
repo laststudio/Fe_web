@@ -177,10 +177,12 @@ function AssignmentPanel({
   homeworks,
   selectedId,
   parsingId,
+  homeworkError,
   onClose,
   onNavigate,
   onToggle,
   onSelectHomework,
+  onRetry,
 }: {
   isOpen: boolean
   activePage: Page
@@ -188,10 +190,12 @@ function AssignmentPanel({
   homeworks: HomeworkItem[]
   selectedId: string | null
   parsingId: string | null
+  homeworkError?: string | null
   onClose: () => void
   onNavigate: (page: Page, closePanel?: boolean) => void
   onToggle: () => void
   onSelectHomework: (item: HomeworkItem) => void
+  onRetry?: () => void
 }) {
   const [query, setQuery] = useState('')
 
@@ -242,7 +246,17 @@ function AssignmentPanel({
           </label>
         </div>
         <div className="assignment-list">
-          {!accountInfo?.bound ? (
+          {homeworkError ? (
+            <div className="panel-empty-alert panel-empty-alert--error">
+              <Icon name="error_outline" />
+              <p>{homeworkError}</p>
+              {onRetry && (
+                <button type="button" className="panel-action-btn" onClick={onRetry}>
+                  重新加载
+                </button>
+              )}
+            </div>
+          ) : !accountInfo?.bound ? (
             <div className="panel-empty-alert">
               <Icon name="no_accounts" />
               <p>尚未绑定 ETS100 账号</p>
@@ -484,20 +498,24 @@ function CurrentAssignmentPage({
   paper,
   isLoadingPaper,
   parsingMessage,
+  homeworkError,
   onOpenAssignments,
   onRequestParse,
   onCopyAnswer,
   onExportAnswer,
+  onRetry,
 }: {
   accountInfo: PlatformAccountInfo | null
   selectedHomework: HomeworkItem | null
   paper: Paper | null
   isLoadingPaper: boolean
   parsingMessage: string | null
+  homeworkError?: string | null
   onOpenAssignments: () => void
   onRequestParse: (hw: HomeworkItem) => void
   onCopyAnswer: () => void
   onExportAnswer: () => void
+  onRetry?: () => void
 }) {
   if (!accountInfo?.bound) {
     return (
@@ -596,6 +614,31 @@ function CurrentAssignmentPage({
           >
             <Icon name="bolt" /> 发起云端解析
           </button>
+        </div>
+      </section>
+    )
+  }
+
+  if (homeworkError && !selectedHomework) {
+    return (
+      <section className="reader-panel page-surface-enter" aria-label="答案阅读器">
+        <div className="reader-toolbar">
+          <button className="mobile-assignment-toggle" type="button" onClick={onOpenAssignments} aria-label="打开作业列表">
+            <Icon name="menu" />
+          </button>
+        </div>
+        <div className="empty-state">
+          <div className="empty-state__icon">
+            <Icon name="error_outline" />
+          </div>
+          <h2>无法获取作业列表</h2>
+          <p>{homeworkError}</p>
+          <p className="empty-state__hint">请确认在 E听说客户端中是否加入了有效班级，或在设置中点击重新同步。</p>
+          {onRetry && (
+            <button className="primary-button" type="button" onClick={onRetry}>
+              <Icon name="refresh" /> 重新尝试
+            </button>
+          )}
         </div>
       </section>
     )
@@ -765,6 +808,34 @@ function SettingsPage({
                   <span className="account-label">ETS100 手机号</span>
                   <strong>{accountInfo.account_display || '未知'}</strong>
                 </div>
+                {accountInfo.profile && (
+                  <>
+                    {(accountInfo.profile as Record<string, unknown>).name ? (
+                      <div className="account-info-card__row">
+                        <span className="account-label">学生姓名</span>
+                        <span>{String((accountInfo.profile as Record<string, unknown>).name)}</span>
+                      </div>
+                    ) : null}
+                    {(accountInfo.profile as Record<string, unknown>).school_name ? (
+                      <div className="account-info-card__row">
+                        <span className="account-label">学校</span>
+                        <span>{String((accountInfo.profile as Record<string, unknown>).school_name)}</span>
+                      </div>
+                    ) : null}
+                    {(accountInfo.profile as Record<string, unknown>).class_name ? (
+                      <div className="account-info-card__row">
+                        <span className="account-label">班级</span>
+                        <span>{String((accountInfo.profile as Record<string, unknown>).class_name)}</span>
+                      </div>
+                    ) : null}
+                    {(accountInfo.profile as Record<string, unknown>).grade ? (
+                      <div className="account-info-card__row">
+                        <span className="account-label">年级</span>
+                        <span>{String((accountInfo.profile as Record<string, unknown>).grade)}</span>
+                      </div>
+                    ) : null}
+                  </>
+                )}
                 {accountInfo.last_used_at && (
                   <div className="account-info-card__row">
                     <span className="account-label">上次使用时间</span>
@@ -833,6 +904,7 @@ function App() {
   const [parsingMessage, setParsingMessage] = useState<string | null>(null)
   const [showRiskModal, setShowRiskModal] = useState<HomeworkItem | null>(null)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [homeworkError, setHomeworkError] = useState<string | null>(null)
 
   const pollingTimerRef = useRef<number | null>(null)
 
@@ -917,21 +989,30 @@ function App() {
         setAccountInfo(account)
 
         if (account.bound) {
-          const res = await getHomeworkList(session.accessToken, '1')
-          if (!active) return
-          setHomeworks(res.homeworks || [])
-          const parsedFirst = res.homeworks.find((h) => h.parsed)
-          if (parsedFirst) {
-            setSelectedHomework(parsedFirst)
-            const detail = await getHomeworkDetail(session.accessToken, parsedFirst.id)
+          try {
+            const res = await getHomeworkList(session.accessToken, '1')
             if (!active) return
-            setCurrentPaper(detail)
+            setHomeworkError(null)
+            setHomeworks(res.homeworks || [])
+            const parsedFirst = res.homeworks.find((h) => h.parsed)
+            if (parsedFirst) {
+              setSelectedHomework(parsedFirst)
+              const detail = await getHomeworkDetail(session.accessToken, parsedFirst.id)
+              if (!active) return
+              setCurrentPaper(detail)
+            }
+          } catch (err) {
+            if (!active) return
+            const msg = err instanceof Error ? err.message : '获取作业列表失败'
+            console.error('Failed to load homework data:', err)
+            setHomeworkError(msg)
           }
         }
       })
       .catch((err) => {
         if (!active) return
-        console.error('Failed to load homework data:', err)
+        console.error('Failed to load account data:', err)
+        setHomeworkError(err instanceof Error ? err.message : '加载账号信息失败')
       })
 
     return () => {
@@ -1116,13 +1197,22 @@ function App() {
 
   function refreshAccountAndHomeworks() {
     if (!session) return
+    setHomeworkError(null)
     getPlatformAccount(session.accessToken)
       .then(async (account) => {
         setAccountInfo(account)
         if (account.bound) {
-          const res = await getHomeworkList(session.accessToken, '1')
-          setHomeworks(res.homeworks || [])
-          showToast('已重新同步作业列表')
+          try {
+            const res = await getHomeworkList(session.accessToken, '1')
+            setHomeworkError(null)
+            setHomeworks(res.homeworks || [])
+            showToast('已重新同步作业列表')
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : '获取作业列表失败'
+            console.error('Failed to refresh homework data:', err)
+            setHomeworkError(msg)
+            showToast(`作业列表同步失败: ${msg}`)
+          }
         }
       })
       .catch((err) => {
@@ -1267,9 +1357,11 @@ function App() {
           homeworks={homeworks}
           selectedId={selectedHomework?.id || null}
           parsingId={parsingId}
+          homeworkError={homeworkError}
           onClose={() => setPanelOpen(false)}
           onNavigate={navigate}
           onToggle={() => setPanelOpen(!isAssignmentPanelOpen)}
+          onRetry={refreshAccountAndHomeworks}
           onSelectHomework={(item) => {
             handleSelectHomework(item)
             if (!item.parsed) {
@@ -1285,10 +1377,12 @@ function App() {
             paper={currentPaper}
             isLoadingPaper={isLoadingPaper}
             parsingMessage={parsingMessage}
+            homeworkError={homeworkError}
             onOpenAssignments={() => setPanelOpen(true)}
             onRequestParse={handleTriggerParse}
             onCopyAnswer={handleCopyAnswer}
             onExportAnswer={handleExportAnswer}
+            onRetry={refreshAccountAndHomeworks}
           />
         )}
 
