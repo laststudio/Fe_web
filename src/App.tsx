@@ -7,6 +7,8 @@ import {
   getHomeworkDetail,
   getHomeworkList,
   getPlatformAccount,
+  getSoftwareConfig,
+  getSoftwareFeatures,
   getTaskStatus,
   startParseHomework,
   type HomeworkItem,
@@ -14,6 +16,8 @@ import {
   type PlatformAccountInfo,
   type Question,
   type Section,
+  type SoftwareConfig,
+  type SoftwareFeatureItem,
 } from './api/homework'
 import AuthGate from './auth/AuthGate'
 import Callback from './auth/Callback'
@@ -178,6 +182,8 @@ function AssignmentPanel({
   selectedId,
   parsingId,
   homeworkError,
+  isCloudModeEnabled = true,
+  cloudModeDenyReason,
   onClose,
   onNavigate,
   onToggle,
@@ -191,6 +197,8 @@ function AssignmentPanel({
   selectedId: string | null
   parsingId: string | null
   homeworkError?: string | null
+  isCloudModeEnabled?: boolean
+  cloudModeDenyReason?: string
   onClose: () => void
   onNavigate: (page: Page, closePanel?: boolean) => void
   onToggle: () => void
@@ -246,7 +254,12 @@ function AssignmentPanel({
           </label>
         </div>
         <div className="assignment-list">
-          {homeworkError ? (
+          {!isCloudModeEnabled ? (
+            <div className="panel-empty-alert panel-empty-alert--error">
+              <Icon name="cloud_off" />
+              <p>{cloudModeDenyReason || '云端模式已暂时停用'}</p>
+            </div>
+          ) : homeworkError ? (
             <div className="panel-empty-alert panel-empty-alert--error">
               <Icon name="error_outline" />
               <p>{homeworkError}</p>
@@ -500,6 +513,10 @@ function CurrentAssignmentPage({
   parsingMessage,
   homeworkError,
   parseError,
+  isAnswerParserEnabled = true,
+  answerParserDenyReason,
+  isCopyExportEnabled = true,
+  copyExportDenyReason,
   onOpenAssignments,
   onRequestParse,
   onCopyAnswer,
@@ -513,6 +530,10 @@ function CurrentAssignmentPage({
   parsingMessage: string | null
   homeworkError?: string | null
   parseError?: string | null
+  isAnswerParserEnabled?: boolean
+  answerParserDenyReason?: string
+  isCopyExportEnabled?: boolean
+  copyExportDenyReason?: string
   onOpenAssignments: () => void
   onRequestParse: (hw: HomeworkItem) => void
   onCopyAnswer: () => void
@@ -618,9 +639,14 @@ function CurrentAssignmentPage({
           <button
             className="primary-button parse-action-btn"
             type="button"
-            onClick={() => onRequestParse(selectedHomework)}
+            disabled={!isAnswerParserEnabled}
+            onClick={() => isAnswerParserEnabled && onRequestParse(selectedHomework)}
+            title={!isAnswerParserEnabled ? (answerParserDenyReason || '答案解析功能当前不可用') : undefined}
           >
-            <Icon name="bolt" /> {parseError ? '重新发起解析' : '发起云端解析'}
+            <Icon name={isAnswerParserEnabled ? "bolt" : "lock"} />{' '}
+            {isAnswerParserEnabled
+              ? (parseError ? '重新发起解析' : '发起云端解析')
+              : (answerParserDenyReason || '答案解析功能已停用')}
           </button>
         </div>
       </section>
@@ -680,21 +706,32 @@ function CurrentAssignmentPage({
         <button className="mobile-assignment-toggle" type="button" onClick={onOpenAssignments} aria-label="打开作业列表">
           <Icon name="menu" />
         </button>
-        <button type="button" onClick={onCopyAnswer} title="复制格式化答案文本到剪贴板">
+        <button
+          type="button"
+          onClick={onCopyAnswer}
+          disabled={!isCopyExportEnabled}
+          title={isCopyExportEnabled ? "复制格式化答案文本到剪贴板" : (copyExportDenyReason || "答案导出功能当前不可用")}
+        >
           <Icon name="content_copy" />
           复制答案
         </button>
-        <button type="button" onClick={onExportAnswer} title="导出 TXT 文件到本地">
+        <button
+          type="button"
+          onClick={onExportAnswer}
+          disabled={!isCopyExportEnabled}
+          title={isCopyExportEnabled ? "导出 TXT 文件到本地" : (copyExportDenyReason || "答案导出功能当前不可用")}
+        >
           <Icon name="download" />
           导出 TXT
         </button>
         {selectedHomework && (
           <button
             type="button"
-            onClick={() => onRequestParse(selectedHomework)}
-            title="强制重新从大陆节点提取并解析"
+            onClick={() => isAnswerParserEnabled && onRequestParse(selectedHomework)}
+            disabled={!isAnswerParserEnabled}
+            title={isAnswerParserEnabled ? "强制重新从大陆节点提取并解析" : (answerParserDenyReason || "答案解析功能当前不可用")}
           >
-            <Icon name="refresh" />
+            <Icon name={isAnswerParserEnabled ? "refresh" : "lock"} />
             重新解析
           </button>
         )}
@@ -776,10 +813,14 @@ function HistoryPage({
 
 function SettingsPage({
   accountInfo,
+  softwareConfig,
+  softwareFeatures,
   onOpenAssignments,
   onRefreshSession,
 }: {
   accountInfo: PlatformAccountInfo | null
+  softwareConfig: SoftwareConfig | null
+  softwareFeatures: SoftwareFeatureItem[]
   onOpenAssignments: () => void
   onRefreshSession: () => void
 }) {
@@ -800,6 +841,47 @@ function SettingsPage({
       </div>
       <div className="page-panel__inner">
         <h1>设置与账号</h1>
+
+        <div className="settings-section">
+          <h2>软件与功能开关</h2>
+          <div className="account-info-card">
+            <div className="account-info-card__row">
+              <span className="account-label">软件名称</span>
+              <strong>{softwareConfig ? 'Fe Web 网页版' : 'Fe Web'}</strong>
+            </div>
+            <div className="account-info-card__row">
+              <span className="account-label">当前版本</span>
+              <span>1.0.0</span>
+            </div>
+            <div className="account-info-card__row">
+              <span className="account-label">运行状态</span>
+              <span className={`account-status-badge ${softwareConfig?.isKillSwitchOn ? 'account-status-badge--none' : 'account-status-badge--ok'}`}>
+                {softwareConfig?.isKillSwitchOn ? '维护中 (紧急暂停)' : '正常运行'}
+              </span>
+            </div>
+            {softwareFeatures.length > 0 && (
+              <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <span className="account-label" style={{ fontWeight: 600 }}>功能开关状态</span>
+                {softwareFeatures.map((feat) => {
+                  const isOk = feat.status === 'enabled' && feat.available_for_version && !softwareConfig?.isKillSwitchOn
+                  return (
+                    <div key={feat.feature_key} className="account-info-card__row" style={{ padding: '4px 0' }}>
+                      <span>
+                        <strong>{feat.name}</strong>
+                        <small style={{ display: 'block', color: 'var(--muted)', fontSize: '12px' }}>
+                          {feat.description || feat.feature_key}
+                        </small>
+                      </span>
+                      <span className={`account-status-badge ${isOk ? 'account-status-badge--ok' : 'account-status-badge--none'}`}>
+                        {isOk ? '已启用' : (feat.reason || '已停用')}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
 
         <div className="settings-section">
           <h2>ETS100 账号状态</h2>
@@ -915,7 +997,57 @@ function App() {
   const [homeworkError, setHomeworkError] = useState<string | null>(null)
   const [parseError, setParseError] = useState<string | null>(null)
 
+  // Software Config & Features State
+  const [softwareConfig, setSoftwareConfig] = useState<SoftwareConfig | null>(null)
+  const [softwareFeatures, setSoftwareFeatures] = useState<SoftwareFeatureItem[]>([])
+  const [announcementDismissed, setAnnouncementDismissed] = useState(false)
+
   const pollingTimerRef = useRef<number | null>(null)
+
+  // Load Fe Web software config and feature switches on mount
+  useEffect(() => {
+    let active = true
+    getSoftwareConfig('fe-web')
+      .then((cfg) => {
+        if (active) setSoftwareConfig(cfg)
+      })
+      .catch((err) => {
+        console.warn('Failed to load software config:', err)
+      })
+
+    getSoftwareFeatures('fe-web')
+      .then((fts) => {
+        if (active) setSoftwareFeatures(fts)
+      })
+      .catch((err) => {
+        console.warn('Failed to load software features:', err)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  function isFeatureEnabled(featureKey: string, defaultValue = true): boolean {
+    if (softwareConfig?.isKillSwitchOn) return false
+    const item = softwareFeatures.find((f) => f.feature_key === featureKey)
+    if (item) {
+      return item.status === 'enabled' && item.available_for_version
+    }
+    if (softwareConfig?.features && featureKey in softwareConfig.features) {
+      return Boolean(softwareConfig.features[featureKey])
+    }
+    return defaultValue
+  }
+
+  function getFeatureDenyReason(featureKey: string, defaultReason = '该功能当前不可用'): string {
+    if (softwareConfig?.isKillSwitchOn) {
+      return softwareConfig.noticeMessage || '服务已被紧急停用或正在维护中'
+    }
+    const item = softwareFeatures.find((f) => f.feature_key === featureKey)
+    if (item?.reason) return item.reason
+    return defaultReason
+  }
 
   useEffect(() => {
     const onPopState = () => {
@@ -998,6 +1130,10 @@ function App() {
         setAccountInfo(account)
 
         if (account.bound) {
+          if (!isFeatureEnabled('cloud_mode')) {
+            setHomeworkError(getFeatureDenyReason('cloud_mode', '云端模式已暂时停用'))
+            return
+          }
           try {
             const res = await getHomeworkList(session.accessToken, '1')
             if (!active) return
@@ -1027,11 +1163,12 @@ function App() {
     return () => {
       active = false
     }
-  }, [session])
+  }, [session, softwareConfig, softwareFeatures])
 
   // Fetch history assignments when opening /history
   useEffect(() => {
     if (!session || page !== '/history') return
+    if (!isFeatureEnabled('cloud_mode')) return
     let active = true
 
     Promise.all([
@@ -1050,7 +1187,7 @@ function App() {
     return () => {
       active = false
     }
-  }, [page, session])
+  }, [page, session, softwareConfig, softwareFeatures])
 
   function showToast(msg: string) {
     setToastMessage(msg)
@@ -1086,6 +1223,10 @@ function App() {
   }
 
   function handleTriggerParse(item: HomeworkItem) {
+    if (!isFeatureEnabled('answer_parser')) {
+      showToast(getFeatureDenyReason('answer_parser', '答案解析功能已停用'))
+      return
+    }
     if (readStoredSkipRiskWarning()) {
       void executeParse(item)
     } else {
@@ -1181,6 +1322,10 @@ function App() {
   }
 
   async function handleCopyAnswer() {
+    if (!isFeatureEnabled('copy_export')) {
+      showToast(getFeatureDenyReason('copy_export', '答案导出功能已停用'))
+      return
+    }
     if (!currentPaper) return
     const text = formatPaperAsText(currentPaper)
     try {
@@ -1198,6 +1343,10 @@ function App() {
   }
 
   function handleExportAnswer() {
+    if (!isFeatureEnabled('copy_export')) {
+      showToast(getFeatureDenyReason('copy_export', '答案导出功能已停用'))
+      return
+    }
     if (!currentPaper) return
     const text = formatPaperAsText(currentPaper)
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
@@ -1219,6 +1368,10 @@ function App() {
       .then(async (account) => {
         setAccountInfo(account)
         if (account.bound) {
+          if (!isFeatureEnabled('cloud_mode')) {
+            setHomeworkError(getFeatureDenyReason('cloud_mode', '云端模式已暂时停用'))
+            return
+          }
           try {
             const res = await getHomeworkList(session.accessToken, '1')
             setHomeworkError(null)
@@ -1344,6 +1497,39 @@ function App() {
         </div>
       </header>
 
+      {softwareConfig?.isKillSwitchOn && (
+        <div className="system-kill-switch-banner" role="alert">
+          <Icon name="block" filled />
+          <div className="system-kill-switch-content">
+            <strong>服务已被紧急停用或正在维护中</strong>
+            <p>{softwareConfig.noticeMessage || '系统正在维护，所有云端与解析功能已暂时关闭。'}</p>
+          </div>
+        </div>
+      )}
+
+      {!announcementDismissed && softwareConfig?.announcementTitle && !softwareConfig.isKillSwitchOn && (
+        <div className="system-announcement-banner">
+          <Icon name="campaign" filled />
+          <div className="system-announcement-content">
+            <strong>{softwareConfig.announcementTitle}：</strong>
+            <p>{softwareConfig.announcementMessage}</p>
+          </div>
+          {softwareConfig.announcementUrl && (
+            <a href={softwareConfig.announcementUrl} target="_blank" rel="noreferrer" className="system-announcement-link">
+              查看详情
+            </a>
+          )}
+          <button
+            type="button"
+            className="icon-button system-announcement-close"
+            onClick={() => setAnnouncementDismissed(true)}
+            aria-label="关闭公告"
+          >
+            <Icon name="close" />
+          </button>
+        </div>
+      )}
+
       <div className="workspace-body">
         <aside className="side-nav">
           <nav className="side-nav__links" aria-label="主导航">
@@ -1375,6 +1561,8 @@ function App() {
           selectedId={selectedHomework?.id || null}
           parsingId={parsingId}
           homeworkError={homeworkError}
+          isCloudModeEnabled={isFeatureEnabled('cloud_mode')}
+          cloudModeDenyReason={getFeatureDenyReason('cloud_mode')}
           onClose={() => setPanelOpen(false)}
           onNavigate={navigate}
           onToggle={() => setPanelOpen(!isAssignmentPanelOpen)}
@@ -1396,6 +1584,10 @@ function App() {
             parsingMessage={parsingMessage}
             homeworkError={homeworkError}
             parseError={parseError}
+            isAnswerParserEnabled={isFeatureEnabled('answer_parser')}
+            answerParserDenyReason={getFeatureDenyReason('answer_parser')}
+            isCopyExportEnabled={isFeatureEnabled('copy_export')}
+            copyExportDenyReason={getFeatureDenyReason('copy_export')}
             onOpenAssignments={() => setPanelOpen(true)}
             onRequestParse={handleTriggerParse}
             onCopyAnswer={handleCopyAnswer}
@@ -1421,6 +1613,8 @@ function App() {
         {page === '/settings' && (
           <SettingsPage
             accountInfo={accountInfo}
+            softwareConfig={softwareConfig}
+            softwareFeatures={softwareFeatures}
             onOpenAssignments={() => setPanelOpen(true)}
             onRefreshSession={refreshAccountAndHomeworks}
           />

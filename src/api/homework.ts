@@ -155,3 +155,46 @@ export function getTaskStatus(accessToken: string, taskId: string): Promise<Pars
 export function getHomeworkDetail(accessToken: string, homeworkId: string): Promise<Paper> {
   return apiRequest<Paper>(`/homework/detail/${encodeURIComponent(homeworkId)}`, { accessToken })
 }
+
+export type SoftwareConfig = {
+  latestVersionCode: number
+  updateUrl: string
+  isKillSwitchOn: boolean
+  isForce: boolean
+  updateMessage: string
+  noticeMessage: string
+  announcementTitle: string
+  announcementMessage: string
+  announcementUpdatedAt: string
+  announcementUrl: string
+  changelogUrl: string
+  changelogTitle: string
+  changelogSummary: string
+  verificationCode: string
+  verificationTitle: string
+  verificationMessage: string
+  donateEnabled: boolean
+  integrityCheckEnabled: boolean
+  features: Record<string, boolean>
+}
+
+export type SoftwareFeatureItem = {
+  feature_key: string
+  name: string
+  description?: string
+  status: 'enabled' | 'disabled'
+  available_for_version: boolean
+  reason: string | null
+  requires_membership: boolean
+  min_member_level: number
+  min_member_tier?: string
+}
+
+export function getSoftwareConfig(softwareKey = 'fe-web'): Promise<SoftwareConfig> {
+  return apiRequest<SoftwareConfig>(`/software/${softwareKey}/config`)
+}
+
+export function getSoftwareFeatures(softwareKey = 'fe-web'): Promise<SoftwareFeatureItem[]> {
+  return apiRequest<SoftwareFeatureItem[]>(`/software/${softwareKey}/features`)
+}
+

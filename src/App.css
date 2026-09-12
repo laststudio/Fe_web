@@ -289,3 +289,71 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
   .assignment-panel { transition: none; }
   .status-pill__spin { animation-duration: 1.5s; }
 }
+
+.system-kill-switch-banner {
+  background: #fce8e6;
+  color: #c5221f;
+  border-bottom: 1px solid #fad2cf;
+  padding: 10px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  z-index: 100;
+}
+.system-kill-switch-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.system-kill-switch-content strong {
+  font-size: 14px;
+  font-weight: 700;
+}
+.system-kill-switch-content p {
+  margin: 0;
+  font-size: 13px;
+  color: #8c1b18;
+}
+
+.system-announcement-banner {
+  background: #e8f0fe;
+  color: #1967d2;
+  border-bottom: 1px solid #d2e3fc;
+  padding: 8px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  z-index: 99;
+}
+.system-announcement-content {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.system-announcement-content strong {
+  font-weight: 700;
+}
+.system-announcement-content p {
+  margin: 0;
+  color: #174ea6;
+}
+.system-announcement-link {
+  color: #1a73e8;
+  font-weight: 600;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+.system-announcement-close {
+  width: 28px;
+  height: 28px;
+  color: #5f6368;
+}
+.system-announcement-close:hover {
+  background: #d2e3fc;
+  color: #202124;
+}
+
