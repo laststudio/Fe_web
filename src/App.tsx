@@ -1094,7 +1094,7 @@ function App() {
   const [historyHomeworks, setHistoryHomeworks] = useState<HomeworkItem[]>([])
   const [isLoadingHomeworks, setIsLoadingHomeworks] = useState(false)
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
-  const [activeTab, setActiveTab] = useState<'current' | 'history'>(() => pathname === '/history' ? 'history' : 'current')
+  const activeTab: 'current' | 'history' = pathname === '/history' ? 'history' : 'current'
 
   // Viewing Paper State (Full-width reader view)
   const [viewingPaper, setViewingPaper] = useState<{ homework: HomeworkItem; paper: Paper | null } | null>(null)
@@ -1254,14 +1254,6 @@ function App() {
   }, [authMessage, page, pathname, session])
 
   useEffect(() => {
-    if (pathname === '/history') {
-      setActiveTab('history')
-    } else if (pathname === '/') {
-      setActiveTab('current')
-    }
-  }, [pathname])
-
-  useEffect(() => {
     if (!session) return
     let active = true
 
@@ -1301,11 +1293,14 @@ function App() {
   }, [session, softwareConfig, softwareFeatures])
 
   useEffect(() => {
-    if (!session || (page !== '/history' && activeTab !== 'history')) return
+    if (!session || page !== '/history') return
     if (!isFeatureEnabled('cloud_mode')) return
     if (historyHomeworks.length > 0) return
     let active = true
-    setIsLoadingHistory(true)
+
+    queueMicrotask(() => {
+      if (active) setIsLoadingHistory(true)
+    })
 
     Promise.all([
       getHomeworkList(session.accessToken, '2').catch(() => ({ homeworks: [] })),
@@ -1325,7 +1320,7 @@ function App() {
     return () => {
       active = false
     }
-  }, [session, page, activeTab, historyHomeworks.length, softwareConfig, softwareFeatures])
+  }, [session, page, historyHomeworks.length, softwareConfig, softwareFeatures])
 
   useEffect(() => {
     return () => {
@@ -1549,7 +1544,6 @@ function App() {
   }
 
   function handleTabChange(tab: 'current' | 'history') {
-    setActiveTab(tab)
     setViewingPaper(null)
     const targetPage = tab === 'history' ? '/history' : '/'
     if (pathname !== targetPage) {
@@ -1560,9 +1554,7 @@ function App() {
   function navigate(nextPage: Page) {
     setViewingPaper(null)
     if (nextPage === '/history') {
-      setActiveTab('history')
-    } else if (nextPage === '/') {
-      setActiveTab('current')
+      setIsLoadingHistory(true)
     }
     setMobileNavOpen(false)
     if (nextPage === window.location.pathname) {
