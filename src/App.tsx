@@ -235,6 +235,230 @@ function RiskWarningModal({
   )
 }
 
+const REFRESH_TIMESTAMPS_KEY = 'fe-web.refresh-timestamps'
+const RATE_LIMIT_WINDOW_MS = 20000
+const MAX_REFRESH_PER_WINDOW = 3
+const MIN_REFRESH_INTERVAL_MS = 2500
+
+function getRecentRefreshTimestamps(): number[] {
+  try {
+    const raw = sessionStorage.getItem(REFRESH_TIMESTAMPS_KEY)
+    if (!raw) return []
+    const now = Date.now()
+    const list: number[] = JSON.parse(raw)
+    return list.filter((t) => typeof t === 'number' && now - t < RATE_LIMIT_WINDOW_MS)
+  } catch {
+    return []
+  }
+}
+
+function recordRefreshTimestamp(): void {
+  try {
+    const list = getRecentRefreshTimestamps()
+    list.push(Date.now())
+    sessionStorage.setItem(REFRESH_TIMESTAMPS_KEY, JSON.stringify(list))
+  } catch {
+    // ignore
+  }
+}
+
+function clearRefreshTimestamps(): void {
+  try {
+    sessionStorage.removeItem(REFRESH_TIMESTAMPS_KEY)
+  } catch {
+    // ignore
+  }
+}
+
+function shouldTriggerCaptchaDefense(): boolean {
+  const list = getRecentRefreshTimestamps()
+  if (list.length >= MAX_REFRESH_PER_WINDOW) {
+    return true
+  }
+  if (list.length > 0) {
+    const last = list[list.length - 1]
+    if (Date.now() - last < MIN_REFRESH_INTERVAL_MS) {
+      return true
+    }
+  }
+  return false
+}
+
+function generateCaptcha(): string {
+  const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'
+  let code = ''
+  for (let i = 0; i < 4; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return code
+}
+
+function CaptchaModal({
+  onSuccess,
+  onCancel,
+}: {
+  onSuccess: () => void
+  onCancel: () => void
+}) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const [captchaCode, setCaptchaCode] = useState(() => generateCaptcha())
+  const [userInput, setUserInput] = useState('')
+  const [error, setError] = useState('')
+
+  function drawCaptcha(code: string) {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const width = canvas.width
+    const height = canvas.height
+
+    const grad = ctx.createLinearGradient(0, 0, width, height)
+    grad.addColorStop(0, '#f8fafc')
+    grad.addColorStop(1, '#e2e8f0')
+    ctx.fillStyle = grad
+    ctx.fillRect(0, 0, width, height)
+
+    for (let i = 0; i < 4; i++) {
+      ctx.strokeStyle = `hsl(${Math.random() * 360}, 50%, 65%)`
+      ctx.lineWidth = 1.5
+      ctx.beginPath()
+      ctx.moveTo(Math.random() * width, Math.random() * height)
+      ctx.bezierCurveTo(
+        Math.random() * width,
+        Math.random() * height,
+        Math.random() * width,
+        Math.random() * height,
+        Math.random() * width,
+        Math.random() * height
+      )
+      ctx.stroke()
+    }
+
+    for (let i = 0; i < 28; i++) {
+      ctx.fillStyle = `rgba(${Math.floor(Math.random() * 200)}, ${Math.floor(Math.random() * 200)}, ${Math.floor(Math.random() * 200)}, 0.45)`
+      ctx.beginPath()
+      ctx.arc(Math.random() * width, Math.random() * height, 1.2, 0, Math.PI * 2)
+      ctx.fill()
+    }
+
+    const charColors = ['#1e40af', '#047857', '#b45309', '#6d28d9', '#be123c']
+    const charWidth = (width - 24) / 4
+
+    for (let i = 0; i < code.length; i++) {
+      const char = code[i]
+      ctx.save()
+      const x = 16 + i * charWidth + (Math.random() * 4 - 2)
+      const y = height / 2 + (Math.random() * 4 - 2)
+      ctx.translate(x, y)
+      const angle = (Math.random() * 40 - 20) * (Math.PI / 180)
+      ctx.rotate(angle)
+
+      ctx.font = `bold ${Math.floor(Math.random() * 4 + 22)}px monospace, sans-serif`
+      ctx.fillStyle = charColors[Math.floor(Math.random() * charColors.length)]
+      ctx.textBaseline = 'middle'
+      ctx.textAlign = 'center'
+      ctx.fillText(char, 0, 0)
+      ctx.restore()
+    }
+  }
+
+  function refreshCode() {
+    let next = generateCaptcha()
+    while (next === captchaCode) {
+      next = generateCaptcha()
+    }
+    setCaptchaCode(next)
+    setUserInput('')
+    setError('')
+  }
+
+  useEffect(() => {
+    drawCaptcha(captchaCode)
+  }, [captchaCode])
+
+  function handleSubmit(e?: React.FormEvent) {
+    if (e) e.preventDefault()
+    if (!userInput.trim()) {
+      setError('请输入验证码')
+      return
+    }
+    if (userInput.trim().toUpperCase() === captchaCode) {
+      onSuccess()
+    } else {
+      setError('验证码输入不正确，请重新输入')
+      refreshCode()
+    }
+  }
+
+  return (
+    <div className="risk-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="captcha-modal-title">
+      <div className="risk-modal-card fe-captcha-modal-card">
+        <div className="fe-captcha-head">
+          <div className="risk-icon-wrap">
+            <Icon name="verified_user" filled />
+          </div>
+          <div>
+            <h2 id="captcha-modal-title">安全人机验证</h2>
+            <p>检测到短时间内频繁刷新，请先输入图形验证码以防接口风控。</p>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} style={{ padding: '20px 24px' }}>
+          <div className="fe-captcha-canvas-wrap">
+            <canvas
+              ref={canvasRef}
+              width={140}
+              height={44}
+              className="fe-captcha-canvas"
+              onClick={refreshCode}
+              title="看不清？点击刷新验证码"
+            />
+            <button
+              type="button"
+              className="fe-captcha-refresh-btn"
+              onClick={refreshCode}
+            >
+              <Icon name="refresh" />
+              <span>换一张</span>
+            </button>
+          </div>
+
+          <div className="fe-captcha-input-row">
+            <input
+              type="text"
+              maxLength={4}
+              autoFocus
+              placeholder="输入4位验证码"
+              value={userInput}
+              onChange={(e) => {
+                setUserInput(e.target.value.toUpperCase())
+                if (error) setError('')
+              }}
+            />
+            {error && (
+              <div className="fe-captcha-error" role="alert">
+                <Icon name="error" />
+                <span>{error}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="risk-modal-actions" style={{ padding: '20px 0 0', background: 'transparent', borderTop: 'none' }}>
+            <button className="control-secondary" type="button" onClick={onCancel}>
+              取消
+            </button>
+            <button className="control-primary" type="submit">
+              验证并继续
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 type QuestionGroup = {
   originalText: string | null
   questions: Question[]
@@ -400,6 +624,7 @@ function PaperReaderView({
   onCopyAnswer,
   onExportAnswer,
   onReParse,
+  onManualRead,
 }: {
   homework: HomeworkItem
   paper: Paper | null
@@ -412,6 +637,7 @@ function PaperReaderView({
   onCopyAnswer: () => void
   onExportAnswer: () => void
   onReParse: () => void
+  onManualRead: () => void
 }) {
   return (
     <div className="fe-reader-view">
@@ -452,10 +678,10 @@ function PaperReaderView({
               type="button"
               onClick={onReParse}
               disabled={!isAnswerParserEnabled}
-              title={isAnswerParserEnabled ? '重新从云端解析试卷' : (answerParserDenyReason || '答案解析已停用')}
+              title={isAnswerParserEnabled ? '重新从云端读取或解析试卷' : (answerParserDenyReason || '答案解析已停用')}
             >
               <Icon name="refresh" />
-              <span>重新解析</span>
+              <span>重新读取</span>
             </button>
           </div>
         </div>
@@ -477,18 +703,27 @@ function PaperReaderView({
           <div className="fe-empty-state__icon spinning">
             <Icon name="hourglass_top" />
           </div>
-          <h2>正在加载试卷及标准答案...</h2>
-          <p style={{ color: 'var(--control-muted)', fontSize: 13 }}>正在读取试卷题目与解析内容，请稍候...</p>
+          <h2>正在读取试卷及标准答案...</h2>
+          <p style={{ color: 'var(--control-muted)', fontSize: 13 }}>正在从云端安全拉取试卷题目与解析，请稍候...</p>
         </div>
       ) : !paper ? (
-        <div className="fe-empty-state" style={{ margin: '50px auto' }}>
-          <div className="fe-empty-state__icon" style={{ background: '#fef2f2', color: '#b91c1c' }}>
-            <Icon name="error_outline" />
+        <div className="fe-reader-prompt-card">
+          <div className="fe-reader-prompt-icon">
+            <Icon name="menu_book" filled />
           </div>
-          <h2>未能加载试卷详情</h2>
-          <p>可能由于网络超时或解析数据丢失。</p>
-          <button className="control-primary" type="button" onClick={onReParse}>
-            <Icon name="refresh" /> 重新解析
+          <h3>试卷答案准备就绪</h3>
+          <p>
+            为防止接口频繁请求及避免官方客户端被顶号，系统未自动加载答案。请在确认当前无进行中的答题或考试后，手动点击下方按钮读取。
+          </p>
+          <button
+            className="control-primary fe-reader-prompt-action"
+            type="button"
+            onClick={onManualRead}
+            disabled={!isAnswerParserEnabled}
+            title={!isAnswerParserEnabled ? (answerParserDenyReason || '答案解析已停用') : undefined}
+          >
+            <Icon name="visibility" />
+            <span>{homework.parsed ? '读取试卷与答案' : '开始解析并读取答案'}</span>
           </button>
         </div>
       ) : (
@@ -626,7 +861,6 @@ function HomeworkCard({
 
 function HomeworkListView({
   activeTab,
-  onTabChange,
   accountInfo,
   homeworks,
   historyHomeworks,
@@ -644,7 +878,6 @@ function HomeworkListView({
   onTriggerParse,
 }: {
   activeTab: 'current' | 'history'
-  onTabChange: (tab: 'current' | 'history') => void
   accountInfo: PlatformAccountInfo | null
   homeworks: HomeworkItem[]
   historyHomeworks: HomeworkItem[]
@@ -676,33 +909,10 @@ function HomeworkListView({
 
   return (
     <div className="fe-homework-container">
-      {/* List Toolbar with Segmented Switch */}
+      {/* List Toolbar */}
       <div className="fe-list-toolbar">
         <div className="fe-list-toolbar__left">
-          <div className="fe-segmented-control" role="tablist">
-            <button
-              className={activeTab === 'current' ? 'is-active' : ''}
-              onClick={() => onTabChange('current')}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === 'current'}
-            >
-              <Icon name="assignment" />
-              <span>当前作业 ({homeworks.length})</span>
-            </button>
-            <button
-              className={activeTab === 'history' ? 'is-active' : ''}
-              onClick={() => onTabChange('history')}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === 'history'}
-            >
-              <Icon name="history" />
-              <span>历史作业 ({historyHomeworks.length})</span>
-            </button>
-          </div>
-
-          <div className="control-toolbar" style={{ width: 'auto', minWidth: 240 }}>
+          <div className="control-toolbar" style={{ width: '100%', maxWidth: 380 }}>
             <label>
               <Icon name="search" />
               <input
@@ -717,11 +927,12 @@ function HomeworkListView({
 
         <div className="fe-list-toolbar__right">
           <span className="admin-pill-badge is-muted">
-            {accountInfo?.bound ? `已连接 · 共 ${filtered.length} 份` : '未绑定 ETS100'}
+            {accountInfo?.bound ? `${activeTab === 'history' ? '往期归档' : '当前作业'} · 共 ${filtered.length} 份` : '未绑定 ETS100'}
           </span>
           <button
-            className="control-icon-button"
+            className={`control-icon-button ${isLoading ? 'fe-spin' : ''}`}
             onClick={onRefresh}
+            disabled={isLoading}
             title="重新同步作业列表"
             type="button"
           >
@@ -1347,21 +1558,40 @@ function App() {
     }
   }
 
-  // Fe user operation flow: click homework -> show answers if parsed, or trigger parse if unparsed!
-  async function handleOpenHomework(item: HomeworkItem) {
+  // Fe user operation flow: click homework -> open answer page. Manual click to read, no auto-reading!
+  function handleOpenHomework(item: HomeworkItem) {
+    const cached = paperCache[item.id]
+    setViewingPaper({ homework: item, paper: cached || null })
+  }
+
+  async function handleManualReadPaper(item: HomeworkItem) {
     if (!item.parsed) {
       handleTriggerParse(item)
       return
     }
-    const cached = paperCache[item.id]
-    if (cached) {
-      setViewingPaper({ homework: item, paper: cached })
-      return
-    }
-    setViewingPaper({ homework: item, paper: null })
-    if (session) {
-      const detail = await loadPaperDetail(session.accessToken, item)
+    if (!session) return
+    const detail = await loadPaperDetail(session.accessToken, item)
+    if (detail) {
       setViewingPaper((curr) => (curr?.homework.id === item.id ? { homework: item, paper: detail } : curr))
+      showToast(`已成功读取《${item.name}》试卷与答案`)
+    } else {
+      showToast('读取试卷详情失败，请检查网络或稍后重试')
+    }
+  }
+
+  async function handleReReadPaper(item: HomeworkItem) {
+    if (!session) return
+    setIsLoadingPaper(true)
+    try {
+      const detail = await getHomeworkDetail(session.accessToken, item.id)
+      setPaperCache((prev) => ({ ...prev, [item.id]: detail }))
+      setViewingPaper((curr) => (curr?.homework.id === item.id ? { homework: item, paper: detail } : curr))
+      showToast('已重新从云端读取试卷与答案')
+    } catch (err) {
+      console.error('Failed to re-read paper detail:', err)
+      showToast(err instanceof Error ? err.message : '重新读取失败')
+    } finally {
+      setIsLoadingPaper(false)
     }
   }
 
@@ -1543,11 +1773,29 @@ function App() {
       })
   }
 
-  function handleTabChange(tab: 'current' | 'history') {
-    setViewingPaper(null)
-    const targetPage = tab === 'history' ? '/history' : '/'
-    if (pathname !== targetPage) {
-      navigate(targetPage)
+  const [showCaptchaModal, setShowCaptchaModal] = useState(false)
+  const pendingRefreshRef = useRef<(() => void) | null>(null)
+
+  function handleRequestRefresh() {
+    if (shouldTriggerCaptchaDefense()) {
+      pendingRefreshRef.current = refreshAccountAndHomeworks
+      setShowCaptchaModal(true)
+      return
+    }
+    recordRefreshTimestamp()
+    refreshAccountAndHomeworks()
+  }
+
+  function handleCaptchaSuccess() {
+    setShowCaptchaModal(false)
+    clearRefreshTimestamps()
+    showToast('安全验证通过，正在同步作业列表...')
+    if (pendingRefreshRef.current) {
+      const fn = pendingRefreshRef.current
+      pendingRefreshRef.current = null
+      fn()
+    } else {
+      refreshAccountAndHomeworks()
     }
   }
 
@@ -1633,6 +1881,16 @@ function App() {
         <AnnouncementModal
           config={softwareConfig}
           onClose={() => setShowAnnouncementModal(false)}
+        />
+      )}
+
+      {showCaptchaModal && (
+        <CaptchaModal
+          onSuccess={handleCaptchaSuccess}
+          onCancel={() => {
+            setShowCaptchaModal(false)
+            pendingRefreshRef.current = null
+          }}
         />
       )}
 
@@ -1852,7 +2110,7 @@ function App() {
               accountInfo={accountInfo}
               softwareConfig={softwareConfig}
               softwareFeatures={softwareFeatures}
-              onRefreshSession={refreshAccountAndHomeworks}
+              onRefreshSession={handleRequestRefresh}
               onOpenAnnouncement={() => setShowAnnouncementModal(true)}
             />
           ) : viewingPaper ? (
@@ -1867,12 +2125,12 @@ function App() {
               onBack={() => setViewingPaper(null)}
               onCopyAnswer={() => viewingPaper.paper && handleCopyAnswer(viewingPaper.paper)}
               onExportAnswer={() => viewingPaper.paper && handleExportAnswer(viewingPaper.paper)}
-              onReParse={() => handleTriggerParse(viewingPaper.homework)}
+              onReParse={() => handleReReadPaper(viewingPaper.homework)}
+              onManualRead={() => handleManualReadPaper(viewingPaper.homework)}
             />
           ) : (
             <HomeworkListView
               activeTab={activeTab}
-              onTabChange={handleTabChange}
               accountInfo={accountInfo}
               homeworks={homeworks}
               historyHomeworks={historyHomeworks}
@@ -1885,7 +2143,7 @@ function App() {
               cloudModeDenyReason={getFeatureDenyReason('cloud_mode')}
               isAnswerParserEnabled={isFeatureEnabled('answer_parser')}
               answerParserDenyReason={getFeatureDenyReason('answer_parser')}
-              onRefresh={refreshAccountAndHomeworks}
+              onRefresh={handleRequestRefresh}
               onOpenHomework={handleOpenHomework}
               onTriggerParse={handleTriggerParse}
             />
