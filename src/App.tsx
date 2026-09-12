@@ -30,14 +30,49 @@ type Page = '/' | '/history' | '/settings'
 type Status = 'parsed' | 'parsing' | 'unread'
 
 const logoSrc = '/fe_logo.png'
-const assignmentPanelStorageKey = 'fe-web.assignment-panel-open'
+const sidebarCollapsedStorageKey = 'fe-web.sidebar-collapsed'
 const skipRiskWarningStorageKey = 'fe-web.skip-risk-warning'
 
-const navigationItems: { icon: string; label: string; page: Page }[] = [
-  { icon: 'assignment', label: '当前作业', page: '/' },
-  { icon: 'history', label: '历史作业', page: '/history' },
-  { icon: 'settings', label: '设置', page: '/settings' },
+type NavItem = {
+  icon: string
+  label: string
+  caption: string
+  page: Page
+}
+
+const navGroups: { label: string; items: NavItem[] }[] = [
+  {
+    label: '作业业务',
+    items: [
+      { icon: 'assignment', label: '当前作业', caption: '作业索引与解析阅读器', page: '/' },
+      { icon: 'history', label: '历史作业', caption: '已归档往期作业记录', page: '/history' },
+    ],
+  },
+  {
+    label: '系统与服务',
+    items: [
+      { icon: 'settings', label: '设置与账号', caption: 'ETS 账号与功能开关', page: '/settings' },
+    ],
+  },
 ]
+
+const pageMeta: Record<Page, { kicker: string; title: string; caption: string }> = {
+  '/': {
+    kicker: 'FE WEB / ASSIGNMENTS',
+    title: '当前作业',
+    caption: '在线解析 ETS100 试卷与答案查阅',
+  },
+  '/history': {
+    kicker: 'FE WEB / HISTORY',
+    title: '历史作业',
+    caption: '往期归档试卷与答案速查',
+  },
+  '/settings': {
+    kicker: 'FE WEB / SETTINGS',
+    title: '设置与账号',
+    caption: '软件配置、功能开关与平台账号管理',
+  },
+}
 
 function Icon({ name, className = '', filled = false }: { name: string; className?: string; filled?: boolean }) {
   return (
@@ -51,9 +86,8 @@ function Icon({ name, className = '', filled = false }: { name: string; classNam
   )
 }
 
-function readStoredAssignmentPanelState() {
-  const stored = window.localStorage.getItem(assignmentPanelStorageKey)
-  return stored === null ? !window.matchMedia('(max-width: 760px)').matches : stored !== 'false'
+function readStoredSidebarCollapsed() {
+  return window.localStorage.getItem(sidebarCollapsedStorageKey) === 'true'
 }
 
 function readStoredSkipRiskWarning() {
@@ -102,7 +136,7 @@ function StatusPill({ status }: { status: Status }) {
     return (
       <span className="status-pill status-pill--unread">
         <span className="status-dot" />
-        未解析
+        待解析
       </span>
     )
   }
@@ -162,11 +196,11 @@ function RiskWarningModal({
           </label>
         </div>
         <div className="risk-modal-actions">
-          <button className="secondary-button" type="button" onClick={onCancel}>
+          <button className="control-secondary" type="button" onClick={onCancel}>
             取消
           </button>
-          <button className="primary-button" type="button" onClick={() => onConfirm(remember)}>
-            我已知晓，开始解析
+          <button className="control-primary" type="button" onClick={() => onConfirm(remember)}>
+            我已了解，开始解析
           </button>
         </div>
       </div>
@@ -174,9 +208,7 @@ function RiskWarningModal({
   )
 }
 
-function AssignmentPanel({
-  isOpen,
-  activePage,
+function AssignmentIndexCard({
   accountInfo,
   homeworks,
   selectedId,
@@ -184,14 +216,9 @@ function AssignmentPanel({
   homeworkError,
   isCloudModeEnabled = true,
   cloudModeDenyReason,
-  onClose,
-  onNavigate,
-  onToggle,
-  onSelectHomework,
   onRetry,
+  onSelectHomework,
 }: {
-  isOpen: boolean
-  activePage: Page
   accountInfo: PlatformAccountInfo | null
   homeworks: HomeworkItem[]
   selectedId: string | null
@@ -199,11 +226,8 @@ function AssignmentPanel({
   homeworkError?: string | null
   isCloudModeEnabled?: boolean
   cloudModeDenyReason?: string
-  onClose: () => void
-  onNavigate: (page: Page, closePanel?: boolean) => void
-  onToggle: () => void
-  onSelectHomework: (item: HomeworkItem) => void
   onRetry?: () => void
+  onSelectHomework: (item: HomeworkItem) => void
 }) {
   const [query, setQuery] = useState('')
 
@@ -221,194 +245,177 @@ function AssignmentPanel({
   const parsedList = filtered.filter((h) => h.parsed && h.id !== parsingId)
 
   return (
-    <>
-      <section
-        className={`assignment-panel ${isOpen ? 'assignment-panel--open' : 'assignment-panel--closed'}`}
-        aria-label="作业列表"
-      >
-        <div className="assignment-panel__head">
-          <div className="assignment-panel__title">
-            <strong>作业索引</strong>
-            <small>
-              {accountInfo?.bound
-                ? `账号: ${accountInfo.account_display || '已连接'} · 共 ${homeworks.length} 份`
-                : '未绑定 ETS100 账号'}
-            </small>
-          </div>
-          <button className="icon-button assignment-collapse" type="button" onClick={onToggle} aria-label="折叠作业列表">
-            <Icon name="keyboard_double_arrow_left" />
-          </button>
-          <button className="icon-button assignment-close" type="button" onClick={onClose} aria-label="关闭作业列表">
-            <Icon name="close" />
-          </button>
+    <div className="fe-card fe-list-card">
+      <div className="fe-list-card__head">
+        <div className="fe-list-card__title">
+          <strong>作业索引</strong>
+          <small>
+            {accountInfo?.bound
+              ? `账号: ${accountInfo.account_display || '已连接'} · 共 ${homeworks.length} 份`
+              : '未绑定 ETS100 账号'}
+          </small>
         </div>
-        <div className="search-row">
-          <label className="search-box">
-            <Icon name="search" />
-            <input
-              placeholder="搜索作业名称或学科..."
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </label>
-        </div>
-        <div className="assignment-list">
-          {!isCloudModeEnabled ? (
-            <div className="panel-empty-alert panel-empty-alert--error">
+        {onRetry && (
+          <button
+            className="control-icon-button"
+            style={{ width: 34, height: 34 }}
+            onClick={onRetry}
+            title="刷新作业列表"
+            type="button"
+          >
+            <Icon name="refresh" />
+          </button>
+        )}
+      </div>
+
+      <div className="fe-list-card__search">
+        <label className="control-toolbar">
+          <Icon name="search" />
+          <input
+            placeholder="搜索作业名称或学科..."
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </label>
+      </div>
+
+      <div className="fe-list-card__body">
+        {!isCloudModeEnabled ? (
+          <div className="fe-empty-state" style={{ margin: '30px auto' }}>
+            <div className="fe-empty-state__icon" style={{ background: '#fef2f2', color: '#b91c1c' }}>
               <Icon name="cloud_off" />
-              <p>{cloudModeDenyReason || '云端模式已暂时停用'}</p>
             </div>
-          ) : homeworkError ? (
-            <div className="panel-empty-alert panel-empty-alert--error">
+            <h2>云端模式已停用</h2>
+            <p>{cloudModeDenyReason || '管理员已暂停云端作业拉取服务。'}</p>
+          </div>
+        ) : homeworkError ? (
+          <div className="fe-empty-state" style={{ margin: '30px auto' }}>
+            <div className="fe-empty-state__icon" style={{ background: '#fef2f2', color: '#b91c1c' }}>
               <Icon name="error_outline" />
-              <p>{homeworkError}</p>
-              {onRetry && (
-                <button type="button" className="panel-action-btn" onClick={onRetry}>
-                  重新加载
-                </button>
-              )}
             </div>
-          ) : !accountInfo?.bound ? (
-            <div className="panel-empty-alert">
+            <h2>作业同步失败</h2>
+            <p>{homeworkError}</p>
+            {onRetry && (
+              <button type="button" className="control-primary" onClick={onRetry}>
+                重新尝试
+              </button>
+            )}
+          </div>
+        ) : !accountInfo?.bound ? (
+          <div className="fe-empty-state" style={{ margin: '30px auto' }}>
+            <div className="fe-empty-state__icon">
               <Icon name="no_accounts" />
-              <p>尚未绑定 ETS100 账号</p>
-              <a href="https://lastudio.cc/account" target="_blank" rel="noreferrer" className="panel-action-btn">
-                前往账号中心绑定
-              </a>
             </div>
-          ) : homeworks.length === 0 ? (
-            <div className="panel-empty-alert">
+            <h2>未绑定 ETS100</h2>
+            <p>请先前往官网账号中心绑定您的 ETS100 手机号与密码。</p>
+            <a href="https://lastudio.cc/account" target="_blank" rel="noreferrer" className="control-primary" style={{ textDecoration: 'none' }}>
+              前往账号中心绑定
+            </a>
+          </div>
+        ) : homeworks.length === 0 ? (
+          <div className="fe-empty-state" style={{ margin: '30px auto' }}>
+            <div className="fe-empty-state__icon">
               <Icon name="inbox" />
-              <p>暂无当前作业</p>
             </div>
-          ) : (
-            <>
-              {parsingList.length > 0 && (
-                <details className="assignment-group" open>
-                  <summary>
-                    <span>正在解析 ({parsingList.length})</span>
-                    <Icon name="keyboard_arrow_down" />
-                  </summary>
-                  <div className="assignment-group__items">
-                    {parsingList.map((item) => (
-                      <button
-                        className={`assignment-card ${item.id === selectedId ? 'assignment-card--selected' : ''}`}
-                        type="button"
-                        onClick={() => {
-                          onSelectHomework(item)
-                          onClose()
-                        }}
-                        key={item.id}
-                      >
-                        <span className="assignment-card__rail" />
-                        <span className="assignment-card__head">
-                          <span className="assignment-card__title">{item.name}</span>
-                          <span className="assignment-card__time assignment-card__time--new">
-                            {formatTime(item.end_time || item.create_time)}
-                          </span>
+            <h2>暂无当前作业</h2>
+            <p>当前没有待完成或待解析的作业。</p>
+          </div>
+        ) : (
+          <>
+            {parsingList.length > 0 && (
+              <details className="fe-group" open>
+                <summary>
+                  <span>正在解析 ({parsingList.length})</span>
+                  <Icon name="keyboard_arrow_down" />
+                </summary>
+                <div className="fe-group__items">
+                  {parsingList.map((item) => (
+                    <button
+                      key={item.id}
+                      className={`fe-homework-item ${item.id === selectedId ? 'is-selected' : ''}`}
+                      type="button"
+                      onClick={() => onSelectHomework(item)}
+                    >
+                      <div className="fe-homework-item__head">
+                        <span className="fe-homework-item__title">{item.name}</span>
+                        <span className="fe-homework-item__time is-new">
+                          {formatTime(item.end_time || item.create_time)}
                         </span>
-                        <span className="assignment-card__meta">
-                          <span>{item.subject_name || '英语'}</span>
-                          <StatusPill status="parsing" />
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </details>
-              )}
+                      </div>
+                      <div className="fe-homework-item__meta">
+                        <span>{item.subject_name || '英语'}</span>
+                        <StatusPill status="parsing" />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </details>
+            )}
 
-              {pendingList.length > 0 && (
-                <details className="assignment-group" open>
-                  <summary>
-                    <span>待解析作业 ({pendingList.length})</span>
-                    <Icon name="keyboard_arrow_down" />
-                  </summary>
-                  <div className="assignment-group__items">
-                    {pendingList.map((item) => (
-                      <button
-                        className={`assignment-card ${item.id === selectedId ? 'assignment-card--selected' : ''}`}
-                        type="button"
-                        onClick={() => {
-                          onSelectHomework(item)
-                          onClose()
-                        }}
-                        key={item.id}
-                      >
-                        <span className="assignment-card__rail" />
-                        <span className="assignment-card__head">
-                          <span className="assignment-card__title">{item.name}</span>
-                          <span className="assignment-card__time">
-                            {formatTime(item.end_time || item.create_time)}
-                          </span>
+            {pendingList.length > 0 && (
+              <details className="fe-group" open>
+                <summary>
+                  <span>待解析作业 ({pendingList.length})</span>
+                  <Icon name="keyboard_arrow_down" />
+                </summary>
+                <div className="fe-group__items">
+                  {pendingList.map((item) => (
+                    <button
+                      key={item.id}
+                      className={`fe-homework-item ${item.id === selectedId ? 'is-selected' : ''}`}
+                      type="button"
+                      onClick={() => onSelectHomework(item)}
+                    >
+                      <div className="fe-homework-item__head">
+                        <span className="fe-homework-item__title">{item.name}</span>
+                        <span className="fe-homework-item__time">
+                          {formatTime(item.end_time || item.create_time)}
                         </span>
-                        <span className="assignment-card__meta">
-                          <span>{item.subject_name || '英语'}</span>
-                          <StatusPill status="unread" />
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </details>
-              )}
+                      </div>
+                      <div className="fe-homework-item__meta">
+                        <span>{item.subject_name || '英语'}</span>
+                        <StatusPill status="unread" />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </details>
+            )}
 
-              {parsedList.length > 0 && (
-                <details className="assignment-group" open>
-                  <summary>
-                    <span>已解析作业 ({parsedList.length})</span>
-                    <Icon name="keyboard_arrow_down" />
-                  </summary>
-                  <div className="assignment-group__items">
-                    {parsedList.map((item) => (
-                      <button
-                        className={`assignment-card ${item.id === selectedId ? 'assignment-card--selected' : ''}`}
-                        type="button"
-                        onClick={() => {
-                          onSelectHomework(item)
-                          onClose()
-                        }}
-                        key={item.id}
-                      >
-                        <span className="assignment-card__rail" />
-                        <span className="assignment-card__head">
-                          <span className="assignment-card__title">{item.name}</span>
-                          <span className="assignment-card__time">
-                            {formatTime(item.end_time || item.create_time)}
-                          </span>
+            {parsedList.length > 0 && (
+              <details className="fe-group" open>
+                <summary>
+                  <span>已解析作业 ({parsedList.length})</span>
+                  <Icon name="keyboard_arrow_down" />
+                </summary>
+                <div className="fe-group__items">
+                  {parsedList.map((item) => (
+                    <button
+                      key={item.id}
+                      className={`fe-homework-item ${item.id === selectedId ? 'is-selected' : ''}`}
+                      type="button"
+                      onClick={() => onSelectHomework(item)}
+                    >
+                      <div className="fe-homework-item__head">
+                        <span className="fe-homework-item__title">{item.name}</span>
+                        <span className="fe-homework-item__time">
+                          {formatTime(item.end_time || item.create_time)}
                         </span>
-                        <span className="assignment-card__meta">
-                          <span>{item.subject_name || '英语'}</span>
-                          <StatusPill status="parsed" />
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </details>
-              )}
-            </>
-          )}
-        </div>
-        <nav className="mobile-drawer-menu" aria-label="移动端主导航">
-          {navigationItems.map((item) => (
-            <button
-              className={`side-link ${activePage === item.page ? 'side-link--active' : ''}`}
-              type="button"
-              onClick={() => onNavigate(item.page, true)}
-              key={item.page}
-            >
-              <Icon name={item.icon} />
-              {item.label}
-            </button>
-          ))}
-        </nav>
-      </section>
-      {!isOpen && (
-        <button className="assignment-rail" type="button" onClick={onToggle} aria-label="展开作业列表">
-          <Icon name="keyboard_double_arrow_right" />
-          <span>作业</span>
-        </button>
-      )}
-    </>
+                      </div>
+                      <div className="fe-homework-item__meta">
+                        <span>{item.subject_name || '英语'}</span>
+                        <StatusPill status="parsed" />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </details>
+            )}
+          </>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -505,7 +512,7 @@ function SectionGroup({ section }: { section: Section }) {
   )
 }
 
-function CurrentAssignmentPage({
+function HomeworkReaderCard({
   accountInfo,
   selectedHomework,
   paper,
@@ -517,7 +524,6 @@ function CurrentAssignmentPage({
   answerParserDenyReason,
   isCopyExportEnabled = true,
   copyExportDenyReason,
-  onOpenAssignments,
   onRequestParse,
   onCopyAnswer,
   onExportAnswer,
@@ -534,280 +540,251 @@ function CurrentAssignmentPage({
   answerParserDenyReason?: string
   isCopyExportEnabled?: boolean
   copyExportDenyReason?: string
-  onOpenAssignments: () => void
   onRequestParse: (hw: HomeworkItem) => void
   onCopyAnswer: () => void
   onExportAnswer: () => void
   onRetry?: () => void
 }) {
-  if (!accountInfo?.bound) {
-    return (
-      <section className="reader-panel page-surface-enter" aria-label="答案阅读器">
-        <div className="reader-toolbar">
-          <button className="mobile-assignment-toggle" type="button" onClick={onOpenAssignments} aria-label="打开作业列表">
-            <Icon name="menu" />
-          </button>
-        </div>
-        <div className="empty-state">
-          <div className="empty-state__icon">
-            <Icon name="link_off" />
-          </div>
-          <h2>未绑定 ETS100 账号</h2>
-          <p>请先在官网账号中心绑定您的 ETS100 手机号与密码，绑定完成后即可在此快速查看与解析作业。</p>
-          <a href="https://lastudio.cc/account" target="_blank" rel="noreferrer" className="primary-button-link">
-            <Icon name="open_in_new" /> 前往账号中心绑定
-          </a>
-        </div>
-      </section>
-    )
-  }
-
-  if (parsingMessage) {
-    return (
-      <section className="reader-panel page-surface-enter" aria-label="答案阅读器">
-        <div className="reader-toolbar">
-          <button className="mobile-assignment-toggle" type="button" onClick={onOpenAssignments} aria-label="打开作业列表">
-            <Icon name="menu" />
-          </button>
-        </div>
-        <div className="empty-state">
-          <div className="empty-state__icon spinning">
-            <Icon name="sync" />
-          </div>
-          <h2>正在解析作业</h2>
-          <p>{parsingMessage}</p>
-          <div className="parse-progress-steps">
-            <span className="step-item step-item--active">
-              <Icon name="cloud_download" /> 大陆节点下载资源包
-            </span>
-            <span className="step-divider">→</span>
-            <span className="step-item step-item--active">
-              <Icon name="code" /> 提取加密 JSON
-            </span>
-            <span className="step-divider">→</span>
-            <span className="step-item step-item--active">
-              <Icon name="memory" /> Rust 核心解析引擎
-            </span>
-          </div>
-        </div>
-      </section>
-    )
-  }
-
-  if (isLoadingPaper) {
-    return (
-      <section className="reader-panel page-surface-enter" aria-label="答案阅读器">
-        <div className="reader-toolbar">
-          <button className="mobile-assignment-toggle" type="button" onClick={onOpenAssignments} aria-label="打开作业列表">
-            <Icon name="menu" />
-          </button>
-        </div>
-        <div className="empty-state">
-          <div className="empty-state__icon spinning">
-            <Icon name="hourglass_top" />
-          </div>
-          <h2>正在加载试卷详情...</h2>
-        </div>
-      </section>
-    )
-  }
-
-  if (selectedHomework && !selectedHomework.parsed && !paper) {
-    return (
-      <section className="reader-panel page-surface-enter" aria-label="答案阅读器">
-        <div className="reader-toolbar">
-          <button className="mobile-assignment-toggle" type="button" onClick={onOpenAssignments} aria-label="打开作业列表">
-            <Icon name="menu" />
-          </button>
-        </div>
-        <div className="empty-state">
-          <div className="empty-state__icon">
-            <Icon name="description" />
-          </div>
-          <h2>{selectedHomework.name}</h2>
-          <p>
-            学科：{selectedHomework.subject_name || '英语'} · 截止：
-            {formatTime(selectedHomework.end_time || selectedHomework.create_time)}
-          </p>
-          {parseError ? (
-            <div className="panel-empty-alert panel-empty-alert--error" style={{ margin: '12px auto 16px', maxWidth: '480px', width: '100%' }}>
-              <span>解析失败：{parseError}</span>
-            </div>
-          ) : (
-            <p className="empty-state__hint">该作业尚未解析答案，点击下方按钮开始云端快速解析。</p>
+  return (
+    <div className="fe-card fe-reader-card">
+      <div className="fe-reader-toolbar">
+        <div className="fe-reader-toolbar-group">
+          {paper && (
+            <>
+              <button
+                className="control-secondary"
+                type="button"
+                onClick={onCopyAnswer}
+                disabled={!isCopyExportEnabled}
+                title={isCopyExportEnabled ? '复制格式化答案文本到剪贴板' : (copyExportDenyReason || '答案导出功能当前不可用')}
+              >
+                <Icon name="content_copy" />
+                <span>复制答案</span>
+              </button>
+              <button
+                className="control-secondary"
+                type="button"
+                onClick={onExportAnswer}
+                disabled={!isCopyExportEnabled}
+                title={isCopyExportEnabled ? '导出 TXT 文件到本地' : (copyExportDenyReason || '答案导出功能当前不可用')}
+              >
+                <Icon name="download" />
+                <span>导出 TXT</span>
+              </button>
+            </>
           )}
-          <button
-            className="primary-button parse-action-btn"
-            type="button"
-            disabled={!isAnswerParserEnabled}
-            onClick={() => isAnswerParserEnabled && onRequestParse(selectedHomework)}
-            title={!isAnswerParserEnabled ? (answerParserDenyReason || '答案解析功能当前不可用') : undefined}
-          >
-            <Icon name={isAnswerParserEnabled ? "bolt" : "lock"} />{' '}
-            {isAnswerParserEnabled
-              ? (parseError ? '重新发起解析' : '发起云端解析')
-              : (answerParserDenyReason || '答案解析功能已停用')}
-          </button>
         </div>
-      </section>
-    )
-  }
 
-  if (homeworkError && !selectedHomework) {
-    return (
-      <section className="reader-panel page-surface-enter" aria-label="答案阅读器">
-        <div className="reader-toolbar">
-          <button className="mobile-assignment-toggle" type="button" onClick={onOpenAssignments} aria-label="打开作业列表">
-            <Icon name="menu" />
-          </button>
-        </div>
-        <div className="empty-state">
-          <div className="empty-state__icon">
-            <Icon name="error_outline" />
-          </div>
-          <h2>无法获取作业列表</h2>
-          <p>{homeworkError}</p>
-          <p className="empty-state__hint">请确认在 E听说客户端中是否加入了有效班级，或在设置中点击重新同步。</p>
-          {onRetry && (
-            <button className="primary-button" type="button" onClick={onRetry}>
-              <Icon name="refresh" /> 重新尝试
+        <div className="fe-reader-toolbar-group">
+          {selectedHomework && (
+            <button
+              className="control-primary"
+              type="button"
+              onClick={() => isAnswerParserEnabled && onRequestParse(selectedHomework)}
+              disabled={!isAnswerParserEnabled}
+              title={isAnswerParserEnabled ? (selectedHomework.parsed ? '重新从大陆节点提取并解析' : '发起云端快速解析') : (answerParserDenyReason || '答案解析功能当前不可用')}
+            >
+              <Icon name={isAnswerParserEnabled ? (selectedHomework.parsed ? 'refresh' : 'bolt') : 'lock'} />
+              <span>{isAnswerParserEnabled ? (selectedHomework.parsed ? '重新解析' : '发起云端解析') : (answerParserDenyReason || '答案解析已停用')}</span>
             </button>
           )}
         </div>
-      </section>
-    )
-  }
+      </div>
 
-  if (!paper) {
-    return (
-      <section className="reader-panel page-surface-enter" aria-label="答案阅读器">
-        <div className="reader-toolbar">
-          <button className="mobile-assignment-toggle" type="button" onClick={onOpenAssignments} aria-label="打开作业列表">
-            <Icon name="menu" />
-          </button>
-        </div>
-        <div className="empty-state">
-          <div className="empty-state__icon">
-            <Icon name="auto_stories" />
+      <div className="fe-reader-body">
+        {!accountInfo?.bound ? (
+          <div className="fe-empty-state">
+            <div className="fe-empty-state__icon">
+              <Icon name="link_off" />
+            </div>
+            <h2>未绑定 ETS100 账号</h2>
+            <p>请先在官网账号中心绑定您的 ETS100 手机号与密码，绑定完成后即可在此快速查看与解析作业。</p>
+            <a href="https://lastudio.cc/account" target="_blank" rel="noreferrer" className="control-primary" style={{ textDecoration: 'none' }}>
+              <Icon name="open_in_new" /> 前往账号中心绑定
+            </a>
           </div>
-          <h2>请选择作业</h2>
-          <p>从左侧“作业索引”中点击一份作业以查看或解析答案。</p>
-          <button className="secondary-button" type="button" onClick={onOpenAssignments}>
-            <Icon name="list" /> 查看作业索引
-          </button>
-        </div>
-      </section>
-    )
-  }
+        ) : parsingMessage ? (
+          <div className="fe-empty-state">
+            <div className="fe-empty-state__icon spinning">
+              <Icon name="sync" />
+            </div>
+            <h2>正在解析作业</h2>
+            <p>{parsingMessage}</p>
+            <div className="parse-progress-steps">
+              <span className="step-item step-item--active">
+                <Icon name="cloud_download" /> 大陆节点下载资源包
+              </span>
+              <span className="step-divider">→</span>
+              <span className="step-item step-item--active">
+                <Icon name="code" /> 提取加密 JSON
+              </span>
+              <span className="step-divider">→</span>
+              <span className="step-item step-item--active">
+                <Icon name="memory" /> Rust 核心解析引擎
+              </span>
+            </div>
+          </div>
+        ) : isLoadingPaper ? (
+          <div className="fe-empty-state">
+            <div className="fe-empty-state__icon spinning">
+              <Icon name="hourglass_top" />
+            </div>
+            <h2>正在加载试卷详情...</h2>
+          </div>
+        ) : selectedHomework && !selectedHomework.parsed && !paper ? (
+          <div className="fe-empty-state">
+            <div className="fe-empty-state__icon">
+              <Icon name="description" />
+            </div>
+            <h2>{selectedHomework.name}</h2>
+            <p>
+              学科：{selectedHomework.subject_name || '英语'} · 截止：
+              {formatTime(selectedHomework.end_time || selectedHomework.create_time)}
+            </p>
+            {parseError ? (
+              <div style={{ margin: '12px auto 16px', padding: '10px 16px', background: '#fef2f2', border: '1px solid #fee2e2', borderRadius: 8, color: '#b91c1c', fontSize: 13 }}>
+                <span>解析失败：{parseError}</span>
+              </div>
+            ) : (
+              <p style={{ color: 'var(--control-muted)', fontSize: 13.5 }}>该作业尚未解析答案，点击下方按钮开始云端快速解析。</p>
+            )}
+            <button
+              className="control-primary"
+              style={{ padding: '10px 24px', fontSize: 13.5 }}
+              type="button"
+              disabled={!isAnswerParserEnabled}
+              onClick={() => isAnswerParserEnabled && onRequestParse(selectedHomework)}
+              title={!isAnswerParserEnabled ? (answerParserDenyReason || '答案解析功能当前不可用') : undefined}
+            >
+              <Icon name={isAnswerParserEnabled ? 'bolt' : 'lock'} />{' '}
+              {isAnswerParserEnabled
+                ? (parseError ? '重新发起解析' : '发起云端解析')
+                : (answerParserDenyReason || '答案解析功能已停用')}
+            </button>
+          </div>
+        ) : homeworkError && !selectedHomework ? (
+          <div className="fe-empty-state">
+            <div className="fe-empty-state__icon">
+              <Icon name="error_outline" />
+            </div>
+            <h2>无法获取作业列表</h2>
+            <p>{homeworkError}</p>
+            <p style={{ color: 'var(--control-muted)', fontSize: 13 }}>请确认在 E听说客户端中是否加入了有效班级，或在设置中点击重新同步。</p>
+            {onRetry && (
+              <button className="control-primary" type="button" onClick={onRetry}>
+                <Icon name="refresh" /> 重新尝试
+              </button>
+            )}
+          </div>
+        ) : !paper ? (
+          <div className="fe-empty-state">
+            <div className="fe-empty-state__icon">
+              <Icon name="auto_stories" />
+            </div>
+            <h2>请选择作业</h2>
+            <p>从左侧“作业索引”中点击一份作业以查看或解析答案。</p>
+          </div>
+        ) : (
+          <article className="answer-paper">
+            <header className="answer-paper__head">
+              <span className="paper-kicker">已解析 · 共 {paper.totalQuestions} 题</span>
+              <h1>{paper.title || paper.paperName}</h1>
+              <div className="paper-meta">
+                <span>地区 / 模式: {paper.regionLabel || '云端解析'}</span>
+                <span>题目数: {paper.totalQuestions} 题</span>
+              </div>
+            </header>
 
-  return (
-    <section className="reader-panel page-surface-enter" aria-label="答案阅读器">
-      <div className="reader-toolbar">
-        <button className="mobile-assignment-toggle" type="button" onClick={onOpenAssignments} aria-label="打开作业列表">
-          <Icon name="menu" />
-        </button>
-        <button
-          type="button"
-          onClick={onCopyAnswer}
-          disabled={!isCopyExportEnabled}
-          title={isCopyExportEnabled ? "复制格式化答案文本到剪贴板" : (copyExportDenyReason || "答案导出功能当前不可用")}
-        >
-          <Icon name="content_copy" />
-          复制答案
-        </button>
-        <button
-          type="button"
-          onClick={onExportAnswer}
-          disabled={!isCopyExportEnabled}
-          title={isCopyExportEnabled ? "导出 TXT 文件到本地" : (copyExportDenyReason || "答案导出功能当前不可用")}
-        >
-          <Icon name="download" />
-          导出 TXT
-        </button>
-        {selectedHomework && (
-          <button
-            type="button"
-            onClick={() => isAnswerParserEnabled && onRequestParse(selectedHomework)}
-            disabled={!isAnswerParserEnabled}
-            title={isAnswerParserEnabled ? "强制重新从大陆节点提取并解析" : (answerParserDenyReason || "答案解析功能当前不可用")}
-          >
-            <Icon name={isAnswerParserEnabled ? "refresh" : "lock"} />
-            重新解析
-          </button>
+            <div className="answer-paper__content">
+              {paper.sections.map((sec, idx) => (
+                <SectionGroup section={sec} key={idx} />
+              ))}
+            </div>
+          </article>
         )}
       </div>
-      <article className="answer-paper">
-        <header className="answer-paper__head">
-          <span className="paper-kicker">已解析 · 共 {paper.totalQuestions} 题</span>
-          <h1>{paper.title || paper.paperName}</h1>
-          <div className="paper-meta">
-            <span>地区 / 模式: {paper.regionLabel || '云端解析'}</span>
-            <span>题目数: {paper.totalQuestions} 题</span>
-          </div>
-        </header>
-
-        <div className="answer-paper__content">
-          {paper.sections.map((section, idx) => (
-            <SectionGroup section={section} key={idx} />
-          ))}
-        </div>
-      </article>
-    </section>
+    </div>
   )
 }
 
 function HistoryPage({
   historyHomeworks,
   isLoading,
-  onOpenAssignments,
   onSelectHomework,
 }: {
   historyHomeworks: HomeworkItem[]
   isLoading: boolean
-  onOpenAssignments: () => void
   onSelectHomework: (item: HomeworkItem) => void
 }) {
+  const [historyQuery, setHistoryQuery] = useState('')
+
+  const filtered = historyHomeworks.filter((hw) => {
+    if (!historyQuery.trim()) return true
+    const q = historyQuery.toLowerCase()
+    return (
+      hw.name.toLowerCase().includes(q) ||
+      (hw.subject_name && hw.subject_name.toLowerCase().includes(q))
+    )
+  })
+
   return (
-    <section className="page-panel page-surface-enter" aria-label="历史作业">
-      <div className="page-toolbar">
-        <button className="mobile-assignment-toggle" type="button" onClick={onOpenAssignments} aria-label="打开作业列表">
-          <Icon name="menu" />
-        </button>
-      </div>
-      <div className="page-panel__inner">
-        <div className="page-head-row">
-          <h1>历史作业</h1>
-          <span className="page-head-badge">{historyHomeworks.length} 份记录</span>
+    <div className="fe-history-container">
+      <div className="fe-history-toolbar">
+        <div className="control-toolbar">
+          <label>
+            <Icon name="search" />
+            <input
+              placeholder="搜索历史作业名称或学科..."
+              type="search"
+              value={historyQuery}
+              onChange={(e) => setHistoryQuery(e.target.value)}
+            />
+          </label>
         </div>
+        <span className="admin-pill-badge is-muted">
+          共 {filtered.length} 份归档记录
+        </span>
+      </div>
+
+      <div className="fe-history-list">
         {isLoading ? (
-          <div className="history-empty">正在拉取历史作业记录...</div>
-        ) : historyHomeworks.length === 0 ? (
-          <div className="history-empty">暂无已归档的历史作业</div>
-        ) : (
-          <div className="history-list">
-            {historyHomeworks.map((hw) => (
-              <button
-                className="history-item"
-                type="button"
-                onClick={() => onSelectHomework(hw)}
-                key={hw.id}
-              >
-                <span>
-                  <strong>{hw.name}</strong>
-                  <small>
-                    {hw.subject_name || '英语'} · 截止: {formatTime(hw.end_time || hw.create_time)}
-                  </small>
-                </span>
-                <div className="history-item__right">
-                  <StatusPill status={hw.parsed ? 'parsed' : 'unread'} />
-                  <Icon name="chevron_right" />
-                </div>
-              </button>
-            ))}
+          <div className="fe-empty-state" style={{ margin: '40px auto' }}>
+            <div className="fe-empty-state__icon spinning">
+              <Icon name="sync" />
+            </div>
+            <h2>正在拉取历史作业记录...</h2>
           </div>
+        ) : filtered.length === 0 ? (
+          <div className="fe-empty-state" style={{ margin: '40px auto' }}>
+            <div className="fe-empty-state__icon">
+              <Icon name="history_toggle_drop" />
+            </div>
+            <h2>暂无已归档的历史作业</h2>
+            <p>完成并归档的试卷将显示在此处以供查阅。</p>
+          </div>
+        ) : (
+          filtered.map((hw) => (
+            <button
+              key={hw.id}
+              className="fe-history-item"
+              type="button"
+              onClick={() => onSelectHomework(hw)}
+            >
+              <div>
+                <strong>{hw.name}</strong>
+                <small>
+                  {hw.subject_name || '英语'} · 截止: {formatTime(hw.end_time || hw.create_time)}
+                </small>
+              </div>
+              <div className="fe-history-item__right">
+                <StatusPill status={hw.parsed ? 'parsed' : 'unread'} />
+                <Icon name="chevron_right" />
+              </div>
+            </button>
+          ))
         )}
       </div>
-    </section>
+    </div>
   )
 }
 
@@ -815,13 +792,11 @@ function SettingsPage({
   accountInfo,
   softwareConfig,
   softwareFeatures,
-  onOpenAssignments,
   onRefreshSession,
 }: {
   accountInfo: PlatformAccountInfo | null
   softwareConfig: SoftwareConfig | null
   softwareFeatures: SoftwareFeatureItem[]
-  onOpenAssignments: () => void
   onRefreshSession: () => void
 }) {
   const [skipRisk, setSkipRisk] = useState(readStoredSkipRiskWarning)
@@ -833,139 +808,181 @@ function SettingsPage({
   }
 
   return (
-    <section className="page-panel page-surface-enter" aria-label="设置">
-      <div className="page-toolbar">
-        <button className="mobile-assignment-toggle" type="button" onClick={onOpenAssignments} aria-label="打开作业列表">
-          <Icon name="menu" />
-        </button>
-      </div>
-      <div className="page-panel__inner">
-        <h1>设置与账号</h1>
-
-        <div className="settings-section">
-          <h2>软件与功能开关</h2>
-          <div className="account-info-card">
-            <div className="account-info-card__row">
-              <span className="account-label">软件名称</span>
-              <strong>{softwareConfig ? 'Fe Web 网页版' : 'Fe Web'}</strong>
-            </div>
-            <div className="account-info-card__row">
-              <span className="account-label">当前版本</span>
-              <span>1.0.0</span>
-            </div>
-            <div className="account-info-card__row">
-              <span className="account-label">运行状态</span>
-              <span className={`account-status-badge ${softwareConfig?.isKillSwitchOn ? 'account-status-badge--none' : 'account-status-badge--ok'}`}>
-                {softwareConfig?.isKillSwitchOn ? '维护中 (紧急暂停)' : '正常运行'}
-              </span>
-            </div>
-            {softwareFeatures.length > 0 && (
-              <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <span className="account-label" style={{ fontWeight: 600 }}>功能开关状态</span>
-                {softwareFeatures.map((feat) => {
-                  const isOk = feat.status === 'enabled' && feat.available_for_version && !softwareConfig?.isKillSwitchOn
-                  return (
-                    <div key={feat.feature_key} className="account-info-card__row" style={{ padding: '4px 0' }}>
-                      <span>
-                        <strong>{feat.name}</strong>
-                        <small style={{ display: 'block', color: 'var(--muted)', fontSize: '12px' }}>
-                          {feat.description || feat.feature_key}
-                        </small>
-                      </span>
-                      <span className={`account-status-badge ${isOk ? 'account-status-badge--ok' : 'account-status-badge--none'}`}>
-                        {isOk ? '已启用' : (feat.reason || '已停用')}
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
+    <div className="fe-settings-container">
+      {/* Software & Feature switches */}
+      <section className="admin-policy-card">
+        <div className="admin-policy-card-head">
+          <Icon name="rocket_launch" />
+          <div>
+            <h3>软件信息与运行状态</h3>
+            <p>当前独立软件登记状态、紧急熔断策略与功能授权细则</p>
           </div>
         </div>
 
-        <div className="settings-section">
-          <h2>ETS100 账号状态</h2>
-          <div className="account-info-card">
-            <div className="account-info-card__row">
-              <span className="account-label">绑定状态</span>
-              <span className={`account-status-badge ${accountInfo?.bound ? 'account-status-badge--ok' : 'account-status-badge--none'}`}>
-                {accountInfo?.bound ? '已绑定' : '未绑定'}
+        <div className="admin-setting-switch-row">
+          <div className="admin-setting-switch-info">
+            <strong>软件名称</strong>
+            <span>独立软件注册代号 fe-web</span>
+          </div>
+          <span className="admin-pill-badge is-info">Fe Web 网页版 (fe-web)</span>
+        </div>
+
+        <div className="admin-setting-switch-row">
+          <div className="admin-setting-switch-info">
+            <strong>运行状态</strong>
+            <span>由 LastStudio 后台集中下发的可用性指示</span>
+          </div>
+          <span className={`admin-pill-badge ${softwareConfig?.isKillSwitchOn ? 'is-danger' : 'is-success'}`}>
+            {softwareConfig?.isKillSwitchOn ? '维护中 (紧急暂停)' : '正常运行'}
+          </span>
+        </div>
+
+        {softwareFeatures.map((feat) => {
+          const isOk = feat.status === 'enabled' && feat.available_for_version && !softwareConfig?.isKillSwitchOn
+          return (
+            <div key={feat.feature_key} className="admin-setting-switch-row">
+              <div className="admin-setting-switch-info">
+                <strong>{feat.name}</strong>
+                <span>{feat.description || feat.feature_key}</span>
+              </div>
+              <span className={`admin-pill-badge ${isOk ? 'is-success' : 'is-danger'}`}>
+                {isOk ? '已启用' : (feat.reason || '已停用')}
               </span>
             </div>
-            {accountInfo?.bound && (
+          )
+        })}
+      </section>
+
+      {/* ETS100 Platform Account Binding */}
+      <section className="admin-policy-card">
+        <div className="admin-policy-card-head">
+          <Icon name="account_box" />
+          <div>
+            <h3>ETS100 平台账号状态</h3>
+            <p>大陆节点拉取作业试卷与解析资源所依赖的平台凭据</p>
+          </div>
+        </div>
+
+        <div className="admin-setting-switch-row">
+          <div className="admin-setting-switch-info">
+            <strong>绑定状态</strong>
+            <span>是否已在 LastStudio 账号中心绑定 ETS100 登录会话</span>
+          </div>
+          <span className={`admin-pill-badge ${accountInfo?.bound ? 'is-success' : 'is-danger'}`}>
+            {accountInfo?.bound ? '已绑定' : '未绑定'}
+          </span>
+        </div>
+
+        {accountInfo?.bound && (
+          <>
+            <div className="admin-setting-switch-row">
+              <div className="admin-setting-switch-info">
+                <strong>ETS100 手机号</strong>
+                <span>已授权关联的手机号</span>
+              </div>
+              <strong>{accountInfo.account_display || '未知'}</strong>
+            </div>
+
+            {accountInfo.profile && (
               <>
-                <div className="account-info-card__row">
-                  <span className="account-label">ETS100 手机号</span>
-                  <strong>{accountInfo.account_display || '未知'}</strong>
-                </div>
-                {accountInfo.profile && (
-                  <>
-                    {(accountInfo.profile as Record<string, unknown>).name ? (
-                      <div className="account-info-card__row">
-                        <span className="account-label">学生姓名</span>
-                        <span>{String((accountInfo.profile as Record<string, unknown>).name)}</span>
-                      </div>
-                    ) : null}
-                    {(accountInfo.profile as Record<string, unknown>).school_name ? (
-                      <div className="account-info-card__row">
-                        <span className="account-label">学校</span>
-                        <span>{String((accountInfo.profile as Record<string, unknown>).school_name)}</span>
-                      </div>
-                    ) : null}
-                    {(accountInfo.profile as Record<string, unknown>).class_name ? (
-                      <div className="account-info-card__row">
-                        <span className="account-label">班级</span>
-                        <span>{String((accountInfo.profile as Record<string, unknown>).class_name)}</span>
-                      </div>
-                    ) : null}
-                    {(accountInfo.profile as Record<string, unknown>).grade ? (
-                      <div className="account-info-card__row">
-                        <span className="account-label">年级</span>
-                        <span>{String((accountInfo.profile as Record<string, unknown>).grade)}</span>
-                      </div>
-                    ) : null}
-                  </>
-                )}
-                {accountInfo.last_used_at && (
-                  <div className="account-info-card__row">
-                    <span className="account-label">上次使用时间</span>
-                    <span>{formatTime(accountInfo.last_used_at)}</span>
+                {(accountInfo.profile as Record<string, unknown>).name ? (
+                  <div className="admin-setting-switch-row">
+                    <div className="admin-setting-switch-info">
+                      <strong>学生姓名</strong>
+                      <span>平台注册姓名</span>
+                    </div>
+                    <span>{String((accountInfo.profile as Record<string, unknown>).name)}</span>
                   </div>
-                )}
+                ) : null}
+
+                {(accountInfo.profile as Record<string, unknown>).school_name ? (
+                  <div className="admin-setting-switch-row">
+                    <div className="admin-setting-switch-info">
+                      <strong>学校 / 班级</strong>
+                      <span>所在学校与班级信息</span>
+                    </div>
+                    <span>
+                      {String((accountInfo.profile as Record<string, unknown>).school_name)}{' '}
+                      {String((accountInfo.profile as Record<string, unknown>).class_name || '')}
+                    </span>
+                  </div>
+                ) : null}
               </>
             )}
-            <div className="account-info-card__actions">
-              <a href="https://lastudio.cc/account" target="_blank" rel="noreferrer" className="secondary-button-link">
-                前往官网账号中心管理
-              </a>
-              <button className="secondary-button" type="button" onClick={onRefreshSession}>
-                重新检测绑定
-              </button>
-            </div>
+
+            {accountInfo.last_used_at && (
+              <div className="admin-setting-switch-row">
+                <div className="admin-setting-switch-info">
+                  <strong>上次同步时间</strong>
+                  <span>云端节点最近一次通信时间</span>
+                </div>
+                <span>{formatTime(accountInfo.last_used_at)}</span>
+              </div>
+            )}
+          </>
+        )}
+
+        <div className="admin-setting-switch-row" style={{ background: '#fafbfc' }}>
+          <div className="admin-setting-switch-info">
+            <strong>账号管理操作</strong>
+            <span>重新拉取或跳转至官网账号中心解绑/换绑</span>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <a
+              href="https://lastudio.cc/account"
+              target="_blank"
+              rel="noreferrer"
+              className="control-secondary"
+            >
+              <Icon name="open_in_new" /> 账号中心管理
+            </a>
+            <button className="control-secondary" type="button" onClick={onRefreshSession}>
+              <Icon name="refresh" /> 重新检测绑定
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Preferences */}
+      <section className="admin-policy-card">
+        <div className="admin-policy-card-head">
+          <Icon name="tune" />
+          <div>
+            <h3>工作台偏好设置</h3>
+            <p>调整本地操作习惯与界面交互体验</p>
           </div>
         </div>
 
-        <div className="settings-section">
-          <h2>偏好设置</h2>
-          <div className="settings-list">
-            <label>
-              <span>
-                <strong>跳过顶号风险提示</strong>
-                <small>发起作业解析时直接开始，不再弹出防顶号警告弹窗</small>
-              </span>
-              <input type="checkbox" checked={skipRisk} onChange={toggleSkipRisk} />
-            </label>
-            <label>
-              <span>
-                <strong>答案高亮</strong>
-                <small>选择题选项自动标记标准答案并高亮显示</small>
-              </span>
-              <input type="checkbox" defaultChecked />
-            </label>
+        <div className="admin-setting-switch-row">
+          <div className="admin-setting-switch-info">
+            <strong>跳过顶号风险提示</strong>
+            <span>发起作业解析时直接开始，不再弹出防顶号警告弹窗</span>
           </div>
+          <button
+            className={`admin-switch ${skipRisk ? 'is-checked' : ''}`}
+            onClick={toggleSkipRisk}
+            role="switch"
+            aria-checked={skipRisk}
+            aria-label="跳过顶号风险提示"
+            type="button"
+          />
         </div>
-      </div>
-    </section>
+
+        <div className="admin-setting-switch-row">
+          <div className="admin-setting-switch-info">
+            <strong>智能答案标记</strong>
+            <span>选择题选项自动匹配标准答案并进行微绿高亮渲染</span>
+          </div>
+          <button
+            className="admin-switch is-checked"
+            role="switch"
+            aria-checked={true}
+            aria-label="智能答案标记"
+            type="button"
+          />
+        </div>
+      </section>
+    </div>
   )
 }
 
@@ -978,7 +995,8 @@ function App() {
   const [pathname, setPathname] = useState(() => window.location.pathname)
   const [session, setSession] = useState<AuthSession | null>(null)
   const [authMessage, setAuthMessage] = useState('')
-  const [isAssignmentPanelOpen, setIsAssignmentPanelOpen] = useState(readStoredAssignmentPanelState)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(readStoredSidebarCollapsed)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const authorizationStarted = useRef(false)
   const page = currentPage(pathname)
 
@@ -1004,6 +1022,26 @@ function App() {
 
   const pollingTimerRef = useRef<number | null>(null)
 
+  function toggleSidebarCollapse() {
+    setSidebarCollapsed((prev) => {
+      const next = !prev
+      window.localStorage.setItem(sidebarCollapsedStorageKey, String(next))
+      return next
+    })
+  }
+
+  // Listen for Ctrl+B keyboard shortcut to toggle sidebar collapse
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+        e.preventDefault()
+        toggleSidebarCollapse()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
   // Load Fe Web software config and feature switches on mount
   useEffect(() => {
     let active = true
@@ -1011,42 +1049,39 @@ function App() {
       .then((cfg) => {
         if (active) setSoftwareConfig(cfg)
       })
-      .catch((err) => {
-        console.warn('Failed to load software config:', err)
-      })
+      .catch((err) => console.error('Failed to load software config:', err))
 
     getSoftwareFeatures('fe-web')
-      .then((fts) => {
-        if (active) setSoftwareFeatures(fts)
+      .then((feats) => {
+        if (active) setSoftwareFeatures(feats)
       })
-      .catch((err) => {
-        console.warn('Failed to load software features:', err)
-      })
+      .catch((err) => console.error('Failed to load software features:', err))
 
     return () => {
       active = false
     }
   }, [])
 
-  function isFeatureEnabled(featureKey: string, defaultValue = true): boolean {
+  function isFeatureEnabled(featureKey: string): boolean {
     if (softwareConfig?.isKillSwitchOn) return false
-    const item = softwareFeatures.find((f) => f.feature_key === featureKey)
-    if (item) {
-      return item.status === 'enabled' && item.available_for_version
-    }
-    if (softwareConfig?.features && featureKey in softwareConfig.features) {
-      return Boolean(softwareConfig.features[featureKey])
-    }
-    return defaultValue
+    const feat = softwareFeatures.find((f) => f.feature_key === featureKey)
+    if (!feat) return true
+    return feat.status === 'enabled' && feat.available_for_version
   }
 
-  function getFeatureDenyReason(featureKey: string, defaultReason = '该功能当前不可用'): string {
+  function getFeatureDenyReason(featureKey: string, fallback = '该功能已暂时停用'): string {
     if (softwareConfig?.isKillSwitchOn) {
-      return softwareConfig.noticeMessage || '服务已被紧急停用或正在维护中'
+      return softwareConfig.noticeMessage || '系统正在维护，所有云端与解析功能已暂时关闭。'
     }
-    const item = softwareFeatures.find((f) => f.feature_key === featureKey)
-    if (item?.reason) return item.reason
-    return defaultReason
+    const feat = softwareFeatures.find((f) => f.feature_key === featureKey)
+    return feat?.reason || fallback
+  }
+
+  function showToast(message: string) {
+    setToastMessage(message)
+    window.setTimeout(() => {
+      setToastMessage(null)
+    }, 2800)
   }
 
   useEffect(() => {
@@ -1101,25 +1136,6 @@ function App() {
     })
   }, [authMessage, page, pathname, session])
 
-  // Clear polling interval on unmount
-  useEffect(() => {
-    return () => {
-      if (pollingTimerRef.current) {
-        window.clearInterval(pollingTimerRef.current)
-      }
-    }
-  }, [])
-
-  // Auto hide toast after 3 seconds
-  useEffect(() => {
-    if (!toastMessage) return
-    const timer = window.setTimeout(() => {
-      setToastMessage(null)
-    }, 3000)
-    return () => window.clearTimeout(timer)
-  }, [toastMessage])
-
-  // Fetch account status & homeworks once authenticated
   useEffect(() => {
     if (!session) return
     let active = true
@@ -1128,7 +1144,6 @@ function App() {
       .then(async (account) => {
         if (!active) return
         setAccountInfo(account)
-
         if (account.bound) {
           if (!isFeatureEnabled('cloud_mode')) {
             setHomeworkError(getFeatureDenyReason('cloud_mode', '云端模式已暂时停用'))
@@ -1139,25 +1154,25 @@ function App() {
             if (!active) return
             setHomeworkError(null)
             setHomeworks(res.homeworks || [])
-            const parsedFirst = res.homeworks.find((h) => h.parsed)
-            if (parsedFirst) {
-              setSelectedHomework(parsedFirst)
-              const detail = await getHomeworkDetail(session.accessToken, parsedFirst.id)
-              if (!active) return
-              setCurrentPaper(detail)
+            if (res.homeworks && res.homeworks.length > 0) {
+              const firstParsed = res.homeworks.find((h) => h.parsed)
+              const firstHw = firstParsed || res.homeworks[0]
+              setSelectedHomework(firstHw)
+              if (firstHw.parsed) {
+                void loadPaperDetail(session.accessToken, firstHw.id)
+              }
             }
           } catch (err) {
             if (!active) return
             const msg = err instanceof Error ? err.message : '获取作业列表失败'
-            console.error('Failed to load homework data:', err)
+            console.error('Failed to load homework list:', err)
             setHomeworkError(msg)
           }
         }
       })
       .catch((err) => {
         if (!active) return
-        console.error('Failed to load account data:', err)
-        setHomeworkError(err instanceof Error ? err.message : '加载账号信息失败')
+        console.error('Failed to load platform account info:', err)
       })
 
     return () => {
@@ -1165,7 +1180,6 @@ function App() {
     }
   }, [session, softwareConfig, softwareFeatures])
 
-  // Fetch history assignments when opening /history
   useEffect(() => {
     if (!session || page !== '/history') return
     if (!isFeatureEnabled('cloud_mode')) return
@@ -1179,19 +1193,25 @@ function App() {
         if (!active) return
         setHistoryHomeworks([...(res2.homeworks || []), ...(res3.homeworks || [])])
       })
+      .catch((err) => {
+        console.error('Failed to load history homeworks:', err)
+      })
       .finally(() => {
-        if (!active) return
-        setIsLoadingHistory(false)
+        if (active) setIsLoadingHistory(false)
       })
 
     return () => {
       active = false
     }
-  }, [page, session, softwareConfig, softwareFeatures])
+  }, [session, page, softwareConfig, softwareFeatures])
 
-  function showToast(msg: string) {
-    setToastMessage(msg)
-  }
+  useEffect(() => {
+    return () => {
+      if (pollingTimerRef.current) {
+        window.clearInterval(pollingTimerRef.current)
+      }
+    }
+  }, [])
 
   async function loadPaperDetail(token: string, homeworkId: string) {
     setIsLoadingPaper(true)
@@ -1391,24 +1411,18 @@ function App() {
       })
   }
 
-  function navigate(nextPage: Page, closePanel = false) {
+  function navigate(nextPage: Page) {
     if (nextPage === '/history') {
       setIsLoadingHistory(true)
     }
+    setMobileNavOpen(false)
     if (nextPage === window.location.pathname) {
-      if (closePanel) setPanelOpen(false)
       return
     }
     transitionRoute(() => {
       window.history.pushState(null, '', nextPage)
       setPathname(nextPage)
-      if (closePanel) setPanelOpen(false)
     })
-  }
-
-  function setPanelOpen(nextOpen: boolean) {
-    setIsAssignmentPanelOpen(nextOpen)
-    window.localStorage.setItem(assignmentPanelStorageKey, String(nextOpen))
   }
 
   function beginAuthentication() {
@@ -1454,8 +1468,10 @@ function App() {
     )
   }
 
+  const meta = pageMeta[page]
+
   return (
-    <main className="workspace-shell">
+    <main className={`control-shell ${mobileNavOpen ? 'drawer-open' : ''}`}>
       {toastMessage && (
         <div className="toast-notification" role="status">
           <Icon name="check_circle" filled />
@@ -1471,32 +1487,66 @@ function App() {
         />
       )}
 
-      <header className="topbar">
-        <div className="brand-lockup">
-          <img className="brand-logo" src={logoSrc} alt="" aria-hidden="true" />
-          <span>
-            <strong>Fuck ets100</strong>
-            <small>作业答案解析工作台</small>
-          </span>
-        </div>
-        <div className="topbar__links">
-          {accountInfo?.bound && (
-            <span className="topbar-account-pill">
-              <Icon name="account_circle" />
-              {accountInfo.account_display}
+      {/* Floating Header Capsule */}
+      <header className="control-site-header">
+        <div className="control-header-inner">
+          <a className="control-brand" href="/">
+            <img src={logoSrc} alt="" />
+            <span>
+              <strong>Fuck ets100</strong>
+              <small>Fe Web · 作业工作台</small>
             </span>
-          )}
-          <a href="https://lastudio.cc/account" target="_blank" rel="noreferrer">
-            账号中心
-            <Icon name="person" />
           </a>
-          <a href="https://lastudio.cc/admin" target="_blank" rel="noreferrer">
-            管理中心
-            <Icon name="admin_panel_settings" />
-          </a>
+
+          <div className="control-header-actions">
+            {accountInfo?.bound && (
+              <a
+                className="control-account"
+                href="https://lastudio.cc/account"
+                target="_blank"
+                rel="noreferrer"
+                title="ETS100 账号状态"
+              >
+                <span className="control-account-avatar">
+                  <Icon name="account_circle" />
+                </span>
+                <div className="control-account-meta">
+                  <strong>{accountInfo.account_display}</strong>
+                  <small>ETS100 已连接</small>
+                </div>
+              </a>
+            )}
+            <a
+              className="control-header-link"
+              href="https://lastudio.cc/account"
+              target="_blank"
+              rel="noreferrer"
+            >
+              <Icon name="person" />
+              <span>账号中心</span>
+            </a>
+            <a
+              className="control-header-link"
+              href="https://lastudio.cc/admin"
+              target="_blank"
+              rel="noreferrer"
+            >
+              <Icon name="admin_panel_settings" />
+              <span>管理中心</span>
+            </a>
+            <button
+              className="control-icon-button"
+              onClick={() => transitionTo(oauthConfig.logoutUrl)}
+              title="退出登录"
+              type="button"
+            >
+              <Icon name="logout" />
+            </button>
+          </div>
         </div>
       </header>
 
+      {/* Kill switch & Announcement Banners */}
       {softwareConfig?.isKillSwitchOn && (
         <div className="system-kill-switch-banner" role="alert">
           <Icon name="block" filled />
@@ -1515,13 +1565,18 @@ function App() {
             <p>{softwareConfig.announcementMessage}</p>
           </div>
           {softwareConfig.announcementUrl && (
-            <a href={softwareConfig.announcementUrl} target="_blank" rel="noreferrer" className="system-announcement-link">
+            <a
+              href={softwareConfig.announcementUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="system-announcement-link"
+            >
               查看详情
             </a>
           )}
           <button
             type="button"
-            className="icon-button system-announcement-close"
+            className="system-announcement-close"
             onClick={() => setAnnouncementDismissed(true)}
             aria-label="关闭公告"
           >
@@ -1530,95 +1585,166 @@ function App() {
         </div>
       )}
 
-      <div className="workspace-body">
-        <aside className="side-nav">
-          <nav className="side-nav__links" aria-label="主导航">
-            {navigationItems.map((item) => (
-              <button
-                className={`side-link ${page === item.page ? 'side-link--active' : ''}`}
-                type="button"
-                onClick={() => navigate(item.page)}
-                key={item.page}
-              >
-                <Icon name={item.icon} />
-                <span>{item.label}</span>
-              </button>
-            ))}
-          </nav>
-          <div className="side-nav__footer">
-            <button className="side-link" type="button" onClick={() => transitionTo(oauthConfig.logoutUrl)}>
-              <Icon name="logout" />
-              <span>退出登录</span>
+      {/* Layout Grid */}
+      <div className={`control-layout ${sidebarCollapsed ? 'is-collapsed' : ''}`}>
+        {/* Collapsible Sidebar */}
+        <aside
+          className={`control-sidebar ${sidebarCollapsed ? 'is-collapsed' : ''}`}
+          id="control-modules"
+          aria-label="工作台模块导航"
+        >
+          <div className="admin-sidebar-head">
+            <button
+              className="admin-collapse-toggle"
+              onClick={toggleSidebarCollapse}
+              title={sidebarCollapsed ? '展开侧边栏 (Ctrl+B)' : '收起侧边栏 (Ctrl+B)'}
+              type="button"
+              aria-label={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
+            >
+              <Icon name="keyboard_double_arrow_left" />
+            </button>
+            <button
+              className="admin-drawer-close"
+              onClick={() => setMobileNavOpen(false)}
+              title="关闭导航抽屉"
+              type="button"
+              aria-label="关闭导航"
+            >
+              <Icon name="close" />
             </button>
           </div>
+
+          <nav aria-label="工作台模块">
+            {navGroups.map((group) => (
+              <section key={group.label}>
+                <small>{group.label}</small>
+                {group.items.map((item) => (
+                  <button
+                    key={item.page}
+                    className={page === item.page ? 'is-active' : ''}
+                    onClick={() => navigate(item.page)}
+                    title={sidebarCollapsed ? item.label : undefined}
+                    type="button"
+                  >
+                    <Icon name={item.icon} />
+                    <span>
+                      <strong>{item.label}</strong>
+                      <small>{item.caption}</small>
+                    </span>
+                  </button>
+                ))}
+              </section>
+            ))}
+          </nav>
+
+          <footer>
+            <i />
+            <span className="admin-footer-label">
+              {accountInfo?.bound ? '云端作业就绪' : '未绑定 ETS100'}
+            </span>
+          </footer>
         </aside>
 
-        <AssignmentPanel
-          isOpen={isAssignmentPanelOpen}
-          activePage={page}
-          accountInfo={accountInfo}
-          homeworks={homeworks}
-          selectedId={selectedHomework?.id || null}
-          parsingId={parsingId}
-          homeworkError={homeworkError}
-          isCloudModeEnabled={isFeatureEnabled('cloud_mode')}
-          cloudModeDenyReason={getFeatureDenyReason('cloud_mode')}
-          onClose={() => setPanelOpen(false)}
-          onNavigate={navigate}
-          onToggle={() => setPanelOpen(!isAssignmentPanelOpen)}
-          onRetry={refreshAccountAndHomeworks}
-          onSelectHomework={(item) => {
-            handleSelectHomework(item)
-            if (!item.parsed) {
-              handleTriggerParse(item)
-            }
-          }}
-        />
+        {/* Workspace */}
+        <section className="control-workspace">
+          {/* Page Heading */}
+          <header className="control-page-heading">
+            <div>
+              <p>{meta.kicker}</p>
+              <h1>{meta.title}</h1>
+              <span>{meta.caption}</span>
+            </div>
+            <div className="control-live">
+              <i />
+              <span>生产服务已连接</span>
+            </div>
+          </header>
 
-        {page === '/' && (
-          <CurrentAssignmentPage
-            accountInfo={accountInfo}
-            selectedHomework={selectedHomework}
-            paper={currentPaper}
-            isLoadingPaper={isLoadingPaper}
-            parsingMessage={parsingMessage}
-            homeworkError={homeworkError}
-            parseError={parseError}
-            isAnswerParserEnabled={isFeatureEnabled('answer_parser')}
-            answerParserDenyReason={getFeatureDenyReason('answer_parser')}
-            isCopyExportEnabled={isFeatureEnabled('copy_export')}
-            copyExportDenyReason={getFeatureDenyReason('copy_export')}
-            onOpenAssignments={() => setPanelOpen(true)}
-            onRequestParse={handleTriggerParse}
-            onCopyAnswer={handleCopyAnswer}
-            onExportAnswer={handleExportAnswer}
-            onRetry={refreshAccountAndHomeworks}
-          />
-        )}
+          {/* Mobile Drawer Trigger & Overlay */}
+          <button
+            className="control-mobile-navigation"
+            onClick={() => setMobileNavOpen(true)}
+            type="button"
+            aria-label="打开工作台导航"
+          >
+            <Icon name="menu" />
+            <span>
+              <small>工作台模块</small>
+              <strong>{meta.title}</strong>
+            </span>
+            <Icon name="chevron_right" />
+          </button>
 
-        {page === '/history' && (
-          <HistoryPage
-            historyHomeworks={historyHomeworks}
-            isLoading={isLoadingHistory}
-            onOpenAssignments={() => setPanelOpen(true)}
-            onSelectHomework={(item) => {
-              handleSelectHomework(item)
-              if (!item.parsed) {
-                handleTriggerParse(item)
-              }
-            }}
+          <button
+            className="control-drawer-overlay"
+            onClick={() => setMobileNavOpen(false)}
+            tabIndex={-1}
+            type="button"
+            aria-label="关闭工作台导航"
           />
-        )}
 
-        {page === '/settings' && (
-          <SettingsPage
-            accountInfo={accountInfo}
-            softwareConfig={softwareConfig}
-            softwareFeatures={softwareFeatures}
-            onOpenAssignments={() => setPanelOpen(true)}
-            onRefreshSession={refreshAccountAndHomeworks}
-          />
-        )}
+          {/* Page Work area */}
+          {page === '/' && (
+            <div className="fe-split-workspace">
+              <AssignmentIndexCard
+                accountInfo={accountInfo}
+                homeworks={homeworks}
+                selectedId={selectedHomework?.id || null}
+                parsingId={parsingId}
+                homeworkError={homeworkError}
+                isCloudModeEnabled={isFeatureEnabled('cloud_mode')}
+                cloudModeDenyReason={getFeatureDenyReason('cloud_mode')}
+                onRetry={refreshAccountAndHomeworks}
+                onSelectHomework={(item) => {
+                  handleSelectHomework(item)
+                  if (!item.parsed) {
+                    handleTriggerParse(item)
+                  }
+                }}
+              />
+
+              <HomeworkReaderCard
+                accountInfo={accountInfo}
+                selectedHomework={selectedHomework}
+                paper={currentPaper}
+                isLoadingPaper={isLoadingPaper}
+                parsingMessage={parsingMessage}
+                homeworkError={homeworkError}
+                parseError={parseError}
+                isAnswerParserEnabled={isFeatureEnabled('answer_parser')}
+                answerParserDenyReason={getFeatureDenyReason('answer_parser')}
+                isCopyExportEnabled={isFeatureEnabled('copy_export')}
+                copyExportDenyReason={getFeatureDenyReason('copy_export')}
+                onRequestParse={handleTriggerParse}
+                onCopyAnswer={handleCopyAnswer}
+                onExportAnswer={handleExportAnswer}
+                onRetry={refreshAccountAndHomeworks}
+              />
+            </div>
+          )}
+
+          {page === '/history' && (
+            <HistoryPage
+              historyHomeworks={historyHomeworks}
+              isLoading={isLoadingHistory}
+              onSelectHomework={(item) => {
+                handleSelectHomework(item)
+                if (!item.parsed) {
+                  handleTriggerParse(item)
+                }
+              }}
+            />
+          )}
+
+          {page === '/settings' && (
+            <SettingsPage
+              accountInfo={accountInfo}
+              softwareConfig={softwareConfig}
+              softwareFeatures={softwareFeatures}
+              onRefreshSession={refreshAccountAndHomeworks}
+            />
+          )}
+        </section>
       </div>
     </main>
   )
