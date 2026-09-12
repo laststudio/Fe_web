@@ -25,6 +25,7 @@ import { oauthConfig } from './auth/config'
 import { startAuthorization } from './auth/oauth'
 import type { AuthSession } from './auth/types'
 import { transitionRoute, transitionTo } from './navigation/controller'
+import CapVerification from './CapVerification'
 
 type Page = '/' | '/history' | '/settings'
 
@@ -284,15 +285,6 @@ function shouldTriggerCaptchaDefense(): boolean {
   return false
 }
 
-function generateCaptcha(): string {
-  const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'
-  let code = ''
-  for (let i = 0; i < 4; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length))
-  }
-  return code
-}
-
 function CaptchaModal({
   onSuccess,
   onCancel,
@@ -300,97 +292,7 @@ function CaptchaModal({
   onSuccess: () => void
   onCancel: () => void
 }) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const [captchaCode, setCaptchaCode] = useState(() => generateCaptcha())
-  const [userInput, setUserInput] = useState('')
   const [error, setError] = useState('')
-
-  function drawCaptcha(code: string) {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    const width = canvas.width
-    const height = canvas.height
-
-    const grad = ctx.createLinearGradient(0, 0, width, height)
-    grad.addColorStop(0, '#f8fafc')
-    grad.addColorStop(1, '#e2e8f0')
-    ctx.fillStyle = grad
-    ctx.fillRect(0, 0, width, height)
-
-    for (let i = 0; i < 4; i++) {
-      ctx.strokeStyle = `hsl(${Math.random() * 360}, 50%, 65%)`
-      ctx.lineWidth = 1.5
-      ctx.beginPath()
-      ctx.moveTo(Math.random() * width, Math.random() * height)
-      ctx.bezierCurveTo(
-        Math.random() * width,
-        Math.random() * height,
-        Math.random() * width,
-        Math.random() * height,
-        Math.random() * width,
-        Math.random() * height
-      )
-      ctx.stroke()
-    }
-
-    for (let i = 0; i < 28; i++) {
-      ctx.fillStyle = `rgba(${Math.floor(Math.random() * 200)}, ${Math.floor(Math.random() * 200)}, ${Math.floor(Math.random() * 200)}, 0.45)`
-      ctx.beginPath()
-      ctx.arc(Math.random() * width, Math.random() * height, 1.2, 0, Math.PI * 2)
-      ctx.fill()
-    }
-
-    const charColors = ['#1e40af', '#047857', '#b45309', '#6d28d9', '#be123c']
-    const charWidth = (width - 24) / 4
-
-    for (let i = 0; i < code.length; i++) {
-      const char = code[i]
-      ctx.save()
-      const x = 16 + i * charWidth + (Math.random() * 4 - 2)
-      const y = height / 2 + (Math.random() * 4 - 2)
-      ctx.translate(x, y)
-      const angle = (Math.random() * 40 - 20) * (Math.PI / 180)
-      ctx.rotate(angle)
-
-      ctx.font = `bold ${Math.floor(Math.random() * 4 + 22)}px monospace, sans-serif`
-      ctx.fillStyle = charColors[Math.floor(Math.random() * charColors.length)]
-      ctx.textBaseline = 'middle'
-      ctx.textAlign = 'center'
-      ctx.fillText(char, 0, 0)
-      ctx.restore()
-    }
-  }
-
-  function refreshCode() {
-    let next = generateCaptcha()
-    while (next === captchaCode) {
-      next = generateCaptcha()
-    }
-    setCaptchaCode(next)
-    setUserInput('')
-    setError('')
-  }
-
-  useEffect(() => {
-    drawCaptcha(captchaCode)
-  }, [captchaCode])
-
-  function handleSubmit(e?: React.FormEvent) {
-    if (e) e.preventDefault()
-    if (!userInput.trim()) {
-      setError('请输入验证码')
-      return
-    }
-    if (userInput.trim().toUpperCase() === captchaCode) {
-      onSuccess()
-    } else {
-      setError('验证码输入不正确，请重新输入')
-      refreshCode()
-    }
-  }
 
   return (
     <div className="risk-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="captcha-modal-title">
@@ -401,59 +303,32 @@ function CaptchaModal({
           </div>
           <div>
             <h2 id="captcha-modal-title">安全人机验证</h2>
-            <p>检测到短时间内频繁刷新，请先输入图形验证码以防接口风控。</p>
+            <p>为保护 ETS 账号安全并防御接口频繁请求，请完成下方人机验证以继续。</p>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ padding: '20px 24px' }}>
-          <div className="fe-captcha-canvas-wrap">
-            <canvas
-              ref={canvasRef}
-              width={140}
-              height={44}
-              className="fe-captcha-canvas"
-              onClick={refreshCode}
-              title="看不清？点击刷新验证码"
-            />
-            <button
-              type="button"
-              className="fe-captcha-refresh-btn"
-              onClick={refreshCode}
-            >
-              <Icon name="refresh" />
-              <span>换一张</span>
-            </button>
-          </div>
+        <div className="fe-cap-modal-body" style={{ padding: '20px 24px' }}>
+          <CapVerification
+            onError={(msg) => setError(msg)}
+            onToken={(token) => {
+              if (token) {
+                onSuccess()
+              }
+            }}
+          />
+          {error && (
+            <div className="fe-captcha-error" role="alert">
+              <Icon name="error" />
+              <span>{error}</span>
+            </div>
+          )}
+        </div>
 
-          <div className="fe-captcha-input-row">
-            <input
-              type="text"
-              maxLength={4}
-              autoFocus
-              placeholder="输入4位验证码"
-              value={userInput}
-              onChange={(e) => {
-                setUserInput(e.target.value.toUpperCase())
-                if (error) setError('')
-              }}
-            />
-            {error && (
-              <div className="fe-captcha-error" role="alert">
-                <Icon name="error" />
-                <span>{error}</span>
-              </div>
-            )}
-          </div>
-
-          <div className="risk-modal-actions" style={{ padding: '20px 0 0', background: 'transparent', borderTop: 'none' }}>
-            <button className="control-secondary" type="button" onClick={onCancel}>
-              取消
-            </button>
-            <button className="control-primary" type="submit">
-              验证并继续
-            </button>
-          </div>
-        </form>
+        <div className="risk-modal-actions" style={{ padding: '16px 24px 20px', borderTop: '1px solid var(--control-line)' }}>
+          <button className="control-secondary" type="button" onClick={onCancel}>
+            取消
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -861,6 +736,7 @@ function HomeworkCard({
 
 function HomeworkListView({
   activeTab,
+  hasLoaded,
   accountInfo,
   homeworks,
   historyHomeworks,
@@ -874,10 +750,12 @@ function HomeworkListView({
   isAnswerParserEnabled = true,
   answerParserDenyReason,
   onRefresh,
+  onManualReadList,
   onOpenHomework,
   onTriggerParse,
 }: {
   activeTab: 'current' | 'history'
+  hasLoaded: boolean
   accountInfo: PlatformAccountInfo | null
   homeworks: HomeworkItem[]
   historyHomeworks: HomeworkItem[]
@@ -891,6 +769,7 @@ function HomeworkListView({
   isAnswerParserEnabled?: boolean
   answerParserDenyReason?: string
   onRefresh: () => void
+  onManualReadList: () => void
   onOpenHomework: (hw: HomeworkItem) => void
   onTriggerParse: (hw: HomeworkItem) => void
 }) {
@@ -920,6 +799,7 @@ function HomeworkListView({
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                disabled={!hasLoaded}
               />
             </label>
           </div>
@@ -927,13 +807,17 @@ function HomeworkListView({
 
         <div className="fe-list-toolbar__right">
           <span className="admin-pill-badge is-muted">
-            {accountInfo?.bound ? `${activeTab === 'history' ? '往期归档' : '当前作业'} · 共 ${filtered.length} 份` : '未绑定 ETS100'}
+            {accountInfo?.bound
+              ? hasLoaded
+                ? `${activeTab === 'history' ? '往期归档' : '当前作业'} · 共 ${filtered.length} 份`
+                : '待手动读取'
+              : '未绑定 ETS100'}
           </span>
           <button
             className={`control-icon-button ${isLoading ? 'fe-spin' : ''}`}
-            onClick={onRefresh}
+            onClick={hasLoaded ? onRefresh : onManualReadList}
             disabled={isLoading}
-            title="重新同步作业列表"
+            title={hasLoaded ? '重新同步作业列表' : '手动读取作业列表'}
             type="button"
           >
             <Icon name="refresh" />
@@ -957,7 +841,7 @@ function HomeworkListView({
           </div>
           <h2>作业同步失败</h2>
           <p>{homeworkError}</p>
-          <button type="button" className="control-primary" onClick={onRefresh}>
+          <button type="button" className="control-primary" onClick={hasLoaded ? onRefresh : onManualReadList}>
             重新尝试
           </button>
         </div>
@@ -977,6 +861,42 @@ function HomeworkListView({
           >
             前往账号中心绑定
           </a>
+        </div>
+      ) : !hasLoaded ? (
+        <div className="fe-list-prompt-card">
+          <div className="fe-list-prompt-icon">
+            <Icon name="cloud_sync" filled />
+          </div>
+          <div className="fe-list-prompt-account-pill">
+            <span className="admin-status-dot is-online" />
+            <span>ETS100 账号：{accountInfo.account_display || '已关联'}</span>
+          </div>
+          <h3>{activeTab === 'current' ? '云端当前作业读取' : '云端历史作业读取'}</h3>
+          <p className="fe-list-prompt-desc">
+            系统支持从云端拉取{activeTab === 'current' ? '正在进行中的最新作业' : '往期完成及逾期的历史归档作业'}。
+          </p>
+
+          <div className="fe-list-prompt-risk-box">
+            <div className="fe-list-risk-title">
+              <Icon name="warning" filled />
+              <span>官方客户端“顶号”风险重要说明</span>
+            </div>
+            <p>
+              使用云端模式直连 E听说 获取作业列表时，可能会导致 E听说 官方客户端被退出登录（“顶号”）。
+              为防止影响正常学习与答题，<strong>请务必避开考试、正式答题、录音提交等关键场景</strong>。在确认当前安全后，点击下方按钮手动读取。
+            </p>
+          </div>
+
+          <button
+            type="button"
+            className="control-primary fe-list-prompt-action"
+            onClick={onManualReadList}
+            disabled={!isCloudModeEnabled}
+            title={!isCloudModeEnabled ? (cloudModeDenyReason || '云端模式已停用') : undefined}
+          >
+            <Icon name="download" />
+            <span>{activeTab === 'current' ? '确认安全，读取当前作业' : '确认安全，读取历史作业'}</span>
+          </button>
         </div>
       ) : isLoading ? (
         <div className="fe-empty-state" style={{ margin: '50px auto' }}>
@@ -1305,6 +1225,8 @@ function App() {
   const [historyHomeworks, setHistoryHomeworks] = useState<HomeworkItem[]>([])
   const [isLoadingHomeworks, setIsLoadingHomeworks] = useState(false)
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+  const [hasLoadedCurrent, setHasLoadedCurrent] = useState(false)
+  const [hasLoadedHistory, setHasLoadedHistory] = useState(false)
   const activeTab: 'current' | 'history' = pathname === '/history' ? 'history' : 'current'
 
   // Viewing Paper State (Full-width reader view)
@@ -1464,34 +1386,15 @@ function App() {
     })
   }, [authMessage, page, pathname, session])
 
+  // Fetch platform account info on login (does not call ETS100, safe from kickout)
   useEffect(() => {
     if (!session) return
     let active = true
 
     getPlatformAccount(session.accessToken)
-      .then(async (account) => {
+      .then((account) => {
         if (!active) return
         setAccountInfo(account)
-        if (account.bound) {
-          if (!isFeatureEnabled('cloud_mode')) {
-            setHomeworkError(getFeatureDenyReason('cloud_mode', '云端模式已暂时停用'))
-            return
-          }
-          try {
-            setIsLoadingHomeworks(true)
-            const res = await getHomeworkList(session.accessToken, '1')
-            if (!active) return
-            setHomeworkError(null)
-            setHomeworks(res.homeworks || [])
-          } catch (err) {
-            if (!active) return
-            const msg = err instanceof Error ? err.message : '获取作业列表失败'
-            console.error('Failed to load homework list:', err)
-            setHomeworkError(msg)
-          } finally {
-            if (active) setIsLoadingHomeworks(false)
-          }
-        }
       })
       .catch((err) => {
         if (!active) return
@@ -1501,37 +1404,7 @@ function App() {
     return () => {
       active = false
     }
-  }, [session, softwareConfig, softwareFeatures])
-
-  useEffect(() => {
-    if (!session || page !== '/history') return
-    if (!isFeatureEnabled('cloud_mode')) return
-    if (historyHomeworks.length > 0) return
-    let active = true
-
-    queueMicrotask(() => {
-      if (active) setIsLoadingHistory(true)
-    })
-
-    Promise.all([
-      getHomeworkList(session.accessToken, '2').catch(() => ({ homeworks: [] })),
-      getHomeworkList(session.accessToken, '3').catch(() => ({ homeworks: [] })),
-    ])
-      .then(([res2, res3]) => {
-        if (!active) return
-        setHistoryHomeworks([...(res2.homeworks || []), ...(res3.homeworks || [])])
-      })
-      .catch((err) => {
-        console.error('Failed to load history homeworks:', err)
-      })
-      .finally(() => {
-        if (active) setIsLoadingHistory(false)
-      })
-
-    return () => {
-      active = false
-    }
-  }, [session, page, historyHomeworks.length, softwareConfig, softwareFeatures])
+  }, [session])
 
   useEffect(() => {
     return () => {
@@ -1731,79 +1604,106 @@ function App() {
     showToast('已导出答案 TXT 文件')
   }
 
-  function refreshAccountAndHomeworks() {
+  async function doFetchHomeworks(tab: 'current' | 'history') {
+    if (!session) return
+    if (!isFeatureEnabled('cloud_mode')) {
+      setHomeworkError(getFeatureDenyReason('cloud_mode', '云端模式已暂时停用'))
+      return
+    }
+    setHomeworkError(null)
+    if (tab === 'current') {
+      setIsLoadingHomeworks(true)
+      try {
+        const res = await getHomeworkList(session.accessToken, '1')
+        setHomeworks(res.homeworks || [])
+        setHasLoadedCurrent(true)
+        showToast('已同步当前作业列表')
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : '获取当前作业列表失败'
+        console.error('Failed to load current homework list:', err)
+        setHomeworkError(msg)
+        showToast(`作业列表同步失败: ${msg}`)
+      } finally {
+        setIsLoadingHomeworks(false)
+      }
+    } else {
+      setIsLoadingHistory(true)
+      try {
+        const [res2, res3] = await Promise.all([
+          getHomeworkList(session.accessToken, '2').catch(() => ({ homeworks: [] })),
+          getHomeworkList(session.accessToken, '3').catch(() => ({ homeworks: [] })),
+        ])
+        setHistoryHomeworks([...(res2.homeworks || []), ...(res3.homeworks || [])])
+        setHasLoadedHistory(true)
+        showToast('已同步历史与逾期作业')
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : '获取历史作业列表失败'
+        console.error('Failed to load history homework list:', err)
+        setHomeworkError(msg)
+        showToast(`历史作业获取失败: ${msg}`)
+      } finally {
+        setIsLoadingHistory(false)
+      }
+    }
+  }
+
+  async function refreshAccountAndHomeworks() {
     if (!session) return
     setHomeworkError(null)
-    getPlatformAccount(session.accessToken)
-      .then(async (account) => {
-        setAccountInfo(account)
-        if (account.bound) {
-          if (!isFeatureEnabled('cloud_mode')) {
-            setHomeworkError(getFeatureDenyReason('cloud_mode', '云端模式已暂时停用'))
-            return
-          }
-          try {
-            setIsLoadingHomeworks(true)
-            const res = await getHomeworkList(session.accessToken, '1')
-            setHomeworkError(null)
-            setHomeworks(res.homeworks || [])
-            if (activeTab === 'history') {
-              setIsLoadingHistory(true)
-              const [res2, res3] = await Promise.all([
-                getHomeworkList(session.accessToken, '2').catch(() => ({ homeworks: [] })),
-                getHomeworkList(session.accessToken, '3').catch(() => ({ homeworks: [] })),
-              ])
-              setHistoryHomeworks([...(res2.homeworks || []), ...(res3.homeworks || [])])
-              setIsLoadingHistory(false)
-            }
-            showToast('已重新同步作业列表')
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : '获取作业列表失败'
-            console.error('Failed to refresh homework data:', err)
-            setHomeworkError(msg)
-            showToast(`作业列表同步失败: ${msg}`)
-          } finally {
-            setIsLoadingHomeworks(false)
-          }
-        }
-      })
-      .catch((err) => {
-        console.error('Failed to refresh data:', err)
-        showToast('刷新失败，请稍后重试')
-      })
+    try {
+      const account = await getPlatformAccount(session.accessToken)
+      setAccountInfo(account)
+      if (account.bound) {
+        await doFetchHomeworks(activeTab)
+      }
+    } catch (err) {
+      console.error('Failed to refresh data:', err)
+      showToast('刷新失败，请稍后重试')
+    }
   }
 
   const [showCaptchaModal, setShowCaptchaModal] = useState(false)
   const pendingRefreshRef = useRef<(() => void) | null>(null)
 
-  function handleRequestRefresh() {
+  function handleManualReadList() {
     if (shouldTriggerCaptchaDefense()) {
-      pendingRefreshRef.current = refreshAccountAndHomeworks
+      pendingRefreshRef.current = () => {
+        void doFetchHomeworks(activeTab)
+      }
       setShowCaptchaModal(true)
       return
     }
     recordRefreshTimestamp()
-    refreshAccountAndHomeworks()
+    void doFetchHomeworks(activeTab)
+  }
+
+  function handleRequestRefresh() {
+    if (shouldTriggerCaptchaDefense()) {
+      pendingRefreshRef.current = () => {
+        void refreshAccountAndHomeworks()
+      }
+      setShowCaptchaModal(true)
+      return
+    }
+    recordRefreshTimestamp()
+    void refreshAccountAndHomeworks()
   }
 
   function handleCaptchaSuccess() {
     setShowCaptchaModal(false)
     clearRefreshTimestamps()
-    showToast('安全验证通过，正在同步作业列表...')
+    showToast('安全验证通过，正在同步作业数据...')
     if (pendingRefreshRef.current) {
       const fn = pendingRefreshRef.current
       pendingRefreshRef.current = null
       fn()
     } else {
-      refreshAccountAndHomeworks()
+      void refreshAccountAndHomeworks()
     }
   }
 
   function navigate(nextPage: Page) {
     setViewingPaper(null)
-    if (nextPage === '/history') {
-      setIsLoadingHistory(true)
-    }
     setMobileNavOpen(false)
     if (nextPage === window.location.pathname) {
       return
@@ -2131,6 +2031,7 @@ function App() {
           ) : (
             <HomeworkListView
               activeTab={activeTab}
+              hasLoaded={activeTab === 'current' ? hasLoadedCurrent : hasLoadedHistory}
               accountInfo={accountInfo}
               homeworks={homeworks}
               historyHomeworks={historyHomeworks}
@@ -2144,6 +2045,7 @@ function App() {
               isAnswerParserEnabled={isFeatureEnabled('answer_parser')}
               answerParserDenyReason={getFeatureDenyReason('answer_parser')}
               onRefresh={handleRequestRefresh}
+              onManualReadList={handleManualReadList}
               onOpenHomework={handleOpenHomework}
               onTriggerParse={handleTriggerParse}
             />
