@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import './App.css'
-import { ApiError, getCurrentUser, setUnauthorizedHandler } from './api/auth'
+import { ApiError, getCurrentUser, setUnauthorizedHandler, type User } from './api/auth'
 import {
   cleanAnswerText,
   formatPaperAsText,
@@ -51,26 +51,23 @@ const navGroups: { label: string; items: NavItem[] }[] = [
   {
     label: '系统与服务',
     items: [
-      { icon: 'settings', label: '设置与账号', caption: 'ETS 账号与功能开关', page: '/settings' },
+      { icon: 'settings', label: '设置与账号', caption: 'ETS 账号与功能设置', page: '/settings' },
     ],
   },
 ]
 
-const pageMeta: Record<Page, { kicker: string; title: string; caption: string }> = {
+const pageMeta: Record<Page, { title: string; caption: string }> = {
   '/': {
-    kicker: 'FE WEB / ASSIGNMENTS',
     title: '当前作业',
-    caption: '在线解析 ETS100 试卷与答案查阅',
+    caption: '获取与查看作业标准答案',
   },
   '/history': {
-    kicker: 'FE WEB / HISTORY',
     title: '历史作业',
     caption: '往期归档试卷与答案速查',
   },
   '/settings': {
-    kicker: 'FE WEB / SETTINGS',
     title: '设置与账号',
-    caption: '软件配置、功能开关与平台账号管理',
+    caption: '平台账号绑定、系统公告与功能设置',
   },
 }
 
@@ -92,6 +89,12 @@ function readStoredSidebarCollapsed() {
 
 function readStoredSkipRiskWarning() {
   return window.localStorage.getItem(skipRiskWarningStorageKey) === 'true'
+}
+
+function resolveAvatarUrl(avatarUrl?: string | null): string | null {
+  if (!avatarUrl) return null
+  if (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://')) return avatarUrl
+  return `${oauthConfig.apiUrl}${avatarUrl.startsWith('/') ? '' : '/'}${avatarUrl}`
 }
 
 function formatTime(dateStr?: string): string {
@@ -148,6 +151,57 @@ function StatusPill({ status }: { status: Status }) {
   )
 }
 
+function AnnouncementModal({
+  config,
+  onClose,
+}: {
+  config: SoftwareConfig
+  onClose: () => void
+}) {
+  return (
+    <div className="risk-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="announcement-modal-title">
+      <div className="risk-modal-card" style={{ maxWidth: 540 }}>
+        <div className="risk-modal-head" style={{ background: '#eff6ff', borderBottom: '1px solid #bfdbfe' }}>
+          <div className="risk-icon-wrap" style={{ background: '#dbeafe', color: '#1d4ed8' }}>
+            <Icon name="campaign" filled />
+          </div>
+          <div>
+            <h2 id="announcement-modal-title" style={{ color: '#1e40af' }}>
+              {config.announcementTitle || '系统公告'}
+            </h2>
+            {config.announcementUpdatedAt && (
+              <p className="risk-modal-subtitle" style={{ color: '#3b82f6' }}>
+                更新时间：{config.announcementUpdatedAt}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="risk-modal-body">
+          <p style={{ whiteSpace: 'pre-line', lineHeight: 1.7, fontSize: 14, color: '#1e293b' }}>
+            {config.announcementMessage || '暂无公告内容'}
+          </p>
+        </div>
+        <div className="risk-modal-actions">
+          {config.announcementUrl && (
+            <a
+              href={config.announcementUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="control-secondary"
+              style={{ marginRight: 'auto', textDecoration: 'none' }}
+            >
+              <Icon name="open_in_new" /> 查看详情
+            </a>
+          )}
+          <button className="control-primary" type="button" onClick={onClose}>
+            我知道了
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function RiskWarningModal({
   homework,
   onConfirm,
@@ -168,21 +222,19 @@ function RiskWarningModal({
             <Icon name="warning" filled />
           </div>
           <div>
-            <h2 id="risk-modal-title">顶号与作业解析风险提示</h2>
+            <h2 id="risk-modal-title">顶号与答题提示</h2>
             <p className="risk-modal-subtitle">作业：{homework.name}</p>
           </div>
         </div>
         <div className="risk-modal-body">
           <p>
-            由于 ETS100 平台的单点在线机制，当网页端通过大陆节点下载作业资源包时，
-            系统会使用您的 ETS100 登录会话与云端交互。
+            如果您的手机或平板端 ETS100 <strong>当前正在答题或录音</strong>，解析可能导致移动端被挤下线。
           </p>
           <div className="risk-alert-box">
-            <strong>⚠️ 注意事项：</strong>
+            <strong>建议：</strong>
             <ul>
-              <li>如果您的手机或平板端 ETS100 <strong>当前正在答题、录音或考试中</strong>，解析可能导致移动端被挤下线（顶号）。</li>
-              <li>建议您在<strong>完成移动端作答后</strong>再在网页端进行作业解析与答案查看。</li>
-              <li>如无正在进行的移动端考试，可放心继续。</li>
+              <li>建议在<strong>移动端完成作答后</strong>，再在网页端进行作业解析与答案查阅。</li>
+              <li>如未在移动端进行考试或答题，可放心继续。</li>
             </ul>
           </div>
           <label className="risk-modal-checkbox" htmlFor={rememberId}>
@@ -192,7 +244,7 @@ function RiskWarningModal({
               checked={remember}
               onChange={(e) => setRemember(e.target.checked)}
             />
-            <span>记住选择（本次浏览器环境不再弹出此提示）</span>
+            <span>记住选择（不再弹出此提示）</span>
           </label>
         </div>
         <div className="risk-modal-actions">
@@ -319,7 +371,7 @@ function AssignmentIndexCard({
               <Icon name="inbox" />
             </div>
             <h2>暂无当前作业</h2>
-            <p>当前没有待完成或待解析的作业。</p>
+            <p>当前没有待完成的作业。</p>
           </div>
         ) : (
           <>
@@ -489,7 +541,7 @@ function QuestionItem({ question }: { question: Question }) {
       </div>
       <div className="review-stamp" aria-hidden="true">
         <Icon name="verified" />
-        <span>Fe 解析核对</span>
+        <span>Fe 核对</span>
       </div>
     </section>
   )
@@ -582,10 +634,10 @@ function HomeworkReaderCard({
               type="button"
               onClick={() => isAnswerParserEnabled && onRequestParse(selectedHomework)}
               disabled={!isAnswerParserEnabled}
-              title={isAnswerParserEnabled ? (selectedHomework.parsed ? '重新从大陆节点提取并解析' : '发起云端快速解析') : (answerParserDenyReason || '答案解析功能当前不可用')}
+              title={isAnswerParserEnabled ? (selectedHomework.parsed ? '重新提取并解析' : '开始解析') : (answerParserDenyReason || '答案解析功能当前不可用')}
             >
               <Icon name={isAnswerParserEnabled ? (selectedHomework.parsed ? 'refresh' : 'bolt') : 'lock'} />
-              <span>{isAnswerParserEnabled ? (selectedHomework.parsed ? '重新解析' : '发起云端解析') : (answerParserDenyReason || '答案解析已停用')}</span>
+              <span>{isAnswerParserEnabled ? (selectedHomework.parsed ? '重新解析' : '开始解析答案') : (answerParserDenyReason || '答案解析已停用')}</span>
             </button>
           )}
         </div>
@@ -608,21 +660,9 @@ function HomeworkReaderCard({
             <div className="fe-empty-state__icon spinning">
               <Icon name="sync" />
             </div>
-            <h2>正在解析作业</h2>
+            <h2>正在解析试卷答案</h2>
             <p>{parsingMessage}</p>
-            <div className="parse-progress-steps">
-              <span className="step-item step-item--active">
-                <Icon name="cloud_download" /> 大陆节点下载资源包
-              </span>
-              <span className="step-divider">→</span>
-              <span className="step-item step-item--active">
-                <Icon name="code" /> 提取加密 JSON
-              </span>
-              <span className="step-divider">→</span>
-              <span className="step-item step-item--active">
-                <Icon name="memory" /> Rust 核心解析引擎
-              </span>
-            </div>
+            <p style={{ color: 'var(--control-muted)', fontSize: 13 }}>正在同步试卷与答案内容，请稍候...</p>
           </div>
         ) : isLoadingPaper ? (
           <div className="fe-empty-state">
@@ -638,7 +678,7 @@ function HomeworkReaderCard({
             </div>
             <h2>{selectedHomework.name}</h2>
             <p>
-              学科：{selectedHomework.subject_name || '英语'} · 截止：
+              {selectedHomework.subject_name || '英语'} · 截止：
               {formatTime(selectedHomework.end_time || selectedHomework.create_time)}
             </p>
             {parseError ? (
@@ -646,7 +686,7 @@ function HomeworkReaderCard({
                 <span>解析失败：{parseError}</span>
               </div>
             ) : (
-              <p style={{ color: 'var(--control-muted)', fontSize: 13.5 }}>该作业尚未解析答案，点击下方按钮开始云端快速解析。</p>
+              <p style={{ color: 'var(--control-muted)', fontSize: 13.5 }}>点击下方按钮开始解析标准答案。</p>
             )}
             <button
               className="control-primary"
@@ -658,7 +698,7 @@ function HomeworkReaderCard({
             >
               <Icon name={isAnswerParserEnabled ? 'bolt' : 'lock'} />{' '}
               {isAnswerParserEnabled
-                ? (parseError ? '重新发起解析' : '发起云端解析')
+                ? (parseError ? '重新重试解析' : '开始解析答案')
                 : (answerParserDenyReason || '答案解析功能已停用')}
             </button>
           </div>
@@ -682,17 +722,13 @@ function HomeworkReaderCard({
               <Icon name="auto_stories" />
             </div>
             <h2>请选择作业</h2>
-            <p>从左侧“作业索引”中点击一份作业以查看或解析答案。</p>
+            <p>从左侧点击一份作业即可自动解析并查看标准答案。</p>
           </div>
         ) : (
           <article className="answer-paper">
             <header className="answer-paper__head">
-              <span className="paper-kicker">已解析 · 共 {paper.totalQuestions} 题</span>
+              <span className="paper-kicker">共 {paper.totalQuestions} 题</span>
               <h1>{paper.title || paper.paperName}</h1>
-              <div className="paper-meta">
-                <span>地区 / 模式: {paper.regionLabel || '云端解析'}</span>
-                <span>题目数: {paper.totalQuestions} 题</span>
-              </div>
             </header>
 
             <div className="answer-paper__content">
@@ -789,15 +825,19 @@ function HistoryPage({
 }
 
 function SettingsPage({
+  currentUser,
   accountInfo,
   softwareConfig,
   softwareFeatures,
   onRefreshSession,
+  onOpenAnnouncement,
 }: {
+  currentUser: User | null
   accountInfo: PlatformAccountInfo | null
   softwareConfig: SoftwareConfig | null
   softwareFeatures: SoftwareFeatureItem[]
   onRefreshSession: () => void
+  onOpenAnnouncement: () => void
 }) {
   const [skipRisk, setSkipRisk] = useState(readStoredSkipRiskWarning)
 
@@ -807,30 +847,97 @@ function SettingsPage({
     window.localStorage.setItem(skipRiskWarningStorageKey, String(next))
   }
 
+  const avatarUrl = resolveAvatarUrl(currentUser?.avatar_url)
+
   return (
     <div className="fe-settings-container">
-      {/* Software & Feature switches */}
+      {/* Current User Profile Card */}
       <section className="admin-policy-card">
         <div className="admin-policy-card-head">
-          <Icon name="rocket_launch" />
+          <Icon name="person" />
           <div>
-            <h3>软件信息与运行状态</h3>
-            <p>当前独立软件登记状态、紧急熔断策略与功能授权细则</p>
+            <h3>当前登录账号</h3>
+            <p>LastStudio 统一通行证账号信息</p>
+          </div>
+        </div>
+
+        <div className="admin-setting-switch-row">
+          <div className="admin-setting-switch-info" style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+            <div className="control-account-avatar" style={{ width: 44, height: 44, borderRadius: 10, fontSize: 16 }}>
+              {avatarUrl ? (
+                <img src={avatarUrl} alt={currentUser?.name || ''} />
+              ) : (
+                currentUser?.name ? currentUser.name.slice(0, 1).toUpperCase() : <Icon name="person" />
+              )}
+            </div>
+            <div>
+              <strong style={{ fontSize: 14 }}>{currentUser?.name || '用户'}</strong>
+              <span style={{ display: 'block', color: 'var(--control-muted)', fontSize: 12 }}>
+                通行证 ID: #{currentUser?.id || '-'}
+              </span>
+            </div>
+          </div>
+          <a
+            href="https://lastudio.cc/account"
+            target="_blank"
+            rel="noreferrer"
+            className="control-secondary"
+          >
+            <Icon name="open_in_new" /> 管理个人资料
+          </a>
+        </div>
+      </section>
+
+      {/* Announcements */}
+      {softwareConfig && (softwareConfig.announcementTitle || softwareConfig.announcementMessage) && (
+        <section className="admin-policy-card">
+          <div className="admin-policy-card-head">
+            <Icon name="campaign" />
+            <div>
+              <h3>系统公告</h3>
+              <p>官方最新动态与服务通知</p>
+            </div>
+          </div>
+
+          <div className="admin-setting-switch-row">
+            <div className="admin-setting-switch-info">
+              <strong>{softwareConfig.announcementTitle || '公告'}</strong>
+              <span style={{ whiteSpace: 'pre-line', lineHeight: 1.6 }}>{softwareConfig.announcementMessage}</span>
+              {softwareConfig.announcementUpdatedAt && (
+                <span style={{ color: '#94a3b8', fontSize: 11, marginTop: 4 }}>
+                  更新时间：{softwareConfig.announcementUpdatedAt}
+                </span>
+              )}
+            </div>
+            <button className="control-secondary" type="button" onClick={onOpenAnnouncement}>
+              <Icon name="visibility" /> 查看公告
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* Software & Feature switches (NO VERSION NUMBERS) */}
+      <section className="admin-policy-card">
+        <div className="admin-policy-card-head">
+          <Icon name="tune" />
+          <div>
+            <h3>功能状态</h3>
+            <p>网页版功能开关与授权细则</p>
           </div>
         </div>
 
         <div className="admin-setting-switch-row">
           <div className="admin-setting-switch-info">
             <strong>软件名称</strong>
-            <span>独立软件注册代号 fe-web</span>
+            <span>网页端在线解析工作台</span>
           </div>
-          <span className="admin-pill-badge is-info">Fe Web 网页版 (fe-web)</span>
+          <span className="admin-pill-badge is-info">Fe Web 网页版</span>
         </div>
 
         <div className="admin-setting-switch-row">
           <div className="admin-setting-switch-info">
             <strong>运行状态</strong>
-            <span>由 LastStudio 后台集中下发的可用性指示</span>
+            <span>服务在线与维护状态</span>
           </div>
           <span className={`admin-pill-badge ${softwareConfig?.isKillSwitchOn ? 'is-danger' : 'is-success'}`}>
             {softwareConfig?.isKillSwitchOn ? '维护中 (紧急暂停)' : '正常运行'}
@@ -859,14 +966,14 @@ function SettingsPage({
           <Icon name="account_box" />
           <div>
             <h3>ETS100 平台账号状态</h3>
-            <p>大陆节点拉取作业试卷与解析资源所依赖的平台凭据</p>
+            <p>拉取作业试卷与答案所依赖的 E听说 平台登录凭据</p>
           </div>
         </div>
 
         <div className="admin-setting-switch-row">
           <div className="admin-setting-switch-info">
             <strong>绑定状态</strong>
-            <span>是否已在 LastStudio 账号中心绑定 ETS100 登录会话</span>
+            <span>是否已在 LastStudio 账号中心绑定 ETS100 账号</span>
           </div>
           <span className={`admin-pill-badge ${accountInfo?.bound ? 'is-success' : 'is-danger'}`}>
             {accountInfo?.bound ? '已绑定' : '未绑定'}
@@ -914,7 +1021,7 @@ function SettingsPage({
               <div className="admin-setting-switch-row">
                 <div className="admin-setting-switch-info">
                   <strong>上次同步时间</strong>
-                  <span>云端节点最近一次通信时间</span>
+                  <span>最近一次通信时间</span>
                 </div>
                 <span>{formatTime(accountInfo.last_used_at)}</span>
               </div>
@@ -925,7 +1032,7 @@ function SettingsPage({
         <div className="admin-setting-switch-row" style={{ background: '#fafbfc' }}>
           <div className="admin-setting-switch-info">
             <strong>账号管理操作</strong>
-            <span>重新拉取或跳转至官网账号中心解绑/换绑</span>
+            <span>解绑、换绑或重新同步账号信息</span>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <a
@@ -956,7 +1063,7 @@ function SettingsPage({
         <div className="admin-setting-switch-row">
           <div className="admin-setting-switch-info">
             <strong>跳过顶号风险提示</strong>
-            <span>发起作业解析时直接开始，不再弹出防顶号警告弹窗</span>
+            <span>点击作业时直接开始解析，不再弹出警告提示弹窗</span>
           </div>
           <button
             className={`admin-switch ${skipRisk ? 'is-checked' : ''}`}
@@ -994,6 +1101,7 @@ function currentPage(pathname: string): Page | null {
 function App() {
   const [pathname, setPathname] = useState(() => window.location.pathname)
   const [session, setSession] = useState<AuthSession | null>(null)
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [authMessage, setAuthMessage] = useState('')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(readStoredSidebarCollapsed)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
@@ -1011,6 +1119,7 @@ function App() {
   const [parsingId, setParsingId] = useState<string | null>(null)
   const [parsingMessage, setParsingMessage] = useState<string | null>(null)
   const [showRiskModal, setShowRiskModal] = useState<HomeworkItem | null>(null)
+  const [showAnnouncementModal, setShowAnnouncementModal] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [homeworkError, setHomeworkError] = useState<string | null>(null)
   const [parseError, setParseError] = useState<string | null>(null)
@@ -1062,6 +1171,24 @@ function App() {
     }
   }, [])
 
+  // Fetch current user profile whenever session exists
+  useEffect(() => {
+    if (!session) return
+    let active = true
+    getCurrentUser(session.accessToken)
+      .then((user) => {
+        if (active) setCurrentUser(user)
+      })
+      .catch((err) => {
+        if (active) setCurrentUser(null)
+        console.error('Failed to load current user profile:', err)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [session])
+
   function isFeatureEnabled(featureKey: string): boolean {
     if (softwareConfig?.isKillSwitchOn) return false
     const feat = softwareFeatures.find((f) => f.feature_key === featureKey)
@@ -1097,6 +1224,7 @@ function App() {
     setUnauthorizedHandler(() => {
       authorizationStarted.current = false
       setSession(null)
+      setCurrentUser(null)
       setAuthMessage('')
     })
     return () => setUnauthorizedHandler(null)
@@ -1107,6 +1235,7 @@ function App() {
     const timer = window.setTimeout(() => {
       authorizationStarted.current = false
       setSession(null)
+      setCurrentUser(null)
       setAuthMessage('')
     }, Math.max(0, session.expiresAt - Date.now()))
     return () => window.clearTimeout(timer)
@@ -1119,6 +1248,7 @@ function App() {
       if (active && error instanceof ApiError && error.status === 401) {
         authorizationStarted.current = false
         setSession(null)
+        setCurrentUser(null)
         setAuthMessage('')
       }
     })
@@ -1226,11 +1356,14 @@ function App() {
     }
   }
 
+  // Fe user operation flow: click homework -> show answers if parsed, or trigger parse if unparsed!
   function handleSelectHomework(item: HomeworkItem) {
     setSelectedHomework(item)
     setParseError(null)
-    if (item.parsed && session) {
-      void loadPaperDetail(session.accessToken, item.id)
+    if (item.parsed) {
+      if (session) {
+        void loadPaperDetail(session.accessToken, item.id)
+      }
       if (page !== '/') {
         navigate('/')
       }
@@ -1239,6 +1372,7 @@ function App() {
       if (page !== '/') {
         navigate('/')
       }
+      handleTriggerParse(item)
     }
   }
 
@@ -1268,7 +1402,7 @@ function App() {
   async function executeParse(item: HomeworkItem) {
     if (!session) return
     setParsingId(item.id)
-    setParsingMessage('正在启动云端解析任务...')
+    setParsingMessage(`正在解析《${item.name}》答案...`)
     setParseError(null)
 
     try {
@@ -1292,7 +1426,7 @@ function App() {
 
       if (resp.task_id) {
         const taskId = resp.task_id
-        setParsingMessage('大陆节点正在提取加密数据...')
+        setParsingMessage('正在解析试卷，请稍候...')
 
         if (pollingTimerRef.current) {
           window.clearInterval(pollingTimerRef.current)
@@ -1301,11 +1435,7 @@ function App() {
         pollingTimerRef.current = window.setInterval(async () => {
           try {
             const task = await getTaskStatus(session.accessToken, taskId)
-            if (task.status === 'EXTRACTING') {
-              setParsingMessage('大陆节点正在提取试卷资源包...')
-            } else if (task.status === 'RESOLVING') {
-              setParsingMessage('Rust 核心解析引擎正在解析答案...')
-            } else if (task.status === 'COMPLETED') {
+            if (task.status === 'COMPLETED') {
               if (pollingTimerRef.current) window.clearInterval(pollingTimerRef.current)
               setParsingId(null)
               setParsingMessage(null)
@@ -1335,7 +1465,7 @@ function App() {
     } catch (err: unknown) {
       setParsingId(null)
       setParsingMessage(null)
-      const errorMsg = err instanceof Error ? err.message : '发起解析请求失败'
+      const errorMsg = err instanceof Error ? err.message : '发起解析失败'
       setParseError(errorMsg)
       showToast(errorMsg)
     }
@@ -1469,6 +1599,7 @@ function App() {
   }
 
   const meta = pageMeta[page]
+  const avatarUrl = resolveAvatarUrl(currentUser?.avatar_url)
 
   return (
     <main className={`control-shell ${mobileNavOpen ? 'drawer-open' : ''}`}>
@@ -1487,6 +1618,13 @@ function App() {
         />
       )}
 
+      {showAnnouncementModal && softwareConfig && (
+        <AnnouncementModal
+          config={softwareConfig}
+          onClose={() => setShowAnnouncementModal(false)}
+        />
+      )}
+
       {/* Floating Header Capsule */}
       <header className="control-site-header">
         <div className="control-header-inner">
@@ -1499,23 +1637,42 @@ function App() {
           </a>
 
           <div className="control-header-actions">
-            {accountInfo?.bound && (
-              <a
-                className="control-account"
-                href="https://lastudio.cc/account"
-                target="_blank"
-                rel="noreferrer"
-                title="ETS100 账号状态"
+            {softwareConfig && (softwareConfig.announcementTitle || softwareConfig.announcementMessage) && (
+              <button
+                className="control-header-link"
+                onClick={() => setShowAnnouncementModal(true)}
+                title="查看系统公告"
+                type="button"
               >
-                <span className="control-account-avatar">
-                  <Icon name="account_circle" />
-                </span>
-                <div className="control-account-meta">
-                  <strong>{accountInfo.account_display}</strong>
-                  <small>ETS100 已连接</small>
-                </div>
-              </a>
+                <Icon name="campaign" />
+                <span>公告</span>
+              </button>
             )}
+
+            <a
+              className="control-account"
+              href="https://lastudio.cc/account"
+              target="_blank"
+              rel="noreferrer"
+              title="查看与管理账号"
+            >
+              <span className="control-account-avatar">
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt={currentUser?.name || ''} />
+                ) : (
+                  currentUser?.name ? currentUser.name.slice(0, 1).toUpperCase() : <Icon name="person" />
+                )}
+              </span>
+              <div className="control-account-meta">
+                <strong>{currentUser?.name || '我的账号'}</strong>
+                <small>
+                  {accountInfo?.bound
+                    ? (accountInfo.account_display ? `ETS: ${accountInfo.account_display}` : 'ETS 已连接')
+                    : 'ETS 未绑定'}
+                </small>
+              </div>
+            </a>
+
             <a
               className="control-header-link"
               href="https://lastudio.cc/account"
@@ -1546,7 +1703,7 @@ function App() {
         </div>
       </header>
 
-      {/* Kill switch & Announcement Banners */}
+      {/* Emergency Kill switch banner */}
       {softwareConfig?.isKillSwitchOn && (
         <div className="system-kill-switch-banner" role="alert">
           <Icon name="block" filled />
@@ -1554,34 +1711,6 @@ function App() {
             <strong>服务已被紧急停用或正在维护中</strong>
             <p>{softwareConfig.noticeMessage || '系统正在维护，所有云端与解析功能已暂时关闭。'}</p>
           </div>
-        </div>
-      )}
-
-      {!announcementDismissed && softwareConfig?.announcementTitle && !softwareConfig.isKillSwitchOn && (
-        <div className="system-announcement-banner">
-          <Icon name="campaign" filled />
-          <div className="system-announcement-content">
-            <strong>{softwareConfig.announcementTitle}：</strong>
-            <p>{softwareConfig.announcementMessage}</p>
-          </div>
-          {softwareConfig.announcementUrl && (
-            <a
-              href={softwareConfig.announcementUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="system-announcement-link"
-            >
-              查看详情
-            </a>
-          )}
-          <button
-            type="button"
-            className="system-announcement-close"
-            onClick={() => setAnnouncementDismissed(true)}
-            aria-label="关闭公告"
-          >
-            <Icon name="close" />
-          </button>
         </div>
       )}
 
@@ -1638,9 +1767,9 @@ function App() {
           </nav>
 
           <footer>
-            <i />
+            <i style={{ background: accountInfo?.bound ? '#2f7a55' : '#94a3b8' }} />
             <span className="admin-footer-label">
-              {accountInfo?.bound ? '云端作业就绪' : '未绑定 ETS100'}
+              {accountInfo?.bound ? 'ETS100 已连接' : 'ETS100 未绑定'}
             </span>
           </footer>
         </aside>
@@ -1650,15 +1779,37 @@ function App() {
           {/* Page Heading */}
           <header className="control-page-heading">
             <div>
-              <p>{meta.kicker}</p>
               <h1>{meta.title}</h1>
               <span>{meta.caption}</span>
             </div>
-            <div className="control-live">
-              <i />
-              <span>生产服务已连接</span>
-            </div>
           </header>
+
+          {/* Announcement Card if present */}
+          {softwareConfig && (softwareConfig.announcementTitle || softwareConfig.announcementMessage) && !announcementDismissed && (
+            <div className="fe-announcement-card">
+              <div className="fe-announcement-icon">
+                <Icon name="campaign" filled />
+              </div>
+              <div className="fe-announcement-content">
+                <strong>{softwareConfig.announcementTitle || '系统公告'}</strong>
+                <p>{softwareConfig.announcementMessage}</p>
+                {softwareConfig.announcementUrl && (
+                  <a href={softwareConfig.announcementUrl} target="_blank" rel="noreferrer">
+                    查看详情 <Icon name="open_in_new" />
+                  </a>
+                )}
+              </div>
+              <button
+                className="fe-announcement-close"
+                onClick={() => setAnnouncementDismissed(true)}
+                title="关闭公告"
+                type="button"
+                aria-label="关闭公告"
+              >
+                <Icon name="close" />
+              </button>
+            </div>
+          )}
 
           {/* Mobile Drawer Trigger & Overlay */}
           <button
@@ -1695,12 +1846,7 @@ function App() {
                 isCloudModeEnabled={isFeatureEnabled('cloud_mode')}
                 cloudModeDenyReason={getFeatureDenyReason('cloud_mode')}
                 onRetry={refreshAccountAndHomeworks}
-                onSelectHomework={(item) => {
-                  handleSelectHomework(item)
-                  if (!item.parsed) {
-                    handleTriggerParse(item)
-                  }
-                }}
+                onSelectHomework={handleSelectHomework}
               />
 
               <HomeworkReaderCard
@@ -1727,21 +1873,18 @@ function App() {
             <HistoryPage
               historyHomeworks={historyHomeworks}
               isLoading={isLoadingHistory}
-              onSelectHomework={(item) => {
-                handleSelectHomework(item)
-                if (!item.parsed) {
-                  handleTriggerParse(item)
-                }
-              }}
+              onSelectHomework={handleSelectHomework}
             />
           )}
 
           {page === '/settings' && (
             <SettingsPage
+              currentUser={currentUser}
               accountInfo={accountInfo}
               softwareConfig={softwareConfig}
               softwareFeatures={softwareFeatures}
               onRefreshSession={refreshAccountAndHomeworks}
+              onOpenAnnouncement={() => setShowAnnouncementModal(true)}
             />
           )}
         </section>

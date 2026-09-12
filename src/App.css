@@ -1838,6 +1838,75 @@ html:has(.control-shell) {
   color: #1e293b;
 }
 
+.fe-announcement-card {
+  margin-bottom: 20px;
+  padding: 14px 18px;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  background: #eff6ff;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.06);
+}
+
+.fe-announcement-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.fe-announcement-content {
+  flex: 1;
+  display: grid;
+  gap: 4px;
+  font-size: 13.5px;
+}
+
+.fe-announcement-content strong {
+  color: #1e3a8a;
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.fe-announcement-content p {
+  margin: 0;
+  color: #1e40af;
+  white-space: pre-line;
+  line-height: 1.55;
+}
+
+.fe-announcement-content a {
+  color: #2563eb;
+  font-weight: 650;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  text-decoration: underline;
+}
+
+.fe-announcement-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  color: #60a5fa;
+  background: transparent;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.fe-announcement-close:hover {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
