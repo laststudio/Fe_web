@@ -289,7 +289,7 @@ function CaptchaModal({
   onSuccess,
   onCancel,
 }: {
-  onSuccess: () => void
+  onSuccess: (capToken: string) => void
   onCancel: () => void
 }) {
   const [error, setError] = useState('')
@@ -312,7 +312,7 @@ function CaptchaModal({
             onError={(msg) => setError(msg)}
             onToken={(token) => {
               if (token) {
-                onSuccess()
+                onSuccess(token)
               }
             }}
           />
@@ -1567,7 +1567,7 @@ function App() {
     showToast('已导出答案 TXT 文件')
   }
 
-  async function doFetchHomeworks(tab: 'current' | 'history') {
+  async function doFetchHomeworks(tab: 'current' | 'history', capToken?: string) {
     if (!session) return
     if (!isFeatureEnabled('cloud_mode')) {
       setHomeworkError(getFeatureDenyReason('cloud_mode', '云端模式已暂时停用'))
@@ -1577,11 +1577,18 @@ function App() {
     if (tab === 'current') {
       setIsLoadingHomeworks(true)
       try {
-        const res = await getHomeworkList(session.accessToken, '1')
+        const res = await getHomeworkList(session.accessToken, '1', capToken)
         setHomeworks(res.homeworks || [])
         setHasLoadedCurrent(true)
         showToast('已同步当前作业列表')
       } catch (err) {
+        if (err instanceof ApiError && (err.captchaRequired || err.status === 429)) {
+          pendingRefreshRef.current = (token?: string) => {
+            void doFetchHomeworks('current', token)
+          }
+          setShowCaptchaModal(true)
+          return
+        }
         const msg = err instanceof Error ? err.message : '获取当前作业列表失败'
         console.error('Failed to load current homework list:', err)
         setHomeworkError(msg)
@@ -1593,13 +1600,26 @@ function App() {
       setIsLoadingHistory(true)
       try {
         const [res2, res3] = await Promise.all([
-          getHomeworkList(session.accessToken, '2').catch(() => ({ homeworks: [] })),
-          getHomeworkList(session.accessToken, '3').catch(() => ({ homeworks: [] })),
+          getHomeworkList(session.accessToken, '2', capToken).catch((err) => {
+            if (err instanceof ApiError && (err.captchaRequired || err.status === 429)) throw err
+            return { homeworks: [] }
+          }),
+          getHomeworkList(session.accessToken, '3', capToken).catch((err) => {
+            if (err instanceof ApiError && (err.captchaRequired || err.status === 429)) throw err
+            return { homeworks: [] }
+          }),
         ])
         setHistoryHomeworks([...(res2.homeworks || []), ...(res3.homeworks || [])])
         setHasLoadedHistory(true)
         showToast('已同步历史与逾期作业')
       } catch (err) {
+        if (err instanceof ApiError && (err.captchaRequired || err.status === 429)) {
+          pendingRefreshRef.current = (token?: string) => {
+            void doFetchHomeworks('history', token)
+          }
+          setShowCaptchaModal(true)
+          return
+        }
         const msg = err instanceof Error ? err.message : '获取历史作业列表失败'
         console.error('Failed to load history homework list:', err)
         setHomeworkError(msg)
@@ -1610,28 +1630,35 @@ function App() {
     }
   }
 
-  async function refreshAccountAndHomeworks() {
+  async function refreshAccountAndHomeworks(capToken?: string) {
     if (!session) return
     setHomeworkError(null)
     try {
       const account = await getPlatformAccount(session.accessToken)
       setAccountInfo(account)
       if (account.bound) {
-        await doFetchHomeworks(activeTab)
+        await doFetchHomeworks(activeTab, capToken)
       }
     } catch (err) {
+      if (err instanceof ApiError && (err.captchaRequired || err.status === 429)) {
+        pendingRefreshRef.current = (token?: string) => {
+          void refreshAccountAndHomeworks(token)
+        }
+        setShowCaptchaModal(true)
+        return
+      }
       console.error('Failed to refresh data:', err)
       showToast('刷新失败，请稍后重试')
     }
   }
 
   const [showCaptchaModal, setShowCaptchaModal] = useState(false)
-  const pendingRefreshRef = useRef<(() => void) | null>(null)
+  const pendingRefreshRef = useRef<((token?: string) => void) | null>(null)
 
   function handleManualReadList() {
     if (shouldTriggerCaptchaDefense()) {
-      pendingRefreshRef.current = () => {
-        void doFetchHomeworks(activeTab)
+      pendingRefreshRef.current = (token?: string) => {
+        void doFetchHomeworks(activeTab, token)
       }
       setShowCaptchaModal(true)
       return
@@ -1642,8 +1669,8 @@ function App() {
 
   function handleRequestRefresh() {
     if (shouldTriggerCaptchaDefense()) {
-      pendingRefreshRef.current = () => {
-        void refreshAccountAndHomeworks()
+      pendingRefreshRef.current = (token?: string) => {
+        void refreshAccountAndHomeworks(token)
       }
       setShowCaptchaModal(true)
       return
@@ -1652,16 +1679,16 @@ function App() {
     void refreshAccountAndHomeworks()
   }
 
-  function handleCaptchaSuccess() {
+  function handleCaptchaSuccess(token: string) {
     setShowCaptchaModal(false)
     clearRefreshTimestamps()
     showToast('安全验证通过，正在同步作业数据...')
     if (pendingRefreshRef.current) {
       const fn = pendingRefreshRef.current
       pendingRefreshRef.current = null
-      fn()
+      fn(token)
     } else {
-      void refreshAccountAndHomeworks()
+      void refreshAccountAndHomeworks(token)
     }
   }
 

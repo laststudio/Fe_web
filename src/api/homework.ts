@@ -132,8 +132,17 @@ export function getPlatformAccount(accessToken: string): Promise<PlatformAccount
   return apiRequest<PlatformAccountInfo>('/homework/account', { accessToken })
 }
 
-export function getHomeworkList(accessToken: string, status: '1' | '2' | '3' = '1'): Promise<HomeworkListResponse> {
-  return apiRequest<HomeworkListResponse>(`/homework/list?status=${status}`, { accessToken })
+export function getHomeworkList(
+  accessToken: string,
+  status: '1' | '2' | '3' = '1',
+  capToken?: string
+): Promise<HomeworkListResponse> {
+  const query = new URLSearchParams({ status })
+  if (capToken) query.set('cap_token', capToken)
+  return apiRequest<HomeworkListResponse>(`/homework/list?${query.toString()}`, {
+    accessToken,
+    headers: capToken ? { 'X-Cap-Token': capToken } : undefined,
+  })
 }
 
 export function startParseHomework(

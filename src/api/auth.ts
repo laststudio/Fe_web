@@ -9,16 +9,19 @@ export type User = {
 }
 
 type ApiErrorBody = {
-  detail?: string | { msg?: string }[] | { message?: string }
+  detail?: string | { msg?: string }[] | { message?: string; captcha_required?: boolean }
+  captcha_required?: boolean
 }
 
 export class ApiError extends Error {
   status: number
+  captchaRequired?: boolean
 
-  constructor(message: string, status = 0) {
+  constructor(message: string, status = 0, captchaRequired = false) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.captchaRequired = captchaRequired
   }
 }
 
@@ -46,16 +49,26 @@ export async function apiRequest<T>(path: string, { accessToken, ...init }: ApiR
   }
   if (!response.ok) {
     let message = response.status >= 500 ? '服务暂时不可用，请稍后重试' : `请求失败（${response.status}）`
+    let captchaRequired = false
     try {
       const body = await response.json() as ApiErrorBody
-      if (typeof body.detail === 'string') message = body.detail
-      else if (Array.isArray(body.detail)) message = body.detail.map((item) => item.msg).filter(Boolean).join('；') || message
-      else if (body.detail?.message) message = body.detail.message
+      if (typeof body.detail === 'string') {
+        message = body.detail
+      } else if (Array.isArray(body.detail)) {
+        message = body.detail.map((item) => item.msg).filter(Boolean).join('；') || message
+      } else if (body.detail && typeof body.detail === 'object') {
+        if (body.detail.message) message = body.detail.message
+        if (body.detail.captcha_required) captchaRequired = true
+      }
+      if (body.captcha_required) captchaRequired = true
     } catch {
       // Keep the HTTP fallback when the service does not return JSON.
     }
     if (response.status === 401) unauthorizedHandler?.()
-    throw new ApiError(message, response.status)
+    if (response.status === 429 && !captchaRequired) {
+      captchaRequired = true
+    }
+    throw new ApiError(message, response.status, captchaRequired)
   }
   return response.json() as Promise<T>
 }
