@@ -939,14 +939,12 @@ function SettingsPage({
   currentUser,
   accountInfo,
   softwareConfig,
-  softwareFeatures,
   onRefreshSession,
   onOpenAnnouncement,
 }: {
   currentUser: User | null
   accountInfo: PlatformAccountInfo | null
   softwareConfig: SoftwareConfig | null
-  softwareFeatures: SoftwareFeatureItem[]
   onRefreshSession: () => void
   onOpenAnnouncement: () => void
 }) {
@@ -1026,50 +1024,6 @@ function SettingsPage({
           </div>
         </section>
       )}
-
-      {/* Software & Feature switches (NO VERSION NUMBERS) */}
-      <section className="admin-policy-card">
-        <div className="admin-policy-card-head">
-          <Icon name="tune" />
-          <div>
-            <h3>功能状态</h3>
-            <p>网页版功能开关与授权细则</p>
-          </div>
-        </div>
-
-        <div className="admin-setting-switch-row">
-          <div className="admin-setting-switch-info">
-            <strong>软件名称</strong>
-            <span>网页端在线解析工作台</span>
-          </div>
-          <span className="admin-pill-badge is-info">Fe Web 网页版</span>
-        </div>
-
-        <div className="admin-setting-switch-row">
-          <div className="admin-setting-switch-info">
-            <strong>运行状态</strong>
-            <span>服务在线与维护状态</span>
-          </div>
-          <span className={`admin-pill-badge ${softwareConfig?.isKillSwitchOn ? 'is-danger' : 'is-success'}`}>
-            {softwareConfig?.isKillSwitchOn ? '维护中 (紧急暂停)' : '正常运行'}
-          </span>
-        </div>
-
-        {softwareFeatures.map((feat) => {
-          const isOk = feat.status === 'enabled' && feat.available_for_version && !softwareConfig?.isKillSwitchOn
-          return (
-            <div key={feat.feature_key} className="admin-setting-switch-row">
-              <div className="admin-setting-switch-info">
-                <strong>{feat.name}</strong>
-                <span>{feat.description || feat.feature_key}</span>
-              </div>
-              <span className={`admin-pill-badge ${isOk ? 'is-success' : 'is-danger'}`}>
-                {isOk ? '已启用' : (feat.reason || '已停用')}
-              </span>
-            </div>
-          )
-        })}
-      </section>
 
       {/* ETS100 Platform Account Binding */}
       <section className="admin-policy-card">
@@ -1215,9 +1169,18 @@ function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [authMessage, setAuthMessage] = useState('')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(readStoredSidebarCollapsed)
+  const [headerCompact, setHeaderCompact] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const authorizationStarted = useRef(false)
   const page = currentPage(pathname)
+
+  // Fluid header scroll state
+  useEffect(() => {
+    const updateHeader = () => setHeaderCompact(window.scrollY > 42)
+    updateHeader()
+    window.addEventListener('scroll', updateHeader, { passive: true })
+    return () => window.removeEventListener('scroll', updateHeader)
+  }, [])
 
   // ETS100 & Homework State
   const [accountInfo, setAccountInfo] = useState<PlatformAccountInfo | null>(null)
@@ -1795,7 +1758,7 @@ function App() {
       )}
 
       {/* Floating Header Capsule */}
-      <header className="control-site-header">
+      <header className={`control-site-header ${headerCompact ? 'is-compact' : ''}`}>
         <div className="control-header-inner">
           <a className="control-brand" href="/">
             <img src={logoSrc} alt="" />
@@ -1842,15 +1805,6 @@ function App() {
               </div>
             </a>
 
-            <a
-              className="control-header-link"
-              href="https://lastudio.cc/account"
-              target="_blank"
-              rel="noreferrer"
-            >
-              <Icon name="person" />
-              <span>账号中心</span>
-            </a>
             <a
               className="control-header-link"
               href="https://lastudio.cc/admin"
@@ -1925,7 +1879,7 @@ function App() {
                     type="button"
                   >
                     <Icon name={item.icon} />
-                    <span>
+                    <span className="control-nav-label">
                       <strong>{item.label}</strong>
                       <small>{item.caption}</small>
                     </span>
@@ -2009,7 +1963,6 @@ function App() {
               currentUser={currentUser}
               accountInfo={accountInfo}
               softwareConfig={softwareConfig}
-              softwareFeatures={softwareFeatures}
               onRefreshSession={handleRequestRefresh}
               onOpenAnnouncement={() => setShowAnnouncementModal(true)}
             />

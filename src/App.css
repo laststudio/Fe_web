@@ -259,6 +259,31 @@ html:has(.control-shell) {
   justify-content: space-between;
   gap: 20px;
   pointer-events: auto;
+  transition: width 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+              min-height 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+              padding 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+              border-radius 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.35s ease,
+              background 0.35s ease;
+}
+
+.control-site-header.is-compact {
+  padding-top: 8px;
+}
+
+.control-site-header.is-instant,
+.control-site-header.is-instant .control-header-inner {
+  transition: none;
+}
+
+.control-site-header.is-compact .control-header-inner {
+  width: min(1080px, calc(100% - 32px));
+  min-height: 52px;
+  padding: 5px 12px;
+  border-radius: 13px;
+  box-shadow: 0 10px 32px rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.90);
+  backdrop-filter: blur(20px) saturate(180%);
 }
 
 .control-brand {
@@ -268,6 +293,7 @@ html:has(.control-shell) {
   gap: 12px;
   color: var(--control-ink);
   text-decoration: none;
+  transition: gap 0.25s ease;
 }
 
 .control-brand img {
@@ -278,6 +304,36 @@ html:has(.control-shell) {
   border-radius: 10px;
   background: #fff;
   object-fit: cover;
+  transition: width 0.35s cubic-bezier(0.22, 1, 0.36, 1), height 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.control-site-header.is-compact .control-brand img {
+  width: 32px;
+  height: 32px;
+}
+
+.control-site-header.is-compact .control-brand small {
+  display: none;
+}
+
+.control-site-header.is-compact .control-account > .control-account-meta {
+  display: none;
+}
+
+.control-site-header.is-compact .control-account {
+  min-height: 36px;
+  padding: 2px 6px;
+}
+
+.control-site-header.is-compact .control-icon-button {
+  width: 36px;
+  height: 36px;
+}
+
+.control-site-header.is-compact .control-header-link {
+  min-height: 36px;
+  padding: 0 10px;
+  font-size: 11px;
 }
 
 .control-brand span {
@@ -543,7 +599,7 @@ html:has(.control-shell) {
   box-shadow: inset 3px 0 #526ed2, inset 0 0 0 1px #dde6ff;
 }
 
-.control-sidebar nav button > span {
+.control-sidebar nav button > .control-nav-label {
   min-width: 0;
   display: grid;
   gap: 3px;
@@ -593,18 +649,50 @@ html:has(.control-shell) {
 }
 
 /* Sidebar Collapsed State */
+.control-layout.is-collapsed {
+  grid-template-columns: 76px minmax(0, 1fr);
+}
+
 .control-sidebar.is-collapsed {
   padding-left: 12px;
   padding-right: 12px;
 }
 
-.control-sidebar.is-collapsed :is(nav > section > small, nav button > span, .admin-footer-label) {
+.control-sidebar.is-collapsed .admin-sidebar-head {
+  justify-content: center;
+}
+
+.control-sidebar.is-collapsed :is(nav > section > small, .control-nav-label, .admin-footer-label) {
+  display: none !important;
   opacity: 0;
 }
 
 .control-sidebar.is-collapsed nav button {
-  padding-left: 17px;
-  padding-right: 6px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+}
+
+.control-sidebar.is-collapsed nav button > .material-symbols-outlined {
+  opacity: 1 !important;
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+}
+
+.control-sidebar.is-collapsed nav button.is-active {
+  color: #3650b3;
+  background: #edf2ff;
+  box-shadow: inset 0 0 0 1.5px #526ed2, 0 2px 6px rgba(82, 110, 210, 0.15);
+}
+
+.control-sidebar.is-collapsed footer {
+  padding: 12px 0 4px;
+  justify-content: center;
 }
 
 /* ==========================================================================
@@ -2270,11 +2358,50 @@ html:has(.control-shell) {
     padding: 10px 12px 0;
   }
 
-  .control-header-inner {
+  .control-site-header.is-compact {
+    padding-top: max(6px, env(safe-area-inset-top));
+  }
+
+  .control-header-inner,
+  .control-site-header.is-compact .control-header-inner {
     width: 100%;
     min-height: 54px;
     padding: 6px 10px;
     border-radius: 13px;
+  }
+
+  .control-sidebar.is-collapsed {
+    width: min(300px, 85vw);
+    padding: 20px 12px 14px;
+  }
+
+  .control-sidebar.is-collapsed :is(nav > section > small, .control-nav-label, .admin-footer-label) {
+    display: grid !important;
+    opacity: 1;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    pointer-events: auto;
+  }
+
+  .control-sidebar.is-collapsed nav > section > small {
+    display: block !important;
+  }
+
+  .control-sidebar.is-collapsed .admin-footer-label {
+    display: inline !important;
+  }
+
+  .control-sidebar.is-collapsed nav button {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    padding: 9px 10px;
+    min-height: 56px;
+    justify-content: flex-start;
+  }
+
+  .control-sidebar.is-collapsed .admin-sidebar-head {
+    justify-content: space-between;
   }
 
   .control-brand strong {
