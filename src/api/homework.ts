@@ -197,6 +197,7 @@ export type SoftwareFeatureItem = {
   requires_membership: boolean
   min_member_level: number
   min_member_tier?: string
+  deny_message?: string | null
 }
 
 export function getSoftwareConfig(softwareKey = 'fe-web'): Promise<SoftwareConfig> {

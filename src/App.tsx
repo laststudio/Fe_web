@@ -40,6 +40,13 @@ type NavItem = {
   page: Page
 }
 
+export type HomeworkErrorInfo = {
+  type: 'membership_required' | 'feature_disabled' | 'kill_switch' | 'network_error' | 'other'
+  message: string
+  actionUrl?: string
+  actionText?: string
+}
+
 const navGroups: { label: string; items: NavItem[] }[] = [
   {
     label: '作业业务',
@@ -491,9 +498,9 @@ function PaperReaderView({
   homework,
   paper,
   isLoadingPaper,
-  isCopyExportEnabled = true,
+  copyExportStatus = 'enabled',
   copyExportDenyReason,
-  isAnswerParserEnabled = true,
+  answerParserStatus = 'enabled',
   answerParserDenyReason,
   onBack,
   onCopyAnswer,
@@ -504,9 +511,9 @@ function PaperReaderView({
   homework: HomeworkItem
   paper: Paper | null
   isLoadingPaper: boolean
-  isCopyExportEnabled?: boolean
+  copyExportStatus?: 'enabled' | 'membership_required' | 'feature_disabled' | 'kill_switch'
   copyExportDenyReason?: string
-  isAnswerParserEnabled?: boolean
+  answerParserStatus?: 'enabled' | 'membership_required' | 'feature_disabled' | 'kill_switch'
   answerParserDenyReason?: string
   onBack: () => void
   onCopyAnswer: () => void
@@ -530,21 +537,31 @@ function PaperReaderView({
                   className="control-secondary"
                   type="button"
                   onClick={onCopyAnswer}
-                  disabled={!isCopyExportEnabled}
-                  title={isCopyExportEnabled ? '复制整套答案文本到剪贴板' : (copyExportDenyReason || '答案导出已停用')}
+                  title={
+                    copyExportStatus === 'membership_required'
+                      ? (copyExportDenyReason || '复制答案需要会员权限')
+                      : copyExportStatus === 'feature_disabled'
+                      ? (copyExportDenyReason || '答案导出已停用')
+                      : '复制整套答案文本到剪贴板'
+                  }
                 >
-                  <Icon name="content_copy" />
-                  <span>复制答案</span>
+                  <Icon name={copyExportStatus === 'membership_required' ? 'workspace_premium' : 'content_copy'} />
+                  <span>{copyExportStatus === 'membership_required' ? '会员复制' : '复制答案'}</span>
                 </button>
                 <button
                   className="control-secondary"
                   type="button"
                   onClick={onExportAnswer}
-                  disabled={!isCopyExportEnabled}
-                  title={isCopyExportEnabled ? '导出为本地 TXT 文本' : (copyExportDenyReason || '答案导出已停用')}
+                  title={
+                    copyExportStatus === 'membership_required'
+                      ? (copyExportDenyReason || '导出答案需要会员权限')
+                      : copyExportStatus === 'feature_disabled'
+                      ? (copyExportDenyReason || '答案导出已停用')
+                      : '导出为本地 TXT 文本'
+                  }
                 >
-                  <Icon name="download" />
-                  <span>导出 TXT</span>
+                  <Icon name={copyExportStatus === 'membership_required' ? 'workspace_premium' : 'download'} />
+                  <span>{copyExportStatus === 'membership_required' ? '会员导出' : '导出 TXT'}</span>
                 </button>
               </>
             )}
@@ -552,8 +569,13 @@ function PaperReaderView({
               className="control-secondary"
               type="button"
               onClick={onReParse}
-              disabled={!isAnswerParserEnabled}
-              title={isAnswerParserEnabled ? '重新从云端读取或解析试卷' : (answerParserDenyReason || '答案解析已停用')}
+              title={
+                answerParserStatus === 'membership_required'
+                  ? (answerParserDenyReason || '重新读取需要会员权限')
+                  : answerParserStatus === 'feature_disabled'
+                  ? (answerParserDenyReason || '答案解析已停用')
+                  : '重新从云端读取或解析试卷'
+              }
             >
               <Icon name="refresh" />
               <span>重新读取</span>
@@ -583,23 +605,80 @@ function PaperReaderView({
         </div>
       ) : !paper ? (
         <div className="fe-reader-prompt-card">
-          <div className="fe-reader-prompt-icon">
-            <Icon name="menu_book" filled />
-          </div>
-          <h3>试卷答案准备就绪</h3>
-          <p>
-            为防止接口频繁请求及避免官方客户端被顶号，系统未自动加载答案。请在确认当前无进行中的答题或考试后，手动点击下方按钮读取。
-          </p>
-          <button
-            className="control-primary fe-reader-prompt-action"
-            type="button"
-            onClick={onManualRead}
-            disabled={!isAnswerParserEnabled}
-            title={!isAnswerParserEnabled ? (answerParserDenyReason || '答案解析已停用') : undefined}
+          <div
+            className="fe-reader-prompt-icon"
+            style={
+              answerParserStatus === 'membership_required'
+                ? { background: '#fffbeb', color: '#d97706' }
+                : answerParserStatus === 'feature_disabled'
+                ? { background: '#f1f5f9', color: '#64748b' }
+                : undefined
+            }
           >
-            <Icon name="visibility" />
-            <span>{homework.parsed ? '读取试卷与答案' : '开始解析并读取答案'}</span>
-          </button>
+            <Icon
+              name={
+                answerParserStatus === 'membership_required'
+                  ? 'workspace_premium'
+                  : answerParserStatus === 'feature_disabled'
+                  ? 'block'
+                  : 'menu_book'
+              }
+              filled
+            />
+          </div>
+          <h3>
+            {answerParserStatus === 'membership_required'
+              ? '答案解析需要会员权限'
+              : answerParserStatus === 'feature_disabled'
+              ? '答案解析功能已暂停'
+              : '试卷答案准备就绪'}
+          </h3>
+          <p>
+            {answerParserStatus === 'membership_required'
+              ? (answerParserDenyReason || '该功能需要开通会员权限后方可使用。请前往官网账号中心开通或升级。')
+              : answerParserStatus === 'feature_disabled'
+              ? (answerParserDenyReason || '管理员已暂停答案解析与试卷读取服务，请留意后续通知。')
+              : '为防止接口频繁请求及避免官方客户端被顶号，系统未自动加载答案。请在确认当前无进行中的答题或考试后，手动点击下方按钮读取。'}
+          </p>
+          {answerParserStatus === 'membership_required' ? (
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <a
+                href="https://lastudio.cc/account"
+                target="_blank"
+                rel="noreferrer"
+                className="control-primary fe-reader-prompt-action"
+                style={{ textDecoration: 'none' }}
+              >
+                <Icon name="open_in_new" />
+                <span>前往开通会员</span>
+              </a>
+              <button
+                className="control-secondary fe-reader-prompt-action"
+                type="button"
+                onClick={onManualRead}
+              >
+                <Icon name="refresh" />
+                <span>重新检测</span>
+              </button>
+            </div>
+          ) : (
+            <button
+              className="control-primary fe-reader-prompt-action"
+              type="button"
+              onClick={onManualRead}
+              disabled={answerParserStatus === 'feature_disabled'}
+              title={answerParserStatus === 'feature_disabled' ? (answerParserDenyReason || '答案解析已停用') : undefined}
+            >
+              <Icon name={answerParserStatus === 'feature_disabled' ? 'block' : 'visibility'} />
+              <span>
+                {answerParserStatus === 'feature_disabled'
+                  ? '功能已由管理员停用'
+                  : homework.parsed
+                  ? '读取试卷与答案'
+                  : '开始解析并读取答案'}
+              </span>
+            </button>
+          )}
         </div>
       ) : (
         <div className="fe-reader-content">
@@ -617,7 +696,7 @@ function HomeworkCard({
   index,
   isParsing,
   parseError,
-  isAnswerParserEnabled = true,
+  answerParserStatus = 'enabled',
   answerParserDenyReason,
   onOpen,
   onTriggerParse,
@@ -626,7 +705,7 @@ function HomeworkCard({
   index: number
   isParsing: boolean
   parseError?: string | null
-  isAnswerParserEnabled?: boolean
+  answerParserStatus?: 'enabled' | 'membership_required' | 'feature_disabled' | 'kill_switch'
   answerParserDenyReason?: string
   onOpen: (hw: HomeworkItem) => void
   onTriggerParse: (hw: HomeworkItem) => void
@@ -713,13 +792,46 @@ function HomeworkCard({
             <Icon name="refresh" />
             <span>重试解析</span>
           </button>
+        ) : answerParserStatus === 'membership_required' ? (
+          <button
+            className="control-secondary"
+            type="button"
+            style={{
+              padding: '7px 14px',
+              fontSize: 12.5,
+              borderColor: '#f59e0b',
+              color: '#d97706',
+              background: '#fffbeb',
+            }}
+            title={answerParserDenyReason || '该功能需要开通会员'}
+            onClick={(e) => {
+              e.stopPropagation()
+              onTriggerParse(item)
+            }}
+          >
+            <Icon name="workspace_premium" />
+            <span>需要会员</span>
+          </button>
+        ) : answerParserStatus === 'feature_disabled' ? (
+          <button
+            className="control-secondary"
+            type="button"
+            style={{ padding: '7px 14px', fontSize: 12.5, opacity: 0.6 }}
+            disabled
+            title={answerParserDenyReason || '解析功能已由管理员停用'}
+            onClick={(e) => {
+              e.stopPropagation()
+              onTriggerParse(item)
+            }}
+          >
+            <Icon name="block" />
+            <span>已停用</span>
+          </button>
         ) : (
           <button
             className="control-secondary"
             type="button"
             style={{ padding: '7px 14px', fontSize: 12.5 }}
-            disabled={!isAnswerParserEnabled}
-            title={!isAnswerParserEnabled ? (answerParserDenyReason || '解析功能已停用') : undefined}
             onClick={(e) => {
               e.stopPropagation()
               onTriggerParse(item)
@@ -745,9 +857,9 @@ function HomeworkListView({
   homeworkError,
   parsingId,
   parseErrors,
-  isCloudModeEnabled = true,
+  cloudModeStatus = 'enabled',
   cloudModeDenyReason,
-  isAnswerParserEnabled = true,
+  answerParserStatus = 'enabled',
   answerParserDenyReason,
   onRefresh,
   onManualReadList,
@@ -761,12 +873,12 @@ function HomeworkListView({
   historyHomeworks: HomeworkItem[]
   isLoadingHomeworks: boolean
   isLoadingHistory: boolean
-  homeworkError?: string | null
+  homeworkError?: HomeworkErrorInfo | string | null
   parsingId: string | null
   parseErrors: Record<string, string>
-  isCloudModeEnabled?: boolean
+  cloudModeStatus?: 'enabled' | 'membership_required' | 'feature_disabled' | 'kill_switch'
   cloudModeDenyReason?: string
-  isAnswerParserEnabled?: boolean
+  answerParserStatus?: 'enabled' | 'membership_required' | 'feature_disabled' | 'kill_switch'
   answerParserDenyReason?: string
   onRefresh: () => void
   onManualReadList: () => void
@@ -826,25 +938,161 @@ function HomeworkListView({
       </div>
 
       {/* Body Area */}
-      {!isCloudModeEnabled ? (
-        <div className="fe-empty-state">
-          <div className="fe-empty-state__icon" style={{ background: '#fef2f2', color: '#b91c1c' }}>
-            <Icon name="cloud_off" />
-          </div>
-          <h2>云端模式已停用</h2>
-          <p>{cloudModeDenyReason || '管理员已暂停云端作业拉取服务。'}</p>
-        </div>
+      {cloudModeStatus !== 'enabled' ? (
+        (() => {
+          if (cloudModeStatus === 'membership_required') {
+            return (
+              <div className="fe-empty-state">
+                <div className="fe-empty-state__icon" style={{ background: '#fef3c7', color: '#d97706' }}>
+                  <Icon name="workspace_premium" />
+                </div>
+                <h2>云端模式需要会员权限</h2>
+                <p>{cloudModeDenyReason || '云端同步与作业拉取功能需要开通会员权限后方可使用。'}</p>
+                <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+                  <a
+                    href="https://lastudio.cc/account"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="control-primary"
+                    style={{ textDecoration: 'none' }}
+                  >
+                    <Icon name="open_in_new" /> 前往账号中心开通
+                  </a>
+                  <button type="button" className="control-secondary" onClick={onRefresh}>
+                    重新检测
+                  </button>
+                </div>
+              </div>
+            )
+          }
+          if (cloudModeStatus === 'kill_switch') {
+            return (
+              <div className="fe-empty-state">
+                <div className="fe-empty-state__icon" style={{ background: '#fef2f2', color: '#dc2626' }}>
+                  <Icon name="build_circle" />
+                </div>
+                <h2>系统正在维护中</h2>
+                <p>{cloudModeDenyReason || '服务正在紧急维护，所有云端与解析功能已暂时关闭。'}</p>
+                <button type="button" className="control-secondary" onClick={onRefresh}>
+                  刷新重试
+                </button>
+              </div>
+            )
+          }
+          return (
+            <div className="fe-empty-state">
+              <div className="fe-empty-state__icon" style={{ background: '#f1f5f9', color: '#64748b' }}>
+                <Icon name="cloud_off" />
+              </div>
+              <h2>云端模式已停用</h2>
+              <p>{cloudModeDenyReason || '管理员已暂停云端作业拉取服务。'}</p>
+              <button type="button" className="control-secondary" onClick={onRefresh}>
+                重新检测
+              </button>
+            </div>
+          )
+        })()
       ) : homeworkError ? (
-        <div className="fe-empty-state">
-          <div className="fe-empty-state__icon" style={{ background: '#fef2f2', color: '#b91c1c' }}>
-            <Icon name="error_outline" />
-          </div>
-          <h2>作业同步失败</h2>
-          <p>{homeworkError}</p>
-          <button type="button" className="control-primary" onClick={hasLoaded ? onRefresh : onManualReadList}>
-            重新尝试
-          </button>
-        </div>
+        (() => {
+          const errInfo: HomeworkErrorInfo = typeof homeworkError === 'string'
+            ? {
+                type: homeworkError.includes('会员') || homeworkError.includes('VIP')
+                  ? 'membership_required'
+                  : homeworkError.includes('网络')
+                  ? 'network_error'
+                  : homeworkError.includes('维护') || homeworkError.includes('紧急停用')
+                  ? 'kill_switch'
+                  : homeworkError.includes('停用') || homeworkError.includes('不可用')
+                  ? 'feature_disabled'
+                  : 'other',
+                message: homeworkError,
+              }
+            : homeworkError
+
+          if (errInfo.type === 'membership_required') {
+            return (
+              <div className="fe-empty-state">
+                <div className="fe-empty-state__icon" style={{ background: '#fef3c7', color: '#d97706' }}>
+                  <Icon name="workspace_premium" />
+                </div>
+                <h2>需要开通会员</h2>
+                <p>{errInfo.message || '该功能需要开通会员权限后方可使用。'}</p>
+                <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+                  <a
+                    href="https://lastudio.cc/account"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="control-primary"
+                    style={{ textDecoration: 'none' }}
+                  >
+                    <Icon name="open_in_new" /> 前往账号中心开通
+                  </a>
+                  <button type="button" className="control-secondary" onClick={hasLoaded ? onRefresh : onManualReadList}>
+                    重新检测
+                  </button>
+                </div>
+              </div>
+            )
+          }
+
+          if (errInfo.type === 'feature_disabled') {
+            return (
+              <div className="fe-empty-state">
+                <div className="fe-empty-state__icon" style={{ background: '#f1f5f9', color: '#64748b' }}>
+                  <Icon name="do_not_disturb_on" />
+                </div>
+                <h2>功能已暂停使用</h2>
+                <p>{errInfo.message || '管理员已暂停此功能，请稍后留意系统公告。'}</p>
+                <button type="button" className="control-secondary" onClick={hasLoaded ? onRefresh : onManualReadList}>
+                  重新检测
+                </button>
+              </div>
+            )
+          }
+
+          if (errInfo.type === 'kill_switch') {
+            return (
+              <div className="fe-empty-state">
+                <div className="fe-empty-state__icon" style={{ background: '#fef2f2', color: '#dc2626' }}>
+                  <Icon name="build_circle" />
+                </div>
+                <h2>系统正在维护中</h2>
+                <p>{errInfo.message || '服务正在紧急维护，所有云端与解析功能已暂时关闭。'}</p>
+                <button type="button" className="control-secondary" onClick={hasLoaded ? onRefresh : onManualReadList}>
+                  刷新重试
+                </button>
+              </div>
+            )
+          }
+
+          if (errInfo.type === 'network_error') {
+            return (
+              <div className="fe-empty-state">
+                <div className="fe-empty-state__icon" style={{ background: '#fee2e2', color: '#b91c1c' }}>
+                  <Icon name="wifi_off" />
+                </div>
+                <h2>网络连接异常</h2>
+                <p>{errInfo.message || '无法连接到服务器，请检查您的网络连接或代理设置是否正常。'}</p>
+                <button type="button" className="control-primary" onClick={hasLoaded ? onRefresh : onManualReadList}>
+                  检查网络并重试
+                </button>
+              </div>
+            )
+          }
+
+          return (
+            <div className="fe-empty-state">
+              <div className="fe-empty-state__icon" style={{ background: '#fef2f2', color: '#b91c1c' }}>
+                <Icon name="error_outline" />
+              </div>
+              <h2>作业同步失败</h2>
+              <p>{errInfo.message}</p>
+              <button type="button" className="control-primary" onClick={hasLoaded ? onRefresh : onManualReadList}>
+                重新尝试
+              </button>
+            </div>
+          )
+        })()
       ) : !accountInfo?.bound ? (
         <div className="fe-empty-state">
           <div className="fe-empty-state__icon">
@@ -891,11 +1139,13 @@ function HomeworkListView({
             type="button"
             className="control-primary fe-list-prompt-action"
             onClick={onManualReadList}
-            disabled={!isCloudModeEnabled}
-            title={!isCloudModeEnabled ? (cloudModeDenyReason || '云端模式已停用') : undefined}
           >
             <Icon name="download" />
-            <span>{activeTab === 'current' ? '确认安全，读取当前作业' : '确认安全，读取历史作业'}</span>
+            <span>
+              {activeTab === 'current'
+                ? '确认安全，读取当前作业'
+                : '确认安全，读取历史作业'}
+            </span>
           </button>
         </div>
       ) : isLoading ? (
@@ -923,7 +1173,7 @@ function HomeworkListView({
               index={idx}
               isParsing={hw.id === parsingId}
               parseError={parseErrors[hw.id]}
-              isAnswerParserEnabled={isAnswerParserEnabled}
+              answerParserStatus={answerParserStatus}
               answerParserDenyReason={answerParserDenyReason}
               onOpen={onOpenHomework}
               onTriggerParse={onTriggerParse}
@@ -1205,7 +1455,7 @@ function App() {
   const [showRiskModal, setShowRiskModal] = useState<HomeworkItem | null>(null)
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
-  const [homeworkError, setHomeworkError] = useState<string | null>(null)
+  const [homeworkError, setHomeworkError] = useState<HomeworkErrorInfo | string | null>(null)
 
   // Software Config & Features State
   const [softwareConfig, setSoftwareConfig] = useState<SoftwareConfig | null>(null)
@@ -1272,19 +1522,48 @@ function App() {
     }
   }, [session])
 
-  function isFeatureEnabled(featureKey: string): boolean {
-    if (softwareConfig?.isKillSwitchOn) return false
+  type FeatureCheck = {
+    enabled: boolean
+    status: 'enabled' | 'membership_required' | 'feature_disabled' | 'kill_switch'
+    reason: string
+    minMemberLevel?: number
+    minMemberTier?: string
+  }
+
+  function getFeatureStatus(featureKey: string, defaultName = '该功能'): FeatureCheck {
+    if (softwareConfig?.isKillSwitchOn) {
+      return {
+        enabled: false,
+        status: 'kill_switch',
+        reason: softwareConfig.noticeMessage || '系统正在维护，所有云端与解析功能已暂时关闭。',
+      }
+    }
     const feat = softwareFeatures.find((f) => f.feature_key === featureKey)
-    if (!feat) return true
-    return feat.status === 'enabled' && feat.available_for_version
+    if (!feat) {
+      return { enabled: true, status: 'enabled', reason: '' }
+    }
+    if (feat.status !== 'enabled' || !feat.available_for_version) {
+      return {
+        enabled: false,
+        status: 'feature_disabled',
+        reason: feat.deny_message || feat.reason || `${defaultName}已由管理员停用`,
+      }
+    }
+    if (feat.requires_membership && (currentUser?.member_level ?? 0) < feat.min_member_level) {
+      return {
+        enabled: false,
+        status: 'membership_required',
+        reason: feat.deny_message || `${defaultName}需要开通 ${feat.min_member_tier || 'VIP'} 会员权限`,
+        minMemberLevel: feat.min_member_level,
+        minMemberTier: feat.min_member_tier,
+      }
+    }
+    return { enabled: true, status: 'enabled', reason: '' }
   }
 
   function getFeatureDenyReason(featureKey: string, fallback = '该功能已暂时停用'): string {
-    if (softwareConfig?.isKillSwitchOn) {
-      return softwareConfig.noticeMessage || '系统正在维护，所有云端与解析功能已暂时关闭。'
-    }
-    const feat = softwareFeatures.find((f) => f.feature_key === featureKey)
-    return feat?.reason || fallback
+    const res = getFeatureStatus(featureKey, fallback)
+    return res.reason || fallback
   }
 
   function showToast(message: string) {
@@ -1406,17 +1685,54 @@ function App() {
       return
     }
     if (!session) return
-    const detail = await loadPaperDetail(session.accessToken, item)
-    if (detail) {
+    const parseStatus = getFeatureStatus('answer_parser', '答案解析')
+    if (!parseStatus.enabled) {
+      if (parseStatus.status === 'membership_required') {
+        showToast(`${parseStatus.reason}，请前往账号中心开通`)
+      } else {
+        showToast(parseStatus.reason || '答案解析功能已停用')
+      }
+      return
+    }
+    setIsLoadingPaper(true)
+    try {
+      const detail = await getHomeworkDetail(session.accessToken, item.id)
+      setPaperCache((prev) => ({ ...prev, [item.id]: detail }))
       setViewingPaper((curr) => (curr?.homework.id === item.id ? { homework: item, paper: detail } : curr))
       showToast(`已成功读取《${item.name}》试卷与答案`)
-    } else {
-      showToast('读取试卷详情失败，请检查网络或稍后重试')
+    } catch (err) {
+      console.error('Failed to load paper detail:', err)
+      if (err instanceof ApiError) {
+        if (err.isNetworkError) {
+          showToast('网络连接失败，请检查您的网络连接是否正常')
+        } else if (err.reason === 'membership_required' || err.message.includes('会员') || err.message.includes('VIP')) {
+          showToast(`读取失败: ${err.message || '查看试卷答案需要开通会员'}`)
+        } else if (err.reason === 'feature_disabled' || err.status === 403) {
+          showToast(`读取失败: ${err.message || '答案解析功能已停用'}`)
+        } else if (err.reason === 'kill_switch' || err.status === 503) {
+          showToast(`读取失败: ${err.message || '服务维护中，请稍后重试'}`)
+        } else {
+          showToast(`读取失败: ${err.message}`)
+        }
+      } else {
+        showToast(err instanceof Error ? err.message : '读取试卷详情失败')
+      }
+    } finally {
+      setIsLoadingPaper(false)
     }
   }
 
   async function handleReReadPaper(item: HomeworkItem) {
     if (!session) return
+    const parseStatus = getFeatureStatus('answer_parser', '答案解析')
+    if (!parseStatus.enabled) {
+      if (parseStatus.status === 'membership_required') {
+        showToast(`${parseStatus.reason}，请前往账号中心开通`)
+      } else {
+        showToast(parseStatus.reason || '答案解析功能已停用')
+      }
+      return
+    }
     setIsLoadingPaper(true)
     try {
       const detail = await getHomeworkDetail(session.accessToken, item.id)
@@ -1425,15 +1741,34 @@ function App() {
       showToast('已重新从云端读取试卷与答案')
     } catch (err) {
       console.error('Failed to re-read paper detail:', err)
-      showToast(err instanceof Error ? err.message : '重新读取失败')
+      if (err instanceof ApiError) {
+        if (err.isNetworkError) {
+          showToast('网络连接失败，请检查网络连接')
+        } else if (err.reason === 'membership_required' || err.message.includes('会员') || err.message.includes('VIP')) {
+          showToast(`重新读取失败: ${err.message || '该功能需要开通会员'}`)
+        } else if (err.reason === 'feature_disabled' || err.status === 403) {
+          showToast(`重新读取失败: ${err.message || '答案解析功能已停用'}`)
+        } else if (err.reason === 'kill_switch' || err.status === 503) {
+          showToast(`重新读取失败: ${err.message || '服务维护中'}`)
+        } else {
+          showToast(`重新读取失败: ${err.message}`)
+        }
+      } else {
+        showToast(err instanceof Error ? err.message : '重新读取失败')
+      }
     } finally {
       setIsLoadingPaper(false)
     }
   }
 
   function handleTriggerParse(item: HomeworkItem) {
-    if (!isFeatureEnabled('answer_parser')) {
-      showToast(getFeatureDenyReason('answer_parser', '答案解析功能已停用'))
+    const parseStatus = getFeatureStatus('answer_parser', '答案解析')
+    if (!parseStatus.enabled) {
+      if (parseStatus.status === 'membership_required') {
+        showToast(`${parseStatus.reason}，请前往账号中心开通`)
+      } else {
+        showToast(parseStatus.reason || '答案解析功能已停用')
+      }
       return
     }
     if (readStoredSkipRiskWarning()) {
@@ -1523,15 +1858,44 @@ function App() {
       }
     } catch (err: unknown) {
       setParsingId(null)
-      const errorMsg = err instanceof Error ? err.message : '发起解析失败'
-      setParseErrors((prev) => ({ ...prev, [item.id]: errorMsg }))
-      showToast(errorMsg)
+      if (err instanceof ApiError) {
+        if (err.isNetworkError) {
+          const errorMsg = '网络连接失败，请检查网络连接'
+          setParseErrors((prev) => ({ ...prev, [item.id]: errorMsg }))
+          showToast(errorMsg)
+        } else if (err.reason === 'membership_required' || err.message.includes('会员') || err.message.includes('VIP')) {
+          const errorMsg = err.message || '答案解析需要开通会员'
+          setParseErrors((prev) => ({ ...prev, [item.id]: errorMsg }))
+          showToast(`${errorMsg}，请前往官网开通会员`)
+        } else if (err.reason === 'feature_disabled' || err.status === 403) {
+          const errorMsg = err.message || '答案解析功能已被停用'
+          setParseErrors((prev) => ({ ...prev, [item.id]: errorMsg }))
+          showToast(errorMsg)
+        } else if (err.reason === 'kill_switch' || err.status === 503) {
+          const errorMsg = err.message || '服务维护中，解析已暂停'
+          setParseErrors((prev) => ({ ...prev, [item.id]: errorMsg }))
+          showToast(errorMsg)
+        } else {
+          const errorMsg = err.message || '发起解析失败'
+          setParseErrors((prev) => ({ ...prev, [item.id]: errorMsg }))
+          showToast(errorMsg)
+        }
+      } else {
+        const errorMsg = err instanceof Error ? err.message : '发起解析失败'
+        setParseErrors((prev) => ({ ...prev, [item.id]: errorMsg }))
+        showToast(errorMsg)
+      }
     }
   }
 
   async function handleCopyAnswer(paper: Paper) {
-    if (!isFeatureEnabled('copy_export')) {
-      showToast(getFeatureDenyReason('copy_export', '答案导出功能已停用'))
+    const copyStatus = getFeatureStatus('copy_export', '答案导出')
+    if (!copyStatus.enabled) {
+      if (copyStatus.status === 'membership_required') {
+        showToast(`${copyStatus.reason}，请前往账号中心开通`)
+      } else {
+        showToast(copyStatus.reason || '答案导出功能已停用')
+      }
       return
     }
     const text = formatPaperAsText(paper)
@@ -1550,8 +1914,13 @@ function App() {
   }
 
   function handleExportAnswer(paper: Paper) {
-    if (!isFeatureEnabled('copy_export')) {
-      showToast(getFeatureDenyReason('copy_export', '答案导出功能已停用'))
+    const copyStatus = getFeatureStatus('copy_export', '答案导出')
+    if (!copyStatus.enabled) {
+      if (copyStatus.status === 'membership_required') {
+        showToast(`${copyStatus.reason}，请前往账号中心开通`)
+      } else {
+        showToast(copyStatus.reason || '答案导出功能已停用')
+      }
       return
     }
     const text = formatPaperAsText(paper)
@@ -1569,8 +1938,17 @@ function App() {
 
   async function doFetchHomeworks(tab: 'current' | 'history', capToken?: string) {
     if (!session) return
-    if (!isFeatureEnabled('cloud_mode')) {
-      setHomeworkError(getFeatureDenyReason('cloud_mode', '云端模式已暂时停用'))
+    const cloudStatus = getFeatureStatus('cloud_mode', '云端模式')
+    if (!cloudStatus.enabled) {
+      setHomeworkError({
+        type:
+          cloudStatus.status === 'membership_required'
+            ? 'membership_required'
+            : cloudStatus.status === 'kill_switch'
+            ? 'kill_switch'
+            : 'feature_disabled',
+        message: cloudStatus.reason || '云端模式已暂时停用',
+      })
       return
     }
     setHomeworkError(null)
@@ -1589,10 +1967,44 @@ function App() {
           setShowCaptchaModal(true)
           return
         }
-        const msg = err instanceof Error ? err.message : '获取当前作业列表失败'
         console.error('Failed to load current homework list:', err)
-        setHomeworkError(msg)
-        showToast(`作业列表同步失败: ${msg}`)
+        if (err instanceof ApiError) {
+          if (err.isNetworkError) {
+            setHomeworkError({
+              type: 'network_error',
+              message: '网络连接失败，请检查您的网络连接或代理设置是否正常。',
+            })
+            showToast('网络连接失败，请检查网络设置')
+          } else if (err.reason === 'membership_required' || err.message.includes('会员') || err.message.includes('VIP')) {
+            setHomeworkError({
+              type: 'membership_required',
+              message: err.message || '作业列表同步需要开通会员。',
+            })
+            showToast(err.message || '作业列表同步需要开通会员')
+          } else if (err.reason === 'feature_disabled' || err.status === 403) {
+            setHomeworkError({
+              type: 'feature_disabled',
+              message: err.message || '作业列表功能已停用。',
+            })
+            showToast(err.message || '作业列表功能已停用')
+          } else if (err.reason === 'kill_switch' || err.status === 503) {
+            setHomeworkError({
+              type: 'kill_switch',
+              message: err.message || '服务正在紧急维护中。',
+            })
+            showToast(err.message || '服务正在紧急维护中')
+          } else {
+            setHomeworkError({
+              type: 'other',
+              message: err.message,
+            })
+            showToast(`作业列表同步失败: ${err.message}`)
+          }
+        } else {
+          const msg = err instanceof Error ? err.message : '获取当前作业列表失败'
+          setHomeworkError({ type: 'other', message: msg })
+          showToast(`作业列表同步失败: ${msg}`)
+        }
       } finally {
         setIsLoadingHomeworks(false)
       }
@@ -1600,14 +2012,8 @@ function App() {
       setIsLoadingHistory(true)
       try {
         const [res2, res3] = await Promise.all([
-          getHomeworkList(session.accessToken, '2', capToken).catch((err) => {
-            if (err instanceof ApiError && (err.captchaRequired || err.status === 429)) throw err
-            return { homeworks: [] }
-          }),
-          getHomeworkList(session.accessToken, '3', capToken).catch((err) => {
-            if (err instanceof ApiError && (err.captchaRequired || err.status === 429)) throw err
-            return { homeworks: [] }
-          }),
+          getHomeworkList(session.accessToken, '2', capToken),
+          getHomeworkList(session.accessToken, '3', capToken),
         ])
         setHistoryHomeworks([...(res2.homeworks || []), ...(res3.homeworks || [])])
         setHasLoadedHistory(true)
@@ -1620,10 +2026,44 @@ function App() {
           setShowCaptchaModal(true)
           return
         }
-        const msg = err instanceof Error ? err.message : '获取历史作业列表失败'
         console.error('Failed to load history homework list:', err)
-        setHomeworkError(msg)
-        showToast(`历史作业获取失败: ${msg}`)
+        if (err instanceof ApiError) {
+          if (err.isNetworkError) {
+            setHomeworkError({
+              type: 'network_error',
+              message: '网络连接失败，请检查您的网络连接或代理设置是否正常。',
+            })
+            showToast('网络连接失败，请检查网络设置')
+          } else if (err.reason === 'membership_required' || err.message.includes('会员') || err.message.includes('VIP')) {
+            setHomeworkError({
+              type: 'membership_required',
+              message: err.message || '历史作业获取需要开通会员。',
+            })
+            showToast(err.message || '历史作业获取需要开通会员')
+          } else if (err.reason === 'feature_disabled' || err.status === 403) {
+            setHomeworkError({
+              type: 'feature_disabled',
+              message: err.message || '历史作业功能已停用。',
+            })
+            showToast(err.message || '历史作业功能已停用')
+          } else if (err.reason === 'kill_switch' || err.status === 503) {
+            setHomeworkError({
+              type: 'kill_switch',
+              message: err.message || '服务正在紧急维护中。',
+            })
+            showToast(err.message || '服务正在维护中')
+          } else {
+            setHomeworkError({
+              type: 'other',
+              message: err.message,
+            })
+            showToast(`历史作业获取失败: ${err.message}`)
+          }
+        } else {
+          const msg = err instanceof Error ? err.message : '获取历史作业列表失败'
+          setHomeworkError({ type: 'other', message: msg })
+          showToast(`历史作业获取失败: ${msg}`)
+        }
       } finally {
         setIsLoadingHistory(false)
       }
@@ -1648,7 +2088,41 @@ function App() {
         return
       }
       console.error('Failed to refresh data:', err)
-      showToast('刷新失败，请稍后重试')
+      if (err instanceof ApiError) {
+        if (err.isNetworkError) {
+          setHomeworkError({
+            type: 'network_error',
+            message: '无法连接到云端服务器，请检查您的网络连接或代理设置。',
+          })
+          showToast('网络连接失败，请检查您的网络设置')
+        } else if (err.reason === 'membership_required' || err.message.includes('会员') || err.message.includes('VIP')) {
+          setHomeworkError({
+            type: 'membership_required',
+            message: err.message || '云端作业功能需要开通会员，请前往账号中心开通。',
+          })
+          showToast(err.message || '云端作业功能需要开通会员')
+        } else if (err.reason === 'feature_disabled' || err.status === 403) {
+          setHomeworkError({
+            type: 'feature_disabled',
+            message: err.message || '云端同步功能当前已被管理员暂停使用。',
+          })
+          showToast(err.message || '云端功能已被停用')
+        } else if (err.reason === 'kill_switch' || err.status === 503) {
+          setHomeworkError({
+            type: 'kill_switch',
+            message: err.message || '服务正在紧急维护，所有云端与解析功能已暂时关闭。',
+          })
+          showToast(err.message || '服务正在维护中')
+        } else {
+          setHomeworkError({
+            type: 'other',
+            message: err.message,
+          })
+          showToast(`刷新失败: ${err.message}`)
+        }
+      } else {
+        showToast(err instanceof Error ? err.message : '刷新失败，请稍后重试')
+      }
     }
   }
 
@@ -1998,9 +2472,9 @@ function App() {
               homework={viewingPaper.homework}
               paper={viewingPaper.paper}
               isLoadingPaper={isLoadingPaper}
-              isCopyExportEnabled={isFeatureEnabled('copy_export')}
+              copyExportStatus={getFeatureStatus('copy_export', '答案导出').status}
               copyExportDenyReason={getFeatureDenyReason('copy_export')}
-              isAnswerParserEnabled={isFeatureEnabled('answer_parser')}
+              answerParserStatus={getFeatureStatus('answer_parser', '答案解析').status}
               answerParserDenyReason={getFeatureDenyReason('answer_parser')}
               onBack={() => setViewingPaper(null)}
               onCopyAnswer={() => viewingPaper.paper && handleCopyAnswer(viewingPaper.paper)}
@@ -2020,9 +2494,9 @@ function App() {
               homeworkError={homeworkError}
               parsingId={parsingId}
               parseErrors={parseErrors}
-              isCloudModeEnabled={isFeatureEnabled('cloud_mode')}
+              cloudModeStatus={getFeatureStatus('cloud_mode', '云端模式').status}
               cloudModeDenyReason={getFeatureDenyReason('cloud_mode')}
-              isAnswerParserEnabled={isFeatureEnabled('answer_parser')}
+              answerParserStatus={getFeatureStatus('answer_parser', '答案解析').status}
               answerParserDenyReason={getFeatureDenyReason('answer_parser')}
               onRefresh={handleRequestRefresh}
               onManualReadList={handleManualReadList}
