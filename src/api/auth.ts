@@ -47,6 +47,18 @@ export class ApiError extends Error {
 type ApiRequestOptions = RequestInit & { accessToken?: string }
 let unauthorizedHandler: (() => void) | null = null
 
+const DEVICE_ID_KEY = 'fe-web.device-id'
+
+export function getOrCreateDeviceId(): string {
+  if (typeof window === 'undefined') return 'web-unknown'
+  let id = localStorage.getItem(DEVICE_ID_KEY)
+  if (!id) {
+    id = `web-${crypto.randomUUID()}`
+    localStorage.setItem(DEVICE_ID_KEY, id)
+  }
+  return id
+}
+
 export function setUnauthorizedHandler(handler: (() => void) | null) {
   unauthorizedHandler = handler
 }
@@ -54,6 +66,11 @@ export function setUnauthorizedHandler(handler: (() => void) | null) {
 export async function apiRequest<T>(path: string, { accessToken, ...init }: ApiRequestOptions = {}): Promise<T> {
   const headers = new Headers(init.headers)
   const method = (init.method || 'GET').toUpperCase()
+  const deviceId = getOrCreateDeviceId()
+  headers.set('X-Device-Id', deviceId)
+  headers.set('X-Platform', 'web')
+  headers.set('X-Software-Key', 'fe-web')
+
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
   if (accessToken && !['GET', 'HEAD', 'OPTIONS'].includes(method)) {
     headers.set('X-Request-Timestamp', String(Math.floor(Date.now() / 1000)))

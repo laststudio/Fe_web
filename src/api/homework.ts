@@ -208,3 +208,24 @@ export function getSoftwareFeatures(softwareKey = 'fe-web'): Promise<SoftwareFea
   return apiRequest<SoftwareFeatureItem[]>(`/software/${softwareKey}/features`)
 }
 
+export function trackFeatureUsage(
+  accessToken: string,
+  featureKey: string,
+  action?: string,
+  details?: Record<string, unknown>
+): Promise<{ ok: boolean }> {
+  return apiRequest<{ ok: boolean }>('/homework/track', {
+    accessToken,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      feature_key: featureKey,
+      action,
+      details,
+    }),
+  }).catch((err) => {
+    console.debug('Failed to track feature usage:', err)
+    return { ok: false }
+  })
+}
+

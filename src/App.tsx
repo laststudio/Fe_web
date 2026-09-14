@@ -11,6 +11,7 @@ import {
   getSoftwareFeatures,
   getTaskStatus,
   startParseHomework,
+  trackFeatureUsage,
   type HomeworkItem,
   type Paper,
   type PlatformAccountInfo,
@@ -1898,6 +1899,12 @@ function App() {
       }
       return
     }
+    if (session?.accessToken) {
+      void trackFeatureUsage(session.accessToken, 'copy_export', 'copy', {
+        paper_id: paper.paperId,
+        title: paper.title || paper.paperName,
+      })
+    }
     const text = formatPaperAsText(paper)
     try {
       await navigator.clipboard.writeText(text)
@@ -1922,6 +1929,12 @@ function App() {
         showToast(copyStatus.reason || '答案导出功能已停用')
       }
       return
+    }
+    if (session?.accessToken) {
+      void trackFeatureUsage(session.accessToken, 'copy_export', 'export', {
+        paper_id: paper.paperId,
+        title: paper.title || paper.paperName,
+      })
     }
     const text = formatPaperAsText(paper)
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })

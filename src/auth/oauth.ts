@@ -2,6 +2,7 @@ import { oauthConfig, oauthTransactionMaxAgeMs, oauthTransactionStorageKey } fro
 import { createCodeChallenge, createRandomValue } from './pkce'
 import type { OAuthTokenResponse, OAuthTransaction } from './types'
 import { beginNavigationActivity, transitionTo } from '../navigation/controller'
+import { getOrCreateDeviceId } from '../api/auth'
 
 export function normalizeReturnTo(value: string | null | undefined) {
   if (value === '/' || value === '/history' || value === '/settings') return value
@@ -95,7 +96,12 @@ export async function exchangeAuthorizationCode(code: string, verifier: string):
   try {
     response = await fetch(oauthConfig.tokenUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-Device-Id': getOrCreateDeviceId(),
+        'X-Platform': 'web',
+        'X-Software-Key': 'fe-web',
+      },
       body,
     })
   } catch {
