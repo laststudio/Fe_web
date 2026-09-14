@@ -301,6 +301,13 @@ function CaptchaModal({
   onCancel: () => void
 }) {
   const [error, setError] = useState('')
+  const handledRef = useRef(false)
+
+  const handleToken = (token: string) => {
+    if (!token || handledRef.current) return
+    handledRef.current = true
+    onSuccess(token)
+  }
 
   return (
     <div className="risk-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="captcha-modal-title">
@@ -318,11 +325,7 @@ function CaptchaModal({
         <div className="fe-cap-modal-body" style={{ padding: '20px 24px' }}>
           <CapVerification
             onError={(msg) => setError(msg)}
-            onToken={(token) => {
-              if (token) {
-                onSuccess(token)
-              }
-            }}
+            onToken={handleToken}
           />
           {error && (
             <div className="fe-captcha-error" role="alert">
@@ -993,7 +996,7 @@ function HomeworkListView({
             </div>
           )
         })()
-      ) : homeworkError ? (
+      ) : (homeworkError && !hasLoaded && currentList.length === 0) ? (
         (() => {
           const errInfo: HomeworkErrorInfo = typeof homeworkError === 'string'
             ? {
@@ -1140,16 +1143,19 @@ function HomeworkListView({
             type="button"
             className="control-primary fe-list-prompt-action"
             onClick={onManualReadList}
+            disabled={isLoading}
           >
-            <Icon name="download" />
+            <Icon name={isLoading ? 'sync' : 'download'} className={isLoading ? 'status-pill__spin' : ''} />
             <span>
-              {activeTab === 'current'
+              {isLoading
+                ? '正在同步作业列表中...'
+                : activeTab === 'current'
                 ? '确认安全，读取当前作业'
                 : '确认安全，读取历史作业'}
             </span>
           </button>
         </div>
-      ) : isLoading ? (
+      ) : isLoading && currentList.length === 0 ? (
         <div className="fe-empty-state" style={{ margin: '50px auto' }}>
           <div className="fe-empty-state__icon spinning">
             <Icon name="sync" />
@@ -1167,6 +1173,12 @@ function HomeworkListView({
         </div>
       ) : (
         <div className="fe-homework-list">
+          {homeworkError && (
+            <div className="admin-status-strip is-danger" style={{ marginBottom: 16 }}>
+              <Icon name="error" />
+              <span>{typeof homeworkError === 'string' ? homeworkError : homeworkError.message}</span>
+            </div>
+          )}
           {filtered.map((hw, idx) => (
             <HomeworkCard
               key={hw.id}
@@ -1464,6 +1476,7 @@ function App() {
   const [announcementDismissed, setAnnouncementDismissed] = useState(false)
 
   const pollingTimerRef = useRef<number | null>(null)
+  const isFetchingHomeworksRef = useRef(false)
 
   function toggleSidebarCollapse() {
     setSidebarCollapsed((prev) => {
@@ -1951,8 +1964,12 @@ function App() {
 
   async function doFetchHomeworks(tab: 'current' | 'history', capToken?: string) {
     if (!session) return
+    if (isFetchingHomeworksRef.current) return
+    isFetchingHomeworksRef.current = true
+
     const cloudStatus = getFeatureStatus('cloud_mode', '云端模式')
     if (!cloudStatus.enabled) {
+      isFetchingHomeworksRef.current = false
       setHomeworkError({
         type:
           cloudStatus.status === 'membership_required'
@@ -1964,13 +1981,22 @@ function App() {
       })
       return
     }
-    setHomeworkError(null)
+
+    const hasLoaded = tab === 'current' ? hasLoadedCurrent : hasLoadedHistory
+    const existingList = tab === 'current' ? homeworks : historyHomeworks
+    const hasData = hasLoaded && existingList.length > 0
+
+    if (!hasData) {
+      setHomeworkError(null)
+    }
+
     if (tab === 'current') {
       setIsLoadingHomeworks(true)
       try {
         const res = await getHomeworkList(session.accessToken, '1', capToken)
         setHomeworks(res.homeworks || [])
         setHasLoadedCurrent(true)
+        setHomeworkError(null)
         showToast('已同步当前作业列表')
       } catch (err) {
         if (err instanceof ApiError && (err.captchaRequired || err.status === 429)) {
@@ -1982,54 +2008,44 @@ function App() {
         }
         console.error('Failed to load current homework list:', err)
         if (err instanceof ApiError) {
+          let errType: HomeworkErrorInfo['type'] = 'other'
+          let errMsg = err.message || '作业列表同步失败'
           if (err.isNetworkError) {
-            setHomeworkError({
-              type: 'network_error',
-              message: '网络连接失败，请检查您的网络连接或代理设置是否正常。',
-            })
-            showToast('网络连接失败，请检查网络设置')
+            errType = 'network_error'
+            errMsg = '网络连接失败，请检查您的网络连接或代理设置是否正常。'
           } else if (err.reason === 'membership_required' || err.message.includes('会员') || err.message.includes('VIP')) {
-            setHomeworkError({
-              type: 'membership_required',
-              message: err.message || '作业列表同步需要开通会员。',
-            })
-            showToast(err.message || '作业列表同步需要开通会员')
+            errType = 'membership_required'
+            errMsg = err.message || '作业列表同步需要开通会员。'
           } else if (err.reason === 'feature_disabled' || err.status === 403) {
-            setHomeworkError({
-              type: 'feature_disabled',
-              message: err.message || '作业列表功能已停用。',
-            })
-            showToast(err.message || '作业列表功能已停用')
+            errType = 'feature_disabled'
+            errMsg = err.message || '作业列表功能已停用。'
           } else if (err.reason === 'kill_switch' || err.status === 503) {
-            setHomeworkError({
-              type: 'kill_switch',
-              message: err.message || '服务正在紧急维护中。',
-            })
-            showToast(err.message || '服务正在紧急维护中')
-          } else {
-            setHomeworkError({
-              type: 'other',
-              message: err.message,
-            })
-            showToast(`作业列表同步失败: ${err.message}`)
+            errType = 'kill_switch'
+            errMsg = err.message || '服务正在紧急维护中。'
+          }
+          showToast(errMsg)
+          if (!hasData) {
+            setHomeworkError({ type: errType, message: errMsg })
           }
         } else {
           const msg = err instanceof Error ? err.message : '获取当前作业列表失败'
-          setHomeworkError({ type: 'other', message: msg })
           showToast(`作业列表同步失败: ${msg}`)
+          if (!hasData) {
+            setHomeworkError({ type: 'other', message: msg })
+          }
         }
       } finally {
         setIsLoadingHomeworks(false)
+        isFetchingHomeworksRef.current = false
       }
     } else {
       setIsLoadingHistory(true)
       try {
-        const [res2, res3] = await Promise.all([
-          getHomeworkList(session.accessToken, '2', capToken),
-          getHomeworkList(session.accessToken, '3', capToken),
-        ])
+        const res2 = await getHomeworkList(session.accessToken, '2', capToken)
+        const res3 = await getHomeworkList(session.accessToken, '3')
         setHistoryHomeworks([...(res2.homeworks || []), ...(res3.homeworks || [])])
         setHasLoadedHistory(true)
+        setHomeworkError(null)
         showToast('已同步历史与逾期作业')
       } catch (err) {
         if (err instanceof ApiError && (err.captchaRequired || err.status === 429)) {
@@ -2041,44 +2057,35 @@ function App() {
         }
         console.error('Failed to load history homework list:', err)
         if (err instanceof ApiError) {
+          let errType: HomeworkErrorInfo['type'] = 'other'
+          let errMsg = err.message || '历史作业获取失败'
           if (err.isNetworkError) {
-            setHomeworkError({
-              type: 'network_error',
-              message: '网络连接失败，请检查您的网络连接或代理设置是否正常。',
-            })
-            showToast('网络连接失败，请检查网络设置')
+            errType = 'network_error'
+            errMsg = '网络连接失败，请检查您的网络连接或代理设置是否正常。'
           } else if (err.reason === 'membership_required' || err.message.includes('会员') || err.message.includes('VIP')) {
-            setHomeworkError({
-              type: 'membership_required',
-              message: err.message || '历史作业获取需要开通会员。',
-            })
-            showToast(err.message || '历史作业获取需要开通会员')
+            errType = 'membership_required'
+            errMsg = err.message || '历史作业获取需要开通会员。'
           } else if (err.reason === 'feature_disabled' || err.status === 403) {
-            setHomeworkError({
-              type: 'feature_disabled',
-              message: err.message || '历史作业功能已停用。',
-            })
-            showToast(err.message || '历史作业功能已停用')
+            errType = 'feature_disabled'
+            errMsg = err.message || '历史作业功能已停用。'
           } else if (err.reason === 'kill_switch' || err.status === 503) {
-            setHomeworkError({
-              type: 'kill_switch',
-              message: err.message || '服务正在紧急维护中。',
-            })
-            showToast(err.message || '服务正在维护中')
-          } else {
-            setHomeworkError({
-              type: 'other',
-              message: err.message,
-            })
-            showToast(`历史作业获取失败: ${err.message}`)
+            errType = 'kill_switch'
+            errMsg = err.message || '服务正在维护中。'
+          }
+          showToast(errMsg)
+          if (!hasData) {
+            setHomeworkError({ type: errType, message: errMsg })
           }
         } else {
           const msg = err instanceof Error ? err.message : '获取历史作业列表失败'
-          setHomeworkError({ type: 'other', message: msg })
           showToast(`历史作业获取失败: ${msg}`)
+          if (!hasData) {
+            setHomeworkError({ type: 'other', message: msg })
+          }
         }
       } finally {
         setIsLoadingHistory(false)
+        isFetchingHomeworksRef.current = false
       }
     }
   }
@@ -2143,6 +2150,7 @@ function App() {
   const pendingRefreshRef = useRef<((token?: string) => void) | null>(null)
 
   function handleManualReadList() {
+    if (isFetchingHomeworksRef.current) return
     if (shouldTriggerCaptchaDefense()) {
       pendingRefreshRef.current = (token?: string) => {
         void doFetchHomeworks(activeTab, token)
@@ -2155,6 +2163,7 @@ function App() {
   }
 
   function handleRequestRefresh() {
+    if (isFetchingHomeworksRef.current) return
     if (shouldTriggerCaptchaDefense()) {
       pendingRefreshRef.current = (token?: string) => {
         void refreshAccountAndHomeworks(token)
@@ -2175,7 +2184,7 @@ function App() {
       pendingRefreshRef.current = null
       fn(token)
     } else {
-      void refreshAccountAndHomeworks(token)
+      void doFetchHomeworks(activeTab, token)
     }
   }
 

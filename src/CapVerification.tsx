@@ -12,16 +12,37 @@ export default function CapVerification({
   onToken: (token: string) => void
 }) {
   const widgetRef = useRef<CapWidget | null>(null)
+  const onTokenRef = useRef(onToken)
+  const onErrorRef = useRef(onError)
+
+  useEffect(() => {
+    onTokenRef.current = onToken
+    onErrorRef.current = onError
+  })
 
   useEffect(() => {
     const widget = widgetRef.current
     if (!widget) return
-    const solve = (event: CapSolveEvent) => onToken(event.detail.token)
-    const error = (event: CapErrorEvent) => {
-      onToken('')
-      onError(event.detail.message || '人机验证失败，请重试')
+
+    let lastEmittedToken = ''
+
+    const solve = (event: CapSolveEvent) => {
+      const token = event.detail?.token
+      if (token && token !== lastEmittedToken) {
+        lastEmittedToken = token
+        onTokenRef.current(token)
+      }
     }
-    const reset = () => onToken('')
+    const error = (event: CapErrorEvent) => {
+      lastEmittedToken = ''
+      onTokenRef.current('')
+      onErrorRef.current(event.detail?.message || '人机验证失败，请重试')
+    }
+    const reset = () => {
+      lastEmittedToken = ''
+      onTokenRef.current('')
+    }
+
     widget.addEventListener('solve', solve)
     widget.addEventListener('error', error)
     widget.addEventListener('reset', reset)
@@ -30,7 +51,7 @@ export default function CapVerification({
       widget.removeEventListener('error', error)
       widget.removeEventListener('reset', reset)
     }
-  }, [onError, onToken])
+  }, [])
 
   return (
     <div className="account-captcha">
