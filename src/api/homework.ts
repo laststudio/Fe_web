@@ -98,7 +98,7 @@ export function formatPaperAsText(paper: Paper): string {
 
   for (const section of paper.sections) {
     if (!section.questions || section.questions.length === 0) continue
-    if (section.category === 'read_chapter') continue
+    if (section.category === 'read_chapter' && !section.questions.some((q) => (q.answers && q.answers.length > 0) || q.questionText)) continue
 
     lines.push(section.caption || section.typeName || '题目')
     lines.push('')
@@ -115,9 +115,13 @@ export function formatPaperAsText(paper: Paper): string {
           .filter(Boolean)
       )
 
-      const answerText = isZhuanShu
+      let answerText = isZhuanShu
         ? cleaned.flat().join(' ')
         : cleaned.map((parts) => parts.join(' ')).join('\n')
+
+      if (!answerText.trim() && q.questionText) {
+        answerText = cleanDisplayText(q.questionText)
+      }
 
       lines.push(`Q${q.order}. ${answerText}`)
     }
