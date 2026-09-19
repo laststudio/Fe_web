@@ -541,6 +541,8 @@ export function AutoCompletePage({
         homework_id: homework.id,
         homework_name: homework.name,
         resource_id: homework.resource_id || ((activePaper as Record<string, unknown> | null)?.resource_id as string | undefined),
+        set_id: homework.set_id || ((activePaper as Record<string, unknown> | null)?.set_id as string | undefined),
+        status: homework.status !== undefined ? String(homework.status) : undefined,
         mode,
         target_total: mode === 'auto' ? autoTargetTotal : Number(manualTotalSum.toFixed(2)),
         allow_over_max: mode === 'manual' ? isManualTotalOverMax || manualOverMaxQuestions.length > 0 : false,

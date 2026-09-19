@@ -25,6 +25,7 @@ export type HomeworkItem = {
   contents: HomeworkContentItem[]
   parsed?: boolean
   set_type?: number
+  set_id?: string
   pk?: number
   kind?: string
   resource_id?: string

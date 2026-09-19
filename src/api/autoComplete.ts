@@ -23,6 +23,8 @@ export type StartAutoCompletePayload = {
   homework_id: string
   homework_name: string
   resource_id?: string
+  set_id?: string
+  status?: string
   mode: AutoCompleteMode
   target_total: number
   allow_over_max: boolean
@@ -136,7 +138,6 @@ export const SUPPORTED_QUESTION_TYPES = [
 export const UNSUPPORTED_KEYWORD_PATTERNS = [
   { pattern: /作文|composition/i, name: '英语作文' },
   { pattern: /拼写|听写|write|dictation/i, name: '单词拼写/听写' },
-  { pattern: /模拟考|中考模拟|高考模拟|期末统考/i, name: '模拟考试' },
 ]
 
 export function checkHomeworkCompatibility(
