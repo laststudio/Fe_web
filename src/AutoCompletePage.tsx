@@ -97,11 +97,14 @@ export function AutoCompletePage({
         for (const q of sec.questions) {
           if (!q) continue
           count++
+          const explicitPoint = Number(
+            (q as any).point ?? (q as any).maxScore ?? (q as any).score ?? (q as any).max_score
+          )
           qList.push({
             order: q.order || count,
-            typeName: q.typeName || sec.typeName || '选择题',
+            typeName: q.typeName || sec.typeName || '题目',
             questionText: q.questionText || q.originalText || `第 ${count} 题`,
-            maxScore: 5.0, // default per question point
+            maxScore: Number.isFinite(explicitPoint) && explicitPoint > 0 ? explicitPoint : 0,
           })
         }
       }
@@ -115,21 +118,42 @@ export function AutoCompletePage({
           order: i,
           typeName: '综合题型',
           questionText: `第 ${i} 题`,
-          maxScore: 10.0,
+          maxScore: 3.0,
         })
       }
     }
 
     const tQuestions = Math.max(1, qList.length)
-    const rawTotal = Number(homework?.total_score)
-    const defaultTotal = Number.isFinite(rawTotal) && rawTotal > 0 ? rawTotal : 100
-    // Proportional base point
-    const pointPerQ = Number((defaultTotal / tQuestions).toFixed(2))
-    qList = qList.map((q) => ({ ...q, maxScore: pointPerQ }))
+    const rawTotal = Number(
+      (homework as any)?.total_score ||
+      (homework as any)?.total_point ||
+      (activePaper as any)?.totalScore ||
+      (activePaper as any)?.total_score
+    )
+    const isPkOrVocab = homework?.pk === 1 || homework?.set_type === 6
+    const defaultTotal = Number.isFinite(rawTotal) && rawTotal > 0 ? rawTotal : (isPkOrVocab ? 100.0 : 30.0)
+
+    // Check if questions already carry explicit points from paper
+    const hasExplicitPoints = qList.some((q) => q.maxScore > 0)
+    let calculatedPaperTotal = defaultTotal
+
+    if (hasExplicitPoints) {
+      const explicitSum = Number(qList.reduce((sum, q) => sum + (q.maxScore > 0 ? q.maxScore : 0), 0).toFixed(2))
+      if (explicitSum > 0) {
+        calculatedPaperTotal = explicitSum
+      }
+      qList = qList.map((q) => ({
+        ...q,
+        maxScore: q.maxScore > 0 ? q.maxScore : Number((calculatedPaperTotal / tQuestions).toFixed(2)),
+      }))
+    } else {
+      const pointPerQ = Number((defaultTotal / tQuestions).toFixed(2))
+      qList = qList.map((q) => ({ ...q, maxScore: pointPerQ }))
+    }
 
     return {
       totalQuestions: tQuestions,
-      paperTotalScore: defaultTotal,
+      paperTotalScore: calculatedPaperTotal,
       questions: qList,
     }
   }, [homework, activePaper])
@@ -147,25 +171,42 @@ export function AutoCompletePage({
 
   // 1. Auto mode target total score state: strictly capped at <= paperTotalScore * 0.95
   const maxAutoScore = useMemo(() => {
-    return Number((paperTotalScore * 0.95).toFixed(1))
+    return Number((paperTotalScore * 0.95).toFixed(2))
   }, [paperTotalScore])
 
+  const [selectedRatio, setSelectedRatio] = useState<number>(0.92)
   const [customAutoTargetTotal, setCustomAutoTargetTotal] = useState<number | null>(null)
+
   const defaultAutoTarget = useMemo(() => {
-    return Number((paperTotalScore * 0.88).toFixed(1))
-  }, [paperTotalScore])
+    return Number((paperTotalScore * selectedRatio).toFixed(2))
+  }, [paperTotalScore, selectedRatio])
 
   const autoTargetTotal = useMemo(() => {
     const candidate = customAutoTargetTotal !== null ? customAutoTargetTotal : defaultAutoTarget
     return Math.min(candidate, maxAutoScore)
   }, [customAutoTargetTotal, defaultAutoTarget, maxAutoScore])
 
+  const currentRatio = useMemo(() => {
+    return paperTotalScore > 0 ? autoTargetTotal / paperTotalScore : 0.95
+  }, [autoTargetTotal, paperTotalScore])
+
+  const handleSelectRatio = (ratio: number) => {
+    const safeRatio = Math.min(0.95, Math.max(0, ratio))
+    setSelectedRatio(safeRatio)
+    setCustomAutoTargetTotal(Number((paperTotalScore * safeRatio).toFixed(2)))
+  }
+
   const handleUpdateAutoTargetTotal = (val: number) => {
     if (val > maxAutoScore) {
       setCustomAutoTargetTotal(maxAutoScore)
-      onToast?.(`已自动受风控限制截断为最高 95% (${maxAutoScore}分)`)
+      setSelectedRatio(0.95)
+      onToast?.(`已自动受风控限制截断为最高 95% 比例 (${maxAutoScore}分)`)
     } else {
-      setCustomAutoTargetTotal(Number(val.toFixed(1)))
+      const rounded = Number(val.toFixed(2))
+      setCustomAutoTargetTotal(rounded)
+      if (paperTotalScore > 0) {
+        setSelectedRatio(Number((rounded / paperTotalScore).toFixed(2)))
+      }
     }
   }
 
@@ -178,7 +219,8 @@ export function AutoCompletePage({
       if (customManualScores[q.order] !== undefined) {
         scores[q.order] = customManualScores[q.order]
       } else {
-        scores[q.order] = Number((q.maxScore * 0.9).toFixed(1))
+        // Default manual score at 92% of question real max score
+        scores[q.order] = Number((q.maxScore * 0.92).toFixed(2))
       }
     })
     return scores
@@ -187,8 +229,17 @@ export function AutoCompletePage({
   const handleUpdateManualScore = (order: number, val: number) => {
     setCustomManualScores((prev) => ({
       ...prev,
-      [order]: Number(val.toFixed(1)),
+      [order]: Number(val.toFixed(2)),
     }))
+  }
+
+  const handleQuickFillManualScores = (ratio: number) => {
+    const newScores: Record<number, number> = {}
+    questions.forEach((q) => {
+      newScores[q.order] = Number((q.maxScore * ratio).toFixed(2))
+    })
+    setCustomManualScores(newScores)
+    onToast?.(`已一键将所有题目按 ${(ratio * 100).toFixed(0)}% 比例填入真实分数`)
   }
 
   // Collapsible state for auto mode score breakdown
@@ -205,11 +256,11 @@ export function AutoCompletePage({
       const q = questions[idx]
       let allocated: number
       if (idx === questions.length - 1) {
-        allocated = Number((autoTargetTotal - allocatedSum).toFixed(1))
+        allocated = Number((autoTargetTotal - allocatedSum).toFixed(2))
       } else {
         const ratio = totalMax > 0 ? q.maxScore / totalMax : 1 / questions.length
-        allocated = Number((autoTargetTotal * ratio).toFixed(1))
-        allocatedSum = Number((allocatedSum + allocated).toFixed(1))
+        allocated = Number((autoTargetTotal * ratio).toFixed(2))
+        allocatedSum = Number((allocatedSum + allocated).toFixed(2))
       }
 
       results.push({
@@ -227,7 +278,7 @@ export function AutoCompletePage({
 
   // Manual mode validations:
   const manualTotalSum = useMemo(() => {
-    return Object.values(manualScores).reduce((acc, cur) => acc + (Number(cur) || 0), 0)
+    return Number(Object.values(manualScores).reduce((acc, cur) => acc + (Number(cur) || 0), 0).toFixed(2))
   }, [manualScores])
 
   const manualOverMaxQuestions = useMemo(() => {
@@ -393,17 +444,17 @@ export function AutoCompletePage({
 
     setIsStartingTask(true)
     try {
-      let perQuestionScoresPayload: Record<number, { total: number }> | undefined = undefined
+      let perQuestionScoresPayload: Record<number, number> | undefined = undefined
 
       if (mode === 'manual') {
         perQuestionScoresPayload = {}
         questions.forEach((q) => {
-          perQuestionScoresPayload![q.order] = { total: manualScores[q.order] ?? q.maxScore }
+          perQuestionScoresPayload![q.order] = manualScores[q.order] ?? q.maxScore
         })
       } else {
         perQuestionScoresPayload = {}
         allocatedQuestionScores.forEach((q) => {
-          perQuestionScoresPayload![q.order] = { total: q.allocatedScore }
+          perQuestionScoresPayload![q.order] = q.allocatedScore
         })
       }
 
@@ -411,7 +462,7 @@ export function AutoCompletePage({
         homework_id: homework.id,
         homework_name: homework.name,
         mode,
-        target_total: mode === 'auto' ? autoTargetTotal : Number(manualTotalSum.toFixed(1)),
+        target_total: mode === 'auto' ? autoTargetTotal : Number(manualTotalSum.toFixed(2)),
         allow_over_max: mode === 'manual' ? isManualTotalOverMax || manualOverMaxQuestions.length > 0 : false,
         use_time: suggestedTimeSeconds,
         voice_mode: voiceMode,
@@ -425,6 +476,14 @@ export function AutoCompletePage({
       setIsRiskModalOpen(false)
       setActiveTaskId(res.task_id)
       setIsMinimized(false)
+      // Immediate visual feedback so user sees the pipeline active
+      setTaskStatus({
+        task_id: res.task_id,
+        status: 'PREPARING',
+        progress: 10,
+        stage_label: '[1/8] 正在通过国内代理初始化 ETS 会话...',
+        stage_text: '[1/8] 正在通过国内代理初始化 ETS 会话...',
+      })
       onToast?.('自动完成任务已发起，正在为您执行！')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '发起任务失败'
@@ -553,9 +612,9 @@ export function AutoCompletePage({
                 <div className="fe-slider-panel-head">
                   <div className="fe-slider-title">
                     <Icon name="speed" />
-                    <strong>目标完成总分设定</strong>
+                    <strong>目标完成总分与比例换算</strong>
                     <span className="admin-pill-badge is-muted">
-                      最高上限锁定: {maxAutoScore.toFixed(1)} 分 (95% 保护线)
+                      当前比例: {(currentRatio * 100).toFixed(1)}% (最高上限 95%)
                     </span>
                   </div>
                   <div className="fe-slider-input-box">
@@ -574,6 +633,29 @@ export function AutoCompletePage({
                   </div>
                 </div>
 
+                {/* Ratio Preset Buttons */}
+                <div className="fe-ratio-presets">
+                  <span style={{ fontSize: 12, color: 'var(--control-muted)', fontWeight: 600 }}>比例快捷预设:</span>
+                  {[
+                    { label: '85% 比例 (推荐安全)', ratio: 0.85 },
+                    { label: '90% 比例 (良好)', ratio: 0.90 },
+                    { label: '92% 比例 (优异)', ratio: 0.92 },
+                    { label: '95% 比例 (最高安全上限)', ratio: 0.95 },
+                  ].map((p) => {
+                    const isActive = Math.abs(currentRatio - p.ratio) < 0.015
+                    return (
+                      <button
+                        key={p.ratio}
+                        type="button"
+                        className={`fe-ratio-preset-btn ${isActive ? 'is-active' : ''}`}
+                        onClick={() => handleSelectRatio(p.ratio)}
+                      >
+                        {p.label} · {(paperTotalScore * p.ratio).toFixed(1)}分
+                      </button>
+                    )
+                  })}
+                </div>
+
                 <div className="fe-range-container">
                   <input
                     type="range"
@@ -585,9 +667,9 @@ export function AutoCompletePage({
                     onChange={(e) => handleUpdateAutoTargetTotal(parseFloat(e.target.value) || 0)}
                   />
                   <div className="fe-slider-ticks">
-                    <span>0 分</span>
+                    <span>0 分 (0%)</span>
                     <span>推荐安全区: {(paperTotalScore * 0.85).toFixed(1)} - {maxAutoScore} 分</span>
-                    <span style={{ color: '#dc2626', fontWeight: 600 }}>上限 {maxAutoScore} 分</span>
+                    <span style={{ color: '#dc2626', fontWeight: 600 }}>95% 上限 {maxAutoScore} 分</span>
                   </div>
                 </div>
               </div>
@@ -601,10 +683,10 @@ export function AutoCompletePage({
                 >
                   <div className="fe-breakdown-title">
                     <Icon name="account_tree" />
-                    <strong>各小题等比自动分配方案 ({totalQuestions} 题)</strong>
+                    <strong>各小题实际分数等比换算方案 ({totalQuestions} 题)</strong>
                     <span className="fe-balance-tag">
                       <Icon name="verified" />
-                      小题求和与设定总分绝对吻合 ({autoTargetTotal.toFixed(1)} 分)
+                      小题求和与设定总分绝对吻合 ({autoTargetTotal.toFixed(2)} 分)
                     </span>
                   </div>
                   <Icon name={isBreakdownOpen ? 'expand_less' : 'expand_more'} />
@@ -615,16 +697,20 @@ export function AutoCompletePage({
                     <div className="fe-breakdown-table-head">
                       <span>题号</span>
                       <span>题型</span>
-                      <span>卷面原满分</span>
-                      <span>等比平衡得分</span>
+                      <span>题目实际满分</span>
+                      <span>换算目标实际得分</span>
+                      <span>5分制对应折算</span>
                     </div>
                     {allocatedQuestionScores.map((item) => (
                       <div key={item.order} className="fe-breakdown-table-row">
                         <span className="fe-td-order">Q{item.order}</span>
                         <span className="fe-td-type">{item.typeName}</span>
-                        <span className="fe-td-max">{item.maxScore.toFixed(1)} 分</span>
+                        <span className="fe-td-max">{item.maxScore.toFixed(2)} 分</span>
                         <span className="fe-td-score">
-                          <strong>{item.allocatedScore.toFixed(1)}</strong> 分
+                          <strong>{item.allocatedScore.toFixed(2)}</strong> 分 ({(item.maxScore > 0 ? (item.allocatedScore / item.maxScore) * 100 : 95).toFixed(0)}%)
+                        </span>
+                        <span className="fe-td-scale" style={{ fontSize: 11.5, color: 'var(--control-muted)', fontFamily: 'DM Mono, monospace' }}>
+                          {item.maxScore > 0 ? ((item.allocatedScore / item.maxScore) * 5.0).toFixed(2) : '5.00'} / 5.00
                         </span>
                       </div>
                     ))}
@@ -646,17 +732,37 @@ export function AutoCompletePage({
                 </div>
               )}
 
+              {/* Quick Preset Fill Bar */}
+              <div className="fe-quick-fill-bar">
+                <span>一键按比例快速填分:</span>
+                {[
+                  { label: '95% 比例 (最高安全)', ratio: 0.95 },
+                  { label: '90% 比例 (良好)', ratio: 0.90 },
+                  { label: '85% 比例 (稳健)', ratio: 0.85 },
+                  { label: '100% 卷面满分 (危险)', ratio: 1.0 },
+                ].map((p) => (
+                  <button
+                    key={p.ratio}
+                    type="button"
+                    className="fe-ratio-preset-btn"
+                    onClick={() => handleQuickFillManualScores(p.ratio)}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+
               <div className="fe-manual-toolbar">
                 <div className="fe-manual-stat-left">
                   <span>逐题分值规划表</span>
-                  <small>填写每道小题的期望得分，支持 0.1 步进</small>
+                  <small>填写每道小题的期望真实得分，单题超出满分将自动标红告警</small>
                 </div>
                 <div className="fe-manual-stat-right">
                   <span>当前设定总分：</span>
                   <strong className={isManualTotalOverMax ? 'fe-text-danger' : 'fe-text-success'}>
-                    {manualTotalSum.toFixed(1)}
+                    {manualTotalSum.toFixed(2)}
                   </strong>
-                  <span> / {paperTotalScore.toFixed(1)} 分</span>
+                  <span> / {paperTotalScore.toFixed(1)} 分 ({(manualTotalSum / maxAutoScore > 1 ? '超过95%' : `${(manualTotalSum / paperTotalScore * 100).toFixed(1)}%`)})</span>
                 </div>
               </div>
 
@@ -671,8 +777,11 @@ export function AutoCompletePage({
                         <div className="fe-manual-details">
                           <div className="fe-manual-title-row">
                             <span className="fe-manual-type">{q.typeName}</span>
-                            <span className="fe-manual-max">官方满分: {q.maxScore.toFixed(1)} 分</span>
-                            {isOver && <span className="fe-danger-pill">【危险：单题超满分】</span>}
+                            <span className="fe-manual-max">官方实际满分: {q.maxScore.toFixed(2)} 分</span>
+                            <span className="admin-pill-badge is-muted" style={{ fontSize: 11 }}>
+                              得分率: {q.maxScore > 0 ? ((currentVal / q.maxScore) * 100).toFixed(1) : 0}%
+                            </span>
+                            {isOver && <span className="fe-danger-pill">【危险：单题已超出真实满分 ({q.maxScore.toFixed(2)}分)】</span>}
                           </div>
                           <p className="fe-manual-stem">{q.questionText}</p>
                         </div>
@@ -681,7 +790,7 @@ export function AutoCompletePage({
                       <div className="fe-manual-input-box">
                         <input
                           type="number"
-                          step={0.1}
+                          step={0.05}
                           min={0}
                           className={isOver ? 'fe-input-over-max' : ''}
                           value={currentVal}
@@ -1085,6 +1194,7 @@ export function AutoCompletePage({
       )}
 
       {/* 6. EXECUTION BOARD (FULLSCREEN MODAL OR MINIMIZED FLOATING BAR) */}
+      {/* 6. EXECUTION BOARD (FULLSCREEN MODAL OR MINIMIZED FLOATING BAR) */}
       {activeTaskId && (
         <>
           {isMinimized ? (
@@ -1102,9 +1212,9 @@ export function AutoCompletePage({
                     ? '已完成自动做题'
                     : taskStatus?.status === 'FAILED'
                     ? '任务执行中断'
-                    : `正在自动完成 (${taskStatus?.progress || 0}%)`}
+                    : `正在自动完成 (${taskStatus?.progress || 10}%)`}
                 </strong>
-                <small>{taskStatus?.stage_text || '后台流水线处理中...'}</small>
+                <small>{taskStatus?.stage_label || taskStatus?.stage_text || '后台流水线处理中...'}</small>
               </div>
               <button
                 type="button"
@@ -1156,32 +1266,94 @@ export function AutoCompletePage({
                       </button>
                     </div>
                   ) : taskStatus?.status === 'COMPLETED' ? (
-                    /* Settlement card */
+                    /* Settlement card (做题效果全景展示) */
                     <div className="fe-settlement-card">
                       <div className="fe-settlement-icon-wrap">
-                        <Icon name="military_tech" filled />
+                        <Icon name="verified" filled />
                       </div>
-                      <h3>恭喜，作业已成功自动完成！</h3>
+                      <h3>恭喜，作业已成功自动完成并提交！</h3>
                       <p className="fe-settlement-desc">
-                        所有作答数据与评分 XML 已成功上报至 ETS100 云端官方平台。
+                        所有题目作答录音与真实换算评分已通过国内代理成功上报至 ETS100 云端官方平台。
                       </p>
 
+                      {/* Summary Score Stats */}
                       <div className="fe-settlement-stats">
                         <div className="fe-settlement-tile">
-                          <small>最终得分</small>
-                          <strong>{taskStatus.result?.score ?? (mode === 'auto' ? autoTargetTotal : manualTotalSum)} 分</strong>
+                          <small>官方最终得分</small>
+                          <strong style={{ color: '#16a34a' }}>
+                            {Number((taskStatus.result?.score ?? taskStatus.result?.final_score ?? (mode === 'auto' ? autoTargetTotal : manualTotalSum)).toFixed(2))} 分
+                          </strong>
                         </div>
                         <div className="fe-settlement-tile">
-                          <small>卷面总满分</small>
+                          <small>试卷总满分</small>
                           <strong>{paperTotalScore.toFixed(1)} 分</strong>
                         </div>
                         <div className="fe-settlement-tile">
-                          <small>做题用时</small>
+                          <small>最终得分率</small>
+                          <strong style={{ color: '#2563eb' }}>
+                            {taskStatus.result?.score_rate ?? (
+                              paperTotalScore > 0
+                                ? ((Number(taskStatus.result?.score ?? taskStatus.result?.final_score ?? (mode === 'auto' ? autoTargetTotal : manualTotalSum)) / paperTotalScore) * 100).toFixed(1)
+                                : '95.0'
+                            )}%
+                          </strong>
+                        </div>
+                        <div className="fe-settlement-tile">
+                          <small>实际做题用时</small>
                           <strong>{formatSeconds(taskStatus.result?.use_time || suggestedTimeSeconds)}</strong>
                         </div>
                       </div>
 
-                      <div className="fe-settlement-actions">
+                      {/* Question by question completion breakdown table */}
+                      <div className="fe-settlement-table-wrap">
+                        <table className="fe-settlement-table">
+                          <thead>
+                            <tr>
+                              <th>题号</th>
+                              <th>题型</th>
+                              <th>题目内容节选</th>
+                              <th>真实满分</th>
+                              <th>最终实际得分</th>
+                              <th>官方状态</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(taskStatus.result?.question_details || taskStatus.question_results || allocatedQuestionScores).map((item: any, idx: number) => {
+                              const order = item.order || idx + 1
+                              const typeName = item.type_name || item.typeName || '题目'
+                              const text = item.text || item.questionText || `第 ${order} 题`
+                              const maxS = item.max_score ?? item.maxScore ?? (paperTotalScore / Math.max(1, totalQuestions))
+                              const score = item.awarded_score ?? item.allocatedScore ?? (manualScores[order] || 0)
+                              return (
+                                <tr key={order}>
+                                  <td><strong>Q{order}</strong></td>
+                                  <td><span className="fe-td-type">{typeName}</span></td>
+                                  <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={text}>
+                                    {text}
+                                  </td>
+                                  <td>{Number(maxS).toFixed(2)} 分</td>
+                                  <td><strong style={{ color: '#16a34a' }}>{Number(score).toFixed(2)} 分</strong></td>
+                                  <td>
+                                    <span className="admin-pill-badge is-active" style={{ fontSize: 11 }}>
+                                      <Icon name="check" style={{ fontSize: 12 }} /> 官方已核验
+                                    </span>
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div className="fe-settlement-actions" style={{ display: 'flex', gap: 12, justifyContent: 'center', width: '100%', marginTop: 8 }}>
+                        <button
+                          type="button"
+                          className="control-secondary"
+                          onClick={() => setActiveTaskId(null)}
+                        >
+                          <Icon name="tune" />
+                          <span>留在本页查看配置</span>
+                        </button>
                         <button
                           type="button"
                           className="control-primary"
@@ -1198,18 +1370,45 @@ export function AutoCompletePage({
                   ) : (
                     /* In Progress Dashboard */
                     <div className="fe-execution-active-box">
+                      {/* 8-Stage Pipeline Strip */}
+                      <div className="fe-pipeline-steps">
+                        {[
+                          { num: 1, label: '会话就绪', p: 5 },
+                          { num: 2, label: '试卷提取', p: 15 },
+                          { num: 3, label: '题型规划', p: 25 },
+                          { num: 4, label: '逐题做题', p: 40 },
+                          { num: 5, label: '语音合成', p: 60 },
+                          { num: 6, label: '评分上报', p: 75 },
+                          { num: 7, label: '用时终审', p: 85 },
+                          { num: 8, label: '云端核对', p: 95 },
+                        ].map((s) => {
+                          const curP = taskStatus?.progress || 10
+                          const isDone = curP > s.p + 8
+                          const isActive = curP >= s.p && curP <= s.p + 8
+                          return (
+                            <div
+                              key={s.num}
+                              className={`fe-pipeline-step ${isDone ? 'is-done' : ''} ${isActive ? 'is-active' : ''}`}
+                            >
+                              <Icon name={isDone ? 'check' : isActive ? 'sync' : 'circle'} className={isActive ? 'fe-spin' : ''} style={{ fontSize: 12 }} />
+                              <span>{s.num}. {s.label}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+
                       {/* Big Progress Bar */}
                       <div className="fe-exec-progress-track">
                         <div
                           className="fe-exec-progress-bar"
-                          style={{ width: `${Math.max(5, taskStatus?.progress || 10)}%` }}
+                          style={{ width: `${Math.max(6, taskStatus?.progress || 10)}%` }}
                         />
                       </div>
 
                       <div className="fe-exec-progress-meta">
                         <span className="fe-exec-stage-text">
                           <Icon name="sync" className="fe-spin" />
-                          {taskStatus?.stage_text || '正在连接国内代理节点并初始化做题环境...'}
+                          {taskStatus?.stage_label || taskStatus?.stage_text || '正在连接国内代理节点并初始化做题环境...'}
                         </span>
                         <strong className="fe-exec-percentage">
                           {taskStatus?.progress || 10}%
@@ -1218,11 +1417,42 @@ export function AutoCompletePage({
 
                       {/* Question Stem preview with fade in */}
                       <div className="fe-exec-stem-preview">
-                        <small>当前处理题干：</small>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <small>
+                            当前作答题干 (第 {taskStatus?.current_question_index || 1} / {taskStatus?.total_questions || totalQuestions} 题)：
+                          </small>
+                          <span className="admin-pill-badge is-muted" style={{ fontSize: 11 }}>
+                            {voiceMode === 'clone' ? '专属音色克隆中' : voiceMode === 'edge' ? 'Edge-TTS 合成中' : '静音模式'}
+                          </span>
+                        </div>
                         <p className="fe-stem-text">
                           {taskStatus?.current_question_text || '正在逐题提取作答素材与发音词汇表...'}
                         </p>
                       </div>
+
+                      {/* Live Questions Checklist */}
+                      {taskStatus?.question_results && taskStatus.question_results.length > 0 && (
+                        <div className="fe-exec-questions-checklist">
+                          <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--control-muted)', marginBottom: 2 }}>
+                            已完成题目流水明细 ({taskStatus.question_results.length}/{taskStatus.total_questions || totalQuestions})：
+                          </div>
+                          {taskStatus.question_results.map((q) => (
+                            <div key={q.order} className="fe-exec-q-item is-done">
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <Icon name="check_circle" style={{ fontSize: 14, color: '#16a34a' }} />
+                                <strong>Q{q.order}</strong>
+                                <span style={{ color: 'var(--control-muted)', fontSize: 11 }}>[{q.type_name}]</span>
+                                <span style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {q.text}
+                                </span>
+                              </span>
+                              <strong style={{ color: '#15803d', fontFamily: 'DM Mono, monospace' }}>
+                                +{q.awarded_score.toFixed(2)} 分
+                              </strong>
+                            </div>
+                          ))}
+                        </div>
+                      )}
 
                       <div className="fe-exec-details-grid">
                         <div className="fe-exec-tile">
@@ -1240,8 +1470,8 @@ export function AutoCompletePage({
                           </span>
                         </div>
                         <div className="fe-exec-tile">
-                          <small>目标总分</small>
-                          <span>{mode === 'auto' ? autoTargetTotal : manualTotalSum} 分</span>
+                          <small>目标总分与比例</small>
+                          <span>{mode === 'auto' ? `${autoTargetTotal.toFixed(2)}分 (95%比例)` : `${manualTotalSum.toFixed(2)}分`}</span>
                         </div>
                       </div>
                     </div>

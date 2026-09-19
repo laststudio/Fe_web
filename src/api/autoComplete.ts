@@ -8,6 +8,17 @@ export type AutoCompletePermitResponse = {
   expires_in?: number
 }
 
+export type QuestionTaskDetail = {
+  order: number
+  section_order?: number
+  type_name?: string
+  text?: string
+  awarded_score: number
+  max_score: number
+  audio_url?: string
+  status?: string
+}
+
 export type StartAutoCompletePayload = {
   homework_id: string
   homework_name: string
@@ -17,20 +28,34 @@ export type StartAutoCompletePayload = {
   use_time: number
   voice_mode: AutoCompleteVoiceMode
   voice_id?: string
-  per_question_scores?: Record<number, { total: number }>
+  per_question_scores?: Record<number, number | { total: number }>
   permit_token: string
   disclaimer_text: string
 }
 
-export type AutoCompleteTaskStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+export type AutoCompleteTaskStatus =
+  | 'PENDING'
+  | 'PREPARING'
+  | 'EXTRACTING'
+  | 'SYNTHESIZING'
+  | 'SUBMITTING'
+  | 'VERIFYING'
+  | 'COMPLETED'
+  | 'FAILED'
+  | string
 
 export type AutoCompleteTaskResult = {
-  score: number
-  max_score: number
+  score?: number
+  final_score?: number
+  max_score?: number
+  total_point?: number
+  score_rate?: number
   use_time: number
-  homework_id: string
+  homework_id?: string
   homework_name?: string
+  completed_at?: string
   verified_url?: string
+  question_details?: QuestionTaskDetail[]
   raw_response?: Record<string, unknown>
 }
 
@@ -39,7 +64,11 @@ export type AutoCompleteTaskResponse = {
   status: AutoCompleteTaskStatus
   progress: number
   stage_text?: string
+  stage_label?: string
+  current_question_index?: number
+  total_questions?: number
   current_question_text?: string
+  question_results?: QuestionTaskDetail[]
   result?: AutoCompleteTaskResult | null
   error?: string | null
 }

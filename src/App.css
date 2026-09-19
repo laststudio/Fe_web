@@ -4338,3 +4338,168 @@ html:has(.control-shell) {
   box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3) !important;
 }
 
+/* Pipeline Steps Strip */
+.fe-pipeline-steps {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 4px 0;
+  margin-bottom: 8px;
+}
+
+.fe-pipeline-step {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.fe-pipeline-step.is-done {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.fe-pipeline-step.is-active {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+  animation: pulse-step 1.5s infinite;
+}
+
+@keyframes pulse-step {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+}
+
+/* Live Execution Questions Checklist */
+.fe-exec-questions-checklist {
+  max-height: 140px;
+  overflow-y: auto;
+  border: 1px solid var(--control-line);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 6px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fe-exec-q-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: #f8fafc;
+}
+
+.fe-exec-q-item.is-done {
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.fe-exec-q-item.is-current {
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+/* Settlement Table */
+.fe-settlement-table-wrap {
+  width: 100%;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--control-line);
+  border-radius: 8px;
+  margin: 14px 0;
+}
+
+.fe-settlement-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  text-align: left;
+}
+
+.fe-settlement-table th {
+  background: #f8fafc;
+  padding: 8px 10px;
+  color: var(--control-muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--control-line);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.fe-settlement-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #f1f5f9;
+  color: var(--control-ink);
+}
+
+.fe-settlement-table tr:hover td {
+  background: #f8fafc;
+}
+
+/* Ratio Presets */
+.fe-ratio-presets {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  flex-wrap: wrap;
+}
+
+.fe-ratio-preset-btn {
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid var(--control-line);
+  background: #ffffff;
+  color: var(--control-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.fe-ratio-preset-btn:hover {
+  background: #f1f5f9;
+  color: var(--control-ink);
+  border-color: #cbd5e1;
+}
+
+.fe-ratio-preset-btn.is-active {
+  background: #eff6ff;
+  color: #2563eb;
+  border-color: #93c5fd;
+}
+
+/* Quick Fill Bar in Manual Mode */
+.fe-quick-fill-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border: 1px solid var(--control-line);
+  border-radius: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.fe-quick-fill-bar span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--control-muted);
+}
+
+
