@@ -10,7 +10,7 @@ import {
   type StartAutoCompletePayload,
 } from './api/autoComplete'
 import { getVoiceAudioUrl, getVoices, type VoiceProfile } from './api/voice'
-import { getHomeworkDetail, type HomeworkItem, type Paper } from './api/homework'
+import { getHomeworkDetail, startParseHomework, type HomeworkItem, type Paper } from './api/homework'
 
 const DISCLAIMER_PHRASE = '作者不为使用此功能造成的一切后果负责'
 
@@ -72,8 +72,24 @@ export function AutoCompletePage({
           setFetchedPaper(res)
         }
       })
-      .catch((err) => {
-        console.warn('Failed to load paper detail in AutoCompletePage:', err)
+      .catch(async (err) => {
+        console.warn('Paper not yet cached in Redis, auto-initiating parse:', err)
+        if (!active) return
+        try {
+          const parseRes = await startParseHomework(accessToken, {
+            homework_id: homework.id,
+            homework_name: homework.name || '英语作业',
+            contents: homework.contents || [],
+            resource_id: homework.resource_id,
+            pk: homework.pk,
+            set_type: homework.set_type,
+          })
+          if (active && parseRes?.result) {
+            setFetchedPaper(parseRes.result)
+          }
+        } catch (parseErr) {
+          console.warn('Auto parse failed in AutoCompletePage:', parseErr)
+        }
       })
       .finally(() => {
         if (active) setIsLoadingPaper(false)
@@ -81,7 +97,7 @@ export function AutoCompletePage({
     return () => {
       active = false
     }
-  }, [paper, fetchedPaper, homework.id, accessToken])
+  }, [paper, fetchedPaper, homework.id, accessToken, homework.name, homework.contents, homework.resource_id, homework.pk, homework.set_type])
   const compatibility = useMemo(() => {
     return checkHomeworkCompatibility(homework, activePaper)
   }, [homework, activePaper])
