@@ -689,6 +689,12 @@ function PaperReaderView({
             </button>
           )}
         </div>
+      ) : paper.sections.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
+          <Icon name="assignment" style={{ fontSize: '48px', opacity: 0.5, marginBottom: '16px' }} />
+          <div style={{ fontSize: '16px', fontWeight: 500, marginBottom: '8px' }}>暂无可显示的题目内容</div>
+          <div style={{ fontSize: '13px', opacity: 0.8 }}>该作业可能暂未开始或暂无可解析的题目数据</div>
+        </div>
       ) : (
         <div className="fe-reader-content">
           {paper.sections.map((sec, idx) => (
@@ -1908,6 +1914,8 @@ function App() {
         homework_name: item.name,
         contents: item.contents,
         resource_id: item.resource_id,
+        pk: item.pk,
+        set_type: item.set_type,
       })
 
       if (resp.status === 'COMPLETED' && resp.result) {

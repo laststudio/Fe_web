@@ -159,6 +159,8 @@ export function startParseHomework(
     homework_name: string
     contents: HomeworkContentItem[]
     resource_id?: string
+    pk?: number
+    set_type?: number
   }
 ): Promise<ParseTaskResponse> {
   return apiRequest<ParseTaskResponse>('/homework/parse', {
