@@ -27,8 +27,11 @@ import { startAuthorization } from './auth/oauth'
 import type { AuthSession } from './auth/types'
 import { transitionRoute, transitionTo } from './navigation/controller'
 import CapVerification from './CapVerification'
+import AutoCompletePage from './AutoCompletePage'
+import VoiceManager from './components/VoiceManager'
+import { getAutoCompletePermit } from './api/autoComplete'
 
-type Page = '/' | '/history' | '/pk' | '/settings'
+type Page = '/' | '/history' | '/pk' | '/settings' | string
 
 const logoSrc = '/fe_logo.png'
 const sidebarCollapsedStorageKey = 'fe-web.sidebar-collapsed'
@@ -65,7 +68,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
   },
 ]
 
-const pageMeta: Record<Page, { title: string; caption: string }> = {
+const pageMeta: Record<string, { title: string; caption: string }> = {
   '/': {
     title: '当前作业',
     caption: '获取与查看作业标准答案',
@@ -299,9 +302,13 @@ function shouldTriggerCaptchaDefense(): boolean {
 }
 
 function CaptchaModal({
+  title = '安全人机验证',
+  subtitle = '为保护 ETS 账号安全并防御接口频繁请求，请完成下方人机验证以继续。',
   onSuccess,
   onCancel,
 }: {
+  title?: string
+  subtitle?: string
   onSuccess: (capToken: string) => void
   onCancel: () => void
 }) {
@@ -322,8 +329,8 @@ function CaptchaModal({
             <Icon name="verified_user" filled />
           </div>
           <div>
-            <h2 id="captcha-modal-title">安全人机验证</h2>
-            <p>为保护 ETS 账号安全并防御接口频繁请求，请完成下方人机验证以继续。</p>
+            <h2 id="captcha-modal-title">{title}</h2>
+            <p>{subtitle}</p>
           </div>
         </div>
 
@@ -516,6 +523,7 @@ function PaperReaderView({
   onExportAnswer,
   onReParse,
   onManualRead,
+  onAutoComplete,
 }: {
   homework: HomeworkItem
   paper: Paper | null
@@ -529,6 +537,7 @@ function PaperReaderView({
   onExportAnswer: () => void
   onReParse: () => void
   onManualRead: () => void
+  onAutoComplete?: () => void
 }) {
   return (
     <div className="fe-reader-view">
@@ -573,6 +582,17 @@ function PaperReaderView({
                   <span>{copyExportStatus === 'membership_required' ? '会员导出' : '导出 TXT'}</span>
                 </button>
               </>
+            )}
+            {onAutoComplete && (
+              <button
+                className="control-primary fe-btn-auto-complete"
+                type="button"
+                onClick={onAutoComplete}
+                title="使用高拟真语音与控分算法自动完成此试卷"
+              >
+                <Icon name="bolt" />
+                <span>⚡ 自动完成此试卷</span>
+              </button>
             )}
             <button
               className="control-secondary"
@@ -715,6 +735,7 @@ function HomeworkCard({
   answerParserDenyReason,
   onOpen,
   onTriggerParse,
+  onAutoComplete,
 }: {
   item: HomeworkItem
   index: number
@@ -724,6 +745,7 @@ function HomeworkCard({
   answerParserDenyReason?: string
   onOpen: (hw: HomeworkItem) => void
   onTriggerParse: (hw: HomeworkItem) => void
+  onAutoComplete?: (hw: HomeworkItem) => void
 }) {
   return (
     <div
@@ -789,6 +811,21 @@ function HomeworkCard({
       </div>
 
       <div className="fe-homework-card__right">
+        {onAutoComplete && (!item.status || (item.status !== 2 && item.status !== '2')) && (
+          <button
+            className="control-secondary fe-btn-auto-complete"
+            type="button"
+            style={{ padding: '7px 14px', fontSize: 12.5 }}
+            onClick={(e) => {
+              e.stopPropagation()
+              onAutoComplete(item)
+            }}
+            title="一键安全自动完成此作业"
+          >
+            <Icon name="bolt" />
+            <span>⚡ 自动完成</span>
+          </button>
+        )}
         {isParsing ? (
           <span className="status-pill status-pill--parsing">
             <Icon name="sync" className="status-pill__spin" />
@@ -893,6 +930,7 @@ function HomeworkListView({
   onManualReadList,
   onOpenHomework,
   onTriggerParse,
+  onAutoComplete,
 }: {
   activeTab: 'current' | 'history' | 'pk'
   hasLoaded: boolean
@@ -912,6 +950,7 @@ function HomeworkListView({
   onManualReadList: () => void
   onOpenHomework: (hw: HomeworkItem) => void
   onTriggerParse: (hw: HomeworkItem) => void
+  onAutoComplete?: (hw: HomeworkItem) => void
 }) {
   const [query, setQuery] = useState('')
 
@@ -1286,6 +1325,7 @@ function HomeworkListView({
               answerParserDenyReason={answerParserDenyReason}
               onOpen={onOpenHomework}
               onTriggerParse={onTriggerParse}
+              onAutoComplete={onAutoComplete}
             />
           ))}
         </div>
@@ -1298,12 +1338,16 @@ function SettingsPage({
   currentUser,
   accountInfo,
   softwareConfig,
+  accessToken,
+  onToast,
   onRefreshSession,
   onOpenAnnouncement,
 }: {
   currentUser: User | null
   accountInfo: PlatformAccountInfo | null
   softwareConfig: SoftwareConfig | null
+  accessToken: string
+  onToast?: (msg: string) => void
   onRefreshSession: () => void
   onOpenAnnouncement: () => void
 }) {
@@ -1319,6 +1363,9 @@ function SettingsPage({
 
   return (
     <div className="fe-settings-container">
+      {/* Voice Clone & Online Studio Management */}
+      <VoiceManager accessToken={accessToken} onToast={onToast} />
+
       {/* Current User Profile Card */}
       <section className="admin-policy-card">
         <div className="admin-policy-card-head">
@@ -1519,6 +1566,7 @@ function SettingsPage({
 
 function currentPage(pathname: string): Page | null {
   if (pathname === '/' || pathname === '/history' || pathname === '/pk' || pathname === '/settings') return pathname
+  if (pathname.startsWith('/homework/') && pathname.endsWith('/auto-complete')) return pathname
   return null
 }
 
@@ -2249,6 +2297,36 @@ function App() {
   const [showCaptchaModal, setShowCaptchaModal] = useState(false)
   const pendingRefreshRef = useRef<((token?: string) => void) | null>(null)
 
+  // Auto Complete states
+  const [autoCompleteModalHw, setAutoCompleteModalHw] = useState<HomeworkItem | null>(null)
+  const [autoCompletePermitToken, setAutoCompletePermitToken] = useState<string>('')
+  const [autoCompleteTargetHw, setAutoCompleteTargetHw] = useState<HomeworkItem | null>(null)
+
+  function handleTriggerAutoComplete(hw: HomeworkItem) {
+    setAutoCompleteModalHw(hw)
+  }
+
+  async function handleAutoCompleteCaptchaSuccess(capToken: string) {
+    const hw = autoCompleteModalHw
+    setAutoCompleteModalHw(null)
+    if (!hw || !session) return
+
+    showToast('安全人机验证通过，正在申请自动完成准入令牌...')
+    try {
+      const res = await getAutoCompletePermit(session.accessToken, hw.id, capToken)
+      setAutoCompletePermitToken(res.permit_token)
+      setAutoCompleteTargetHw(hw)
+      const nextPath = `/homework/${hw.id}/auto-complete`
+      transitionRoute(() => {
+        window.history.pushState(null, '', nextPath)
+        setPathname(nextPath)
+      })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '申请自动完成准入令牌失败'
+      showToast(msg)
+    }
+  }
+
   function handleManualReadList() {
     if (isFetchingHomeworksRef.current) return
     if (shouldTriggerCaptchaDefense()) {
@@ -2377,6 +2455,15 @@ function App() {
             setShowCaptchaModal(false)
             pendingRefreshRef.current = null
           }}
+        />
+      )}
+
+      {autoCompleteModalHw && (
+        <CaptchaModal
+          title="自动完成 · 安全人机验证"
+          subtitle={`为防止滥用与保护账号，开启「${autoCompleteModalHw.name}」自动完成前需完成安全人机验证`}
+          onSuccess={handleAutoCompleteCaptchaSuccess}
+          onCancel={() => setAutoCompleteModalHw(null)}
         />
       )}
 
@@ -2525,8 +2612,20 @@ function App() {
           {/* Page Heading */}
           <header className="control-page-heading">
             <div>
-              <h1>{viewingPaper ? `试卷阅读 · ${viewingPaper.homework.name}` : meta.title}</h1>
-              <span>{viewingPaper ? '查看作业结构、题目解析与标准答案' : meta.caption}</span>
+              <h1>
+                {pathname.startsWith('/homework/') && pathname.endsWith('/auto-complete')
+                  ? `作业自动完成 · ${autoCompleteTargetHw?.name || '作业配置'}`
+                  : viewingPaper
+                  ? `试卷阅读 · ${viewingPaper.homework.name}`
+                  : meta.title}
+              </h1>
+              <span>
+                {pathname.startsWith('/homework/') && pathname.endsWith('/auto-complete')
+                  ? '高拟真自动化答题、分值调度与风控防呆'
+                  : viewingPaper
+                  ? '查看作业结构、题目解析与标准答案'
+                  : meta.caption}
+              </span>
             </div>
           </header>
 
@@ -2581,11 +2680,41 @@ function App() {
           />
 
           {/* Page Work area */}
-          {page === '/settings' ? (
+          {pathname.startsWith('/homework/') && pathname.endsWith('/auto-complete') ? (
+            <AutoCompletePage
+              homework={
+                autoCompleteTargetHw ||
+                homeworks.find((h) => pathname.includes(h.id)) ||
+                historyHomeworks.find((h) => pathname.includes(h.id)) || {
+                  id: pathname.replace('/homework/', '').replace('/auto-complete', ''),
+                  name: '作业自动完成',
+                  contents: [],
+                }
+              }
+              paper={
+                (autoCompleteTargetHw && paperCache[autoCompleteTargetHw.id]) ||
+                (viewingPaper && viewingPaper.homework.id === autoCompleteTargetHw?.id
+                  ? viewingPaper.paper
+                  : null)
+              }
+              permitToken={autoCompletePermitToken}
+              accessToken={session.accessToken}
+              onBack={() => {
+                setAutoCompletePermitToken('')
+                navigate('/')
+              }}
+              onOpenSettingsVoice={() => {
+                navigate('/settings')
+              }}
+              onToast={showToast}
+            />
+          ) : page === '/settings' ? (
             <SettingsPage
               currentUser={currentUser}
               accountInfo={accountInfo}
               softwareConfig={softwareConfig}
+              accessToken={session.accessToken}
+              onToast={showToast}
               onRefreshSession={handleRequestRefresh}
               onOpenAnnouncement={() => setShowAnnouncementModal(true)}
             />
@@ -2599,6 +2728,7 @@ function App() {
               answerParserStatus={getFeatureStatus('answer_parser', '答案解析').status}
               answerParserDenyReason={getFeatureDenyReason('answer_parser')}
               onBack={() => setViewingPaper(null)}
+              onAutoComplete={() => handleTriggerAutoComplete(viewingPaper.homework)}
               onCopyAnswer={() => viewingPaper.paper && handleCopyAnswer(viewingPaper.paper)}
               onExportAnswer={() => viewingPaper.paper && handleExportAnswer(viewingPaper.paper)}
               onReParse={() => handleReReadPaper(viewingPaper.homework)}
@@ -2630,6 +2760,7 @@ function App() {
               onManualReadList={handleManualReadList}
               onOpenHomework={handleOpenHomework}
               onTriggerParse={handleTriggerParse}
+              onAutoComplete={handleTriggerAutoComplete}
             />
           )}
         </section>
