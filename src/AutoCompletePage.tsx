@@ -27,8 +27,11 @@ export type AutoCompletePageProps = {
 
 type QuestionScoreItem = {
   order: number
+  sectionCaption?: string
   typeName: string
   questionText: string
+  answers?: string[]
+  options?: string[]
   maxScore: number
   allocatedScore: number
   manualScore: number
@@ -104,7 +107,17 @@ export function AutoCompletePage({
 
   // Paper & Questions calculation
   const { totalQuestions, paperTotalScore, questions } = useMemo(() => {
-    let qList: Array<{ order: number; typeName: string; questionText: string; maxScore: number }> = []
+    let qList: Array<{
+      order: number
+      sectionOrder?: number
+      sub_order?: number
+      sectionCaption?: string
+      typeName: string
+      questionText: string
+      answers: string[]
+      options: string[]
+      maxScore: number
+    }> = []
 
     if (activePaper && Array.isArray(activePaper.sections) && activePaper.sections.length > 0) {
       let count = 0
@@ -113,13 +126,22 @@ export function AutoCompletePage({
         for (const q of sec.questions) {
           if (!q) continue
           count++
+          const qObj = q as Record<string, unknown>
           const explicitPoint = Number(
-            (q as any).point ?? (q as any).maxScore ?? (q as any).score ?? (q as any).max_score
+            qObj.point ?? qObj.maxScore ?? qObj.score ?? qObj.max_score
           )
+          const secCaption = sec.caption || sec.typeName || ''
+          const qTypeName = q.typeName || sec.typeName || '题目'
+          const displayName = secCaption && secCaption !== qTypeName ? `[${secCaption}] ${qTypeName}` : qTypeName
           qList.push({
             order: q.order || count,
-            typeName: q.typeName || sec.typeName || '题目',
+            sectionOrder: typeof qObj.sectionOrder === 'number' ? qObj.sectionOrder : undefined,
+            sub_order: typeof qObj.sub_order === 'number' ? qObj.sub_order : undefined,
+            sectionCaption: secCaption,
+            typeName: displayName,
             questionText: q.questionText || q.originalText || `第 ${count} 题`,
+            answers: Array.isArray(q.answers) ? q.answers : (q.answers ? [String(q.answers)] : []),
+            options: Array.isArray(q.options) ? q.options : (q.options ? [String(q.options)] : []),
             maxScore: Number.isFinite(explicitPoint) && explicitPoint > 0 ? explicitPoint : 0,
           })
         }
@@ -127,24 +149,21 @@ export function AutoCompletePage({
     }
 
     if (qList.length === 0) {
-      // Fallback if paper structure wasn't fully parsed yet or has no questions
-      const count = 10
-      for (let i = 1; i <= count; i++) {
-        qList.push({
-          order: i,
-          typeName: '综合题型',
-          questionText: `第 ${i} 题`,
-          maxScore: 3.0,
-        })
+      return {
+        totalQuestions: 0,
+        paperTotalScore: 0,
+        questions: [],
       }
     }
 
-    const tQuestions = Math.max(1, qList.length)
+    const tQuestions = qList.length
+    const hwObj = homework as Record<string, unknown>
+    const paperObj = activePaper as Record<string, unknown> | null
     const rawTotal = Number(
-      (homework as any)?.total_score ||
-      (homework as any)?.total_point ||
-      (activePaper as any)?.totalScore ||
-      (activePaper as any)?.total_score
+      hwObj?.total_score ||
+      hwObj?.total_point ||
+      paperObj?.totalScore ||
+      paperObj?.total_score
     )
     const isPkOrVocab =
       homework?.pk === 1 ||
@@ -156,7 +175,7 @@ export function AutoCompletePage({
     const isBeijing = /北京/i.test(hwTitle)
     const oralStandardTotal = isBeijing ? 40.0 : 30.0
 
-    let defaultTotal = oralStandardTotal
+    let defaultTotal: number
     if (isPkOrVocab) {
       defaultTotal = Number.isFinite(rawTotal) && rawTotal > 0 ? rawTotal : 100.0
     } else {
@@ -322,8 +341,11 @@ export function AutoCompletePage({
 
       results.push({
         order: q.order,
+        sectionCaption: q.sectionCaption,
         typeName: q.typeName,
         questionText: q.questionText,
+        answers: q.answers,
+        options: q.options,
         maxScore: q.maxScore,
         allocatedScore: allocated,
         manualScore: manualScores[q.order] ?? 0,
@@ -662,7 +684,26 @@ export function AutoCompletePage({
         </div>
 
         <div className="fe-mode-tab-body">
-          {mode === 'auto' ? (
+          {questions.length === 0 ? (
+            <div className="fe-auto-mode-view" style={{ textAlign: 'center', padding: '40px 20px' }}>
+              <Icon name="assignment_late" style={{ fontSize: 40, color: '#f59e0b', marginBottom: 12 }} />
+              <h4 style={{ margin: '0 0 8px', color: '#1e293b' }}>未能提取到该作业的题目明细</h4>
+              <p style={{ color: '#64748b', fontSize: 13, margin: '0 0 16px' }}>
+                云端资源包可能尚未解析就绪或需重新同步，请返回重试或刷新页面。
+              </p>
+              <button
+                type="button"
+                className="control-secondary"
+                onClick={() => {
+                  setIsLoadingPaper(true)
+                  setFetchedPaper(null)
+                }}
+              >
+                <Icon name="refresh" />
+                <span>重新解析试卷</span>
+              </button>
+            </div>
+          ) : mode === 'auto' ? (
             /* AUTO MODE */
             <div className="fe-auto-mode-view">
               <div className="fe-slider-panel">
@@ -841,6 +882,21 @@ export function AutoCompletePage({
                             {isOver && <span className="fe-danger-pill">【危险：单题已超出真实满分 ({q.maxScore.toFixed(2)}分)】</span>}
                           </div>
                           <p className="fe-manual-stem">{q.questionText}</p>
+                          {q.options && q.options.length > 0 && (
+                            <div className="fe-manual-options-list" style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                              {q.options.map((opt, oIdx) => (
+                                <span key={oIdx} className="admin-pill-badge is-muted" style={{ fontSize: 11.5 }}>
+                                  {opt}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {q.answers && q.answers.length > 0 && (
+                            <div style={{ marginTop: 4, fontSize: 12, color: '#059669', display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <Icon name="check_circle" style={{ fontSize: 14 }} />
+                              <span>作答参考/标准内容: <strong>{q.answers.join(' / ')}</strong></span>
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -990,19 +1046,29 @@ export function AutoCompletePage({
         <button
           type="button"
           className="control-primary fe-start-button"
-          disabled={!compatibility.supported}
-          style={!compatibility.supported ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
-          title={!compatibility.supported ? compatibility.reason : '开始自动完成'}
+          disabled={!compatibility.supported || questions.length === 0}
+          style={(!compatibility.supported || questions.length === 0) ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+          title={!compatibility.supported ? compatibility.reason : (questions.length === 0 ? '试卷题目未就绪' : '开始自动完成')}
           onClick={() => {
             if (!compatibility.supported) {
               onToast?.(compatibility.reason || '该作业包含未适配题型，暂未开放自动完成')
               return
             }
+            if (questions.length === 0) {
+              onToast?.('试卷题目尚未解析就绪，请重新解析')
+              return
+            }
             handleOpenRiskModal()
           }}
         >
-          <Icon name={compatibility.supported ? 'bolt' : 'block'} />
-          <span>{compatibility.supported ? '开始自动完成' : '该作业暂不支持自动完成'}</span>
+          <Icon name={!compatibility.supported || questions.length === 0 ? 'block' : 'bolt'} />
+          <span>
+            {!compatibility.supported
+              ? '该作业暂不支持自动完成'
+              : questions.length === 0
+                ? '题目未解析就绪'
+                : '开始自动完成'}
+          </span>
         </button>
       </div>
 
@@ -1375,12 +1441,13 @@ export function AutoCompletePage({
                             </tr>
                           </thead>
                           <tbody>
-                            {(taskStatus.result?.question_details || taskStatus.question_results || allocatedQuestionScores).map((item: any, idx: number) => {
-                              const order = item.order || idx + 1
-                              const typeName = item.type_name || item.typeName || '题目'
-                              const text = item.text || item.questionText || `第 ${order} 题`
-                              const maxS = item.max_score ?? item.maxScore ?? (paperTotalScore / Math.max(1, totalQuestions))
-                              const score = item.awarded_score ?? item.allocatedScore ?? (manualScores[order] || 0)
+                            {(taskStatus.result?.question_details || taskStatus.question_results || allocatedQuestionScores).map((rawItem: unknown, idx: number) => {
+                              const item = rawItem as Record<string, unknown>
+                              const order = Number(item.order || idx + 1)
+                              const typeName = String(item.type_name || item.typeName || '题目')
+                              const text = String(item.text || item.questionText || `第 ${order} 题`)
+                              const maxS = (item.max_score ?? item.maxScore ?? (paperTotalScore / Math.max(1, totalQuestions))) as number
+                              const score = (item.awarded_score ?? item.allocatedScore ?? (manualScores[order] || 0)) as number
                               return (
                                 <tr key={order}>
                                   <td><strong>Q{order}</strong></td>
