@@ -130,8 +130,29 @@ export function AutoCompletePage({
       (activePaper as any)?.totalScore ||
       (activePaper as any)?.total_score
     )
-    const isPkOrVocab = homework?.pk === 1 || homework?.set_type === 6
-    const defaultTotal = Number.isFinite(rawTotal) && rawTotal > 0 ? rawTotal : (isPkOrVocab ? 100.0 : 30.0)
+    const isPkOrVocab =
+      homework?.pk === 1 ||
+      homework?.set_type === 6 ||
+      /词汇|单词|默写|word|pk/i.test(homework?.name || '') ||
+      /词汇|单词|默写|word|pk/i.test(activePaper?.title || activePaper?.paperName || '')
+
+    const hwTitle = homework?.name || activePaper?.title || activePaper?.paperName || ''
+    const isBeijing = /北京/i.test(hwTitle)
+    const oralStandardTotal = isBeijing ? 40.0 : 30.0
+
+    let defaultTotal = oralStandardTotal
+    if (isPkOrVocab) {
+      defaultTotal = Number.isFinite(rawTotal) && rawTotal > 0 ? rawTotal : 100.0
+    } else {
+      // For oral / mock / room test exams (机房套题/听说训练/中考机考):
+      // Official standard total is 30.0 (or 40.0 for Beijing).
+      // If rawTotal is 100.0 (ETS percent scale), it MUST be normalized to official 30.0!
+      if (Number.isFinite(rawTotal) && rawTotal > 0 && Math.abs(rawTotal - 100.0) >= 0.01) {
+        defaultTotal = rawTotal
+      } else {
+        defaultTotal = oralStandardTotal
+      }
+    }
 
     // Check if questions already carry explicit points from paper
     const hasExplicitPoints = qList.some((q) => q.maxScore > 0)
@@ -140,15 +161,35 @@ export function AutoCompletePage({
     if (hasExplicitPoints) {
       const explicitSum = Number(qList.reduce((sum, q) => sum + (q.maxScore > 0 ? q.maxScore : 0), 0).toFixed(2))
       if (explicitSum > 0) {
-        calculatedPaperTotal = explicitSum
+        if (!isPkOrVocab && Math.abs(explicitSum - 100.0) < 0.1) {
+          // Oral paper was previously scaled to 100.0 instead of 30.0 (or 40.0)
+          calculatedPaperTotal = defaultTotal
+          const scale = calculatedPaperTotal / explicitSum
+          qList = qList.map((q) => ({
+            ...q,
+            maxScore: Number((q.maxScore * scale).toFixed(2)),
+          }))
+          const currentSum = Number(qList.reduce((sum, q) => sum + q.maxScore, 0).toFixed(2))
+          const diff = Number((calculatedPaperTotal - currentSum).toFixed(2))
+          if (diff !== 0 && qList.length > 0) {
+            qList[qList.length - 1].maxScore = Number((qList[qList.length - 1].maxScore + diff).toFixed(2))
+          }
+        } else {
+          calculatedPaperTotal = explicitSum
+          qList = qList.map((q) => ({
+            ...q,
+            maxScore: q.maxScore > 0 ? q.maxScore : Number((calculatedPaperTotal / tQuestions).toFixed(2)),
+          }))
+        }
       }
-      qList = qList.map((q) => ({
-        ...q,
-        maxScore: q.maxScore > 0 ? q.maxScore : Number((calculatedPaperTotal / tQuestions).toFixed(2)),
-      }))
     } else {
       const pointPerQ = Number((defaultTotal / tQuestions).toFixed(2))
       qList = qList.map((q) => ({ ...q, maxScore: pointPerQ }))
+      const currentSum = Number(qList.reduce((sum, q) => sum + q.maxScore, 0).toFixed(2))
+      const diff = Number((defaultTotal - currentSum).toFixed(2))
+      if (diff !== 0 && qList.length > 0) {
+        qList[qList.length - 1].maxScore = Number((qList[qList.length - 1].maxScore + diff).toFixed(2))
+      }
     }
 
     return {
