@@ -1634,6 +1634,35 @@ function App() {
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [homeworkError, setHomeworkError] = useState<HomeworkErrorInfo | string | null>(null)
 
+  // User Profile Dropdown Popover state
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const userMenuRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!userMenuOpen) return
+
+    function handleOutsideClick(e: MouseEvent | TouchEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false)
+      }
+    }
+
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        setUserMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleOutsideClick)
+    document.addEventListener('touchstart', handleOutsideClick)
+    document.addEventListener('keydown', handleEscape)
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick)
+      document.removeEventListener('touchstart', handleOutsideClick)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [userMenuOpen])
+
   // Software Config & Features State
   const [softwareConfig, setSoftwareConfig] = useState<SoftwareConfig | null>(null)
   const [softwareFeatures, setSoftwareFeatures] = useState<SoftwareFeatureItem[]>([])
@@ -1753,6 +1782,7 @@ function App() {
 
   useEffect(() => {
     const onPopState = () => {
+      setUserMenuOpen(false)
       const nextPathname = window.location.pathname
       transitionRoute(() => setPathname(nextPathname))
     }
@@ -2393,6 +2423,7 @@ function App() {
   }
 
   function navigate(nextPage: Page) {
+    setUserMenuOpen(false)
     setViewingPaper(null)
     setMobileNavOpen(false)
     if (nextPage === window.location.pathname) {
@@ -2516,7 +2547,7 @@ function App() {
           <div className="control-header-actions">
             {softwareConfig && (softwareConfig.announcementTitle || softwareConfig.announcementMessage) && (
               <button
-                className="control-header-link"
+                className="control-header-link control-announcement-link"
                 onClick={() => setShowAnnouncementModal(true)}
                 title="查看系统公告"
                 type="button"
@@ -2526,32 +2557,174 @@ function App() {
               </button>
             )}
 
-            <a
-              className="control-account"
-              href="https://lastudio.cc/account"
-              target="_blank"
-              rel="noreferrer"
-              title="查看与管理账号"
-            >
-              <span className="control-account-avatar">
-                {avatarUrl ? (
-                  <img src={avatarUrl} alt={currentUser?.name || ''} />
-                ) : (
-                  currentUser?.name ? currentUser.name.slice(0, 1).toUpperCase() : <Icon name="person" />
-                )}
-              </span>
-              <div className="control-account-meta">
-                <strong>{currentUser?.name || '我的账号'}</strong>
-                <small>
-                  {accountInfo?.bound
-                    ? (accountInfo.account_display ? `ETS: ${accountInfo.account_display}` : 'ETS 已连接')
-                    : 'ETS 未绑定'}
-                </small>
-              </div>
-            </a>
+            {/* User Account / Profile Dropdown */}
+            <div className="control-account-wrapper" ref={userMenuRef}>
+              <button
+                className={`control-account ${userMenuOpen ? 'is-open' : ''}`}
+                onClick={() => setUserMenuOpen((prev) => !prev)}
+                title="查看个人中心与快捷操作"
+                type="button"
+                aria-expanded={userMenuOpen}
+                aria-haspopup="menu"
+              >
+                <span className="control-account-avatar">
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt={currentUser?.name || ''} />
+                  ) : (
+                    currentUser?.name ? currentUser.name.slice(0, 1).toUpperCase() : <Icon name="person" />
+                  )}
+                </span>
+                <div className="control-account-meta">
+                  <strong>{currentUser?.name || '我的账号'}</strong>
+                  <small>
+                    {accountInfo?.bound
+                      ? (accountInfo.account_display ? `ETS: ${accountInfo.account_display}` : 'ETS 已连接')
+                      : 'ETS 未绑定'}
+                  </small>
+                </div>
+                <Icon name="expand_more" className={`control-account-caret ${userMenuOpen ? 'is-open' : ''}`} />
+              </button>
+
+              {userMenuOpen && (
+                <>
+                  <div
+                    className="control-user-dropdown-backdrop"
+                    onClick={() => setUserMenuOpen(false)}
+                    aria-hidden="true"
+                  />
+                  <div className="control-user-dropdown" role="menu">
+                    <div className="control-user-dropdown-header">
+                      <div className="control-user-dropdown-avatar">
+                        {avatarUrl ? (
+                          <img src={avatarUrl} alt={currentUser?.name || ''} />
+                        ) : (
+                          currentUser?.name ? currentUser.name.slice(0, 1).toUpperCase() : <Icon name="person" />
+                        )}
+                      </div>
+                      <div className="control-user-dropdown-info">
+                        <div className="control-user-dropdown-name-row">
+                          <strong className="control-user-dropdown-name">{currentUser?.name || '我的通行证'}</strong>
+                          {currentUser?.member_level ? (
+                            <span className="control-user-badge vip">VIP {currentUser.member_level}</span>
+                          ) : (
+                            <span className="control-user-badge">普通会员</span>
+                          )}
+                        </div>
+                        <div className="control-user-dropdown-uid">UID #{currentUser?.id || '-'}</div>
+                        <div className={`control-user-dropdown-ets ${accountInfo?.bound ? 'is-bound' : 'is-unbound'}`}>
+                          <span className="control-user-ets-dot" />
+                          <span>
+                            {accountInfo?.bound
+                              ? (accountInfo.account_display ? `ETS: ${accountInfo.account_display}` : 'ETS 已连接')
+                              : 'ETS 未绑定'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="control-user-dropdown-menu">
+                      <button
+                        className={`control-user-dropdown-item as-button ${page === '/settings' ? 'is-current' : ''}`}
+                        onClick={() => {
+                          setUserMenuOpen(false)
+                          navigate('/settings')
+                        }}
+                        type="button"
+                        role="menuitem"
+                      >
+                        <div className="control-user-dropdown-icon">
+                          <Icon name="tune" />
+                        </div>
+                        <div className="control-user-dropdown-text">
+                          <strong>工作台设置</strong>
+                          <small>ETS 账号连接与功能偏好</small>
+                        </div>
+                        <Icon name="chevron_right" className="control-user-dropdown-arrow" />
+                      </button>
+
+                      <a
+                        className="control-user-dropdown-item"
+                        href="https://lastudio.cc/account"
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={() => setUserMenuOpen(false)}
+                        role="menuitem"
+                      >
+                        <div className="control-user-dropdown-icon">
+                          <Icon name="manage_accounts" />
+                        </div>
+                        <div className="control-user-dropdown-text">
+                          <strong>通行证中心</strong>
+                          <small>个人信息、ETS 绑定与安全管理</small>
+                        </div>
+                        <Icon name="open_in_new" className="control-user-dropdown-arrow" />
+                      </a>
+
+                      <a
+                        className="control-user-dropdown-item"
+                        href="https://lastudio.cc/admin"
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={() => setUserMenuOpen(false)}
+                        role="menuitem"
+                      >
+                        <div className="control-user-dropdown-icon">
+                          <Icon name="admin_panel_settings" />
+                        </div>
+                        <div className="control-user-dropdown-text">
+                          <strong>管理中心</strong>
+                          <small>LaStudio 控制台后台</small>
+                        </div>
+                        <Icon name="open_in_new" className="control-user-dropdown-arrow" />
+                      </a>
+
+                      {softwareConfig && (softwareConfig.announcementTitle || softwareConfig.announcementMessage) && (
+                        <button
+                          className="control-user-dropdown-item as-button"
+                          onClick={() => {
+                            setUserMenuOpen(false)
+                            setShowAnnouncementModal(true)
+                          }}
+                          type="button"
+                          role="menuitem"
+                        >
+                          <div className="control-user-dropdown-icon">
+                            <Icon name="campaign" />
+                          </div>
+                          <div className="control-user-dropdown-text">
+                            <strong>系统公告</strong>
+                            <small>{softwareConfig.announcementTitle || '查看系统通知'}</small>
+                          </div>
+                          <Icon name="chevron_right" className="control-user-dropdown-arrow" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="control-user-dropdown-divider" />
+
+                    <div className="control-user-dropdown-footer">
+                      <button
+                        className="control-user-dropdown-logout"
+                        onClick={() => {
+                          setUserMenuOpen(false)
+                          transitionTo(oauthConfig.logoutUrl)
+                        }}
+                        type="button"
+                        role="menuitem"
+                      >
+                        <div className="control-user-dropdown-logout-icon">
+                          <Icon name="logout" />
+                        </div>
+                        <span>退出登录</span>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
 
             <a
-              className="control-header-link"
+              className="control-header-link control-header-admin-link"
               href="https://lastudio.cc/admin"
               target="_blank"
               rel="noreferrer"
@@ -2560,7 +2733,7 @@ function App() {
               <span>管理中心</span>
             </a>
             <button
-              className="control-icon-button"
+              className="control-icon-button control-header-logout-button"
               onClick={() => transitionTo(oauthConfig.logoutUrl)}
               title="退出登录"
               type="button"

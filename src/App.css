@@ -316,7 +316,8 @@ html:has(.control-shell) {
   display: none;
 }
 
-.control-site-header.is-compact .control-account > .control-account-meta {
+.control-site-header.is-compact .control-account > .control-account-meta,
+.control-site-header.is-compact .control-account .control-account-caret {
   display: none;
 }
 
@@ -361,9 +362,15 @@ html:has(.control-shell) {
   gap: 8px;
 }
 
+.control-account-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
 .control-account {
   min-height: 42px;
-  padding: 3px 12px 3px 6px;
+  padding: 3px 10px 3px 6px;
   border: 1px solid #dfe5ee;
   border-radius: 10px;
   color: var(--control-ink);
@@ -373,12 +380,38 @@ html:has(.control-shell) {
   gap: 8px;
   text-align: left;
   text-decoration: none;
-  transition: background 0.15s, border-color 0.15s;
+  font: inherit;
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.1s;
 }
 
 .control-account:hover {
   background: #f1f4f8;
   border-color: #cbd5e1;
+}
+
+.control-account:active {
+  transform: scale(0.985);
+}
+
+.control-account.is-open {
+  background: #f0f5ff;
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.control-account-caret {
+  font-size: 18px;
+  color: #7a8597;
+  margin-left: 2px;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), color 0.15s;
+}
+
+.control-account-caret.is-open {
+  transform: rotate(180deg);
+  color: #2563eb;
 }
 
 .control-account-avatar {
@@ -392,6 +425,7 @@ html:has(.control-shell) {
   font-size: 13px;
   font-weight: 700;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .control-account-avatar img {
@@ -415,6 +449,314 @@ html:has(.control-shell) {
   color: #7a8597;
   font-size: 9px;
 }
+
+/* ==========================================================================
+   User Dropdown Popover
+   ========================================================================== */
+
+.control-user-dropdown-backdrop {
+  display: none;
+}
+
+.control-user-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 290px;
+  max-width: calc(100vw - 28px);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(203, 213, 225, 0.75);
+  box-shadow: 0 20px 48px -10px rgba(15, 23, 42, 0.16), 0 0 0 1px rgba(255, 255, 255, 0.8) inset;
+  overflow: hidden;
+  z-index: 150;
+  transform-origin: top right;
+  animation: controlDropdownEnter 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes controlDropdownEnter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.control-user-dropdown-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, rgba(248, 250, 252, 0.95) 0%, rgba(238, 242, 255, 0.75) 100%);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.75);
+}
+
+.control-user-dropdown-avatar {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 12px;
+  background: #e0e7ff;
+  color: #3730a3;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  font-weight: 750;
+  overflow: hidden;
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.15);
+  flex-shrink: 0;
+}
+
+.control-user-dropdown-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.control-user-dropdown-info {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.control-user-dropdown-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.control-user-dropdown-name {
+  font-size: 13.5px;
+  font-weight: 750;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 125px;
+}
+
+.control-user-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.control-user-badge.vip {
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  color: #92400e;
+  border-color: #fcd34d;
+}
+
+.control-user-dropdown-uid {
+  font-size: 11px;
+  color: #8993a4;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.control-user-dropdown-ets {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.control-user-dropdown-ets.is-bound {
+  background: rgba(16, 185, 129, 0.1);
+  color: #047857;
+}
+
+.control-user-dropdown-ets.is-unbound {
+  background: rgba(245, 158, 11, 0.1);
+  color: #b45309;
+}
+
+.control-user-ets-dot {
+  width: 6px;
+  height: 6px;
+  min-width: 6px;
+  border-radius: 50%;
+}
+
+.control-user-dropdown-ets.is-bound .control-user-ets-dot {
+  background: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+.control-user-dropdown-ets.is-unbound .control-user-ets-dot {
+  background: #f59e0b;
+}
+
+.control-user-dropdown-ets span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.control-user-dropdown-menu {
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.control-user-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  color: #334155;
+  text-decoration: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: background 0.15s, color 0.15s, transform 0.1s;
+}
+
+.control-user-dropdown-item:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.control-user-dropdown-item:active {
+  transform: scale(0.985);
+}
+
+.control-user-dropdown-item.as-button {
+  width: 100%;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.control-user-dropdown-item.is-current {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.control-user-dropdown-icon {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #475569;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.control-user-dropdown-icon .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.control-user-dropdown-item:hover .control-user-dropdown-icon {
+  background: #e0e7ff;
+  color: #3b82f6;
+}
+
+.control-user-dropdown-item.is-current .control-user-dropdown-icon {
+  background: #3b82f6;
+  color: #fff;
+}
+
+.control-user-dropdown-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.control-user-dropdown-text strong {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: inherit;
+}
+
+.control-user-dropdown-text small {
+  font-size: 10.5px;
+  color: #8896aa;
+  line-height: 1.25;
+}
+
+.control-user-dropdown-arrow {
+  font-size: 16px;
+  color: #94a3b8;
+}
+
+.control-user-dropdown-divider {
+  height: 1px;
+  background: rgba(226, 232, 240, 0.75);
+  margin: 0;
+}
+
+.control-user-dropdown-footer {
+  padding: 6px;
+}
+
+.control-user-dropdown-logout {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 10px;
+  color: #dc2626;
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background 0.15s;
+  font-family: inherit;
+}
+
+.control-user-dropdown-logout:hover {
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.control-user-dropdown-logout-icon {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.08);
+  color: #dc2626;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+}
+
+.control-user-dropdown-logout-icon .material-symbols-outlined {
+  font-size: 18px;
+}
+
 
 .control-header-link {
   min-height: 40px;
@@ -2422,22 +2764,48 @@ html:has(.control-shell) {
   }
 
   .control-header-actions {
-    gap: 6px;
+    gap: 8px;
+  }
+
+  /* Personal buttons squeeze fix on mobile:
+     Individual Admin link and Logout button are neatly relocated into the User Dropdown Popover */
+  .control-header-actions .control-header-admin-link,
+  .control-header-actions .control-header-logout-button {
+    display: none !important;
   }
 
   .control-account {
-    min-height: 34px;
-    padding: 2px 4px;
+    min-height: 36px;
+    height: 36px;
+    width: 36px;
+    min-width: 36px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 10px;
   }
 
-  .control-account .control-account-meta {
+  .control-account .control-account-meta,
+  .control-account .control-account-caret {
     display: none !important;
   }
 
   .control-account-avatar {
-    width: 28px;
-    height: 28px;
-    font-size: 11.5px;
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    min-height: 30px;
+    font-size: 12px;
+    border-radius: 8px;
+  }
+
+  .control-header-link.control-announcement-link {
+    min-height: 36px;
+    height: 36px;
+    width: 36px;
+    min-width: 36px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 10px;
   }
 
   .control-header-link span {
@@ -2445,16 +2813,36 @@ html:has(.control-shell) {
   }
 
   .control-header-link {
-    min-height: 34px;
-    height: 34px;
+    min-height: 36px;
+    height: 36px;
     padding: 0 8px;
   }
 
   .control-icon-button {
-    width: 34px;
-    height: 34px;
-    min-width: 34px;
-    min-height: 34px;
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  .control-user-dropdown-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 140;
+    background: rgba(15, 23, 42, 0.22);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+  }
+
+  .control-user-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: min(300px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+    z-index: 150;
+    box-shadow: 0 20px 48px rgba(15, 23, 42, 0.22), 0 0 0 1px rgba(203, 213, 225, 0.75);
   }
 
   .toast-notification {
