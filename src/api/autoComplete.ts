@@ -128,7 +128,8 @@ export function checkHomeworkCompatibility(
   // 2. 如果已有试卷结构，检查各个题型
   if (paper && Array.isArray(paper.sections) && paper.sections.length > 0) {
     for (const sec of paper.sections) {
-      const secType = (sec.typeName || sec.category || '').toLowerCase()
+      if (!sec) continue
+      const secType = String(sec.typeName || sec.category || '').toLowerCase()
       for (const rule of UNSUPPORTED_KEYWORD_PATTERNS) {
         if (rule.pattern.test(secType) && !unsupportedList.includes(rule.name)) {
           unsupportedList.push(rule.name)
@@ -137,7 +138,8 @@ export function checkHomeworkCompatibility(
 
       if (Array.isArray(sec.questions)) {
         for (const q of sec.questions) {
-          const qType = (q.typeName || q.category || '').toLowerCase()
+          if (!q) continue
+          const qType = String(q.typeName || q.category || '').toLowerCase()
           for (const rule of UNSUPPORTED_KEYWORD_PATTERNS) {
             if (rule.pattern.test(qType) && !unsupportedList.includes(rule.name)) {
               unsupportedList.push(rule.name)
@@ -157,7 +159,7 @@ export function checkHomeworkCompatibility(
   }
 
   // 3. 检查作业名称与资源名称中是否有明确的未支持特征
-  const hwName = (homework.name || '').toLowerCase()
+  const hwName = String(homework?.name || '').toLowerCase()
   for (const rule of UNSUPPORTED_KEYWORD_PATTERNS) {
     if (rule.pattern.test(hwName) && !unsupportedList.includes(rule.name)) {
       unsupportedList.push(rule.name)

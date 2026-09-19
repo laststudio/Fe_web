@@ -29,6 +29,7 @@ import { transitionRoute, transitionTo } from './navigation/controller'
 import CapVerification from './CapVerification'
 import AutoCompletePage from './AutoCompletePage'
 import VoiceManager from './components/VoiceManager'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { checkHomeworkCompatibility, getAutoCompletePermit } from './api/autoComplete'
 
 type Page = '/' | '/history' | '/pk' | '/settings' | string
@@ -1579,9 +1580,13 @@ function SettingsPage({
   )
 }
 
+function isAutoCompletePath(path: string): boolean {
+  return /^\/homework\/[^/]+\/auto-complete\/?$/.test(path)
+}
+
 function currentPage(pathname: string): Page | null {
   if (pathname === '/' || pathname === '/history' || pathname === '/pk' || pathname === '/settings') return pathname
-  if (pathname.startsWith('/homework/') && pathname.endsWith('/auto-complete')) return pathname
+  if (isAutoCompletePath(pathname)) return pathname
   return null
 }
 
@@ -2442,7 +2447,7 @@ function App() {
     )
   }
 
-  const isAutoCompleteRoute = pathname.startsWith('/homework/') && pathname.endsWith('/auto-complete')
+  const isAutoCompleteRoute = isAutoCompletePath(pathname)
   const meta = pageMeta[page] || (isAutoCompleteRoute
     ? {
         title: '作业自动完成',
@@ -2643,14 +2648,14 @@ function App() {
           <header className="control-page-heading">
             <div>
               <h1>
-                {pathname.startsWith('/homework/') && pathname.endsWith('/auto-complete')
-                  ? `作业自动完成 · ${autoCompleteTargetHw?.name || '作业配置'}`
+                {isAutoCompleteRoute
+                  ? `作业自动完成 · ${autoCompleteTargetHw?.name || '试卷答题配置'}`
                   : viewingPaper
                   ? `试卷阅读 · ${viewingPaper.homework.name}`
                   : meta.title}
               </h1>
               <span>
-                {pathname.startsWith('/homework/') && pathname.endsWith('/auto-complete')
+                {isAutoCompleteRoute
                   ? '高拟真自动化答题、分值调度与风控防呆'
                   : viewingPaper
                   ? '查看作业结构、题目解析与标准答案'
@@ -2710,34 +2715,53 @@ function App() {
           />
 
           {/* Page Work area */}
-          {pathname.startsWith('/homework/') && pathname.endsWith('/auto-complete') ? (
-            <AutoCompletePage
-              homework={
-                autoCompleteTargetHw ||
-                homeworks.find((h) => pathname.includes(h.id)) ||
-                historyHomeworks.find((h) => pathname.includes(h.id)) || {
-                  id: pathname.replace('/homework/', '').replace('/auto-complete', ''),
-                  name: '作业自动完成',
-                  contents: [],
-                }
-              }
-              paper={
-                (autoCompleteTargetHw && paperCache[autoCompleteTargetHw.id]) ||
-                (viewingPaper && viewingPaper.homework.id === autoCompleteTargetHw?.id
-                  ? viewingPaper.paper
-                  : null)
-              }
-              permitToken={autoCompletePermitToken}
-              accessToken={session.accessToken}
-              onBack={() => {
+          {isAutoCompleteRoute ? (
+            <ErrorBoundary
+              fallbackTitle="自动完成模块加载遇到问题"
+              onReset={() => {
                 setAutoCompletePermitToken('')
                 navigate('/')
               }}
-              onOpenSettingsVoice={() => {
-                navigate('/settings')
-              }}
-              onToast={showToast}
-            />
+            >
+              <AutoCompletePage
+                homework={
+                  autoCompleteTargetHw ||
+                  homeworks.find((h) => pathname.includes(h.id)) ||
+                  historyHomeworks.find((h) => pathname.includes(h.id)) || {
+                    id: pathname.replace('/homework/', '').replace('/auto-complete', '').replace(/\//g, ''),
+                    name: '作业自动完成',
+                    contents: [],
+                  }
+                }
+                paper={
+                  (autoCompleteTargetHw && paperCache[autoCompleteTargetHw.id]) ||
+                  (viewingPaper && viewingPaper.homework.id === autoCompleteTargetHw?.id
+                    ? viewingPaper.paper
+                    : null)
+                }
+                permitToken={autoCompletePermitToken}
+                accessToken={session.accessToken}
+                onBack={() => {
+                  setAutoCompletePermitToken('')
+                  navigate('/')
+                }}
+                onRequestPermit={() => {
+                  const targetHw =
+                    autoCompleteTargetHw ||
+                    homeworks.find((h) => pathname.includes(h.id)) ||
+                    historyHomeworks.find((h) => pathname.includes(h.id)) || {
+                      id: pathname.replace('/homework/', '').replace('/auto-complete', '').replace(/\//g, ''),
+                      name: '作业自动完成',
+                      contents: [],
+                    }
+                  handleTriggerAutoComplete(targetHw)
+                }}
+                onOpenSettingsVoice={() => {
+                  navigate('/settings')
+                }}
+                onToast={showToast}
+              />
+            </ErrorBoundary>
           ) : page === '/settings' ? (
             <SettingsPage
               currentUser={currentUser}

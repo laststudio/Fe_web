@@ -20,6 +20,7 @@ export type AutoCompletePageProps = {
   permitToken: string
   accessToken: string
   onBack: () => void
+  onRequestPermit?: () => void
   onOpenSettingsVoice?: () => void
   onToast?: (msg: string) => void
 }
@@ -39,6 +40,7 @@ export function AutoCompletePage({
   permitToken,
   accessToken,
   onBack,
+  onRequestPermit,
   onOpenSettingsVoice,
   onToast,
 }: AutoCompletePageProps) {
@@ -88,10 +90,12 @@ export function AutoCompletePage({
   const { totalQuestions, paperTotalScore, questions } = useMemo(() => {
     let qList: Array<{ order: number; typeName: string; questionText: string; maxScore: number }> = []
 
-    if (activePaper && activePaper.sections && activePaper.sections.length > 0) {
+    if (activePaper && Array.isArray(activePaper.sections) && activePaper.sections.length > 0) {
       let count = 0
       for (const sec of activePaper.sections) {
+        if (!sec || !Array.isArray(sec.questions)) continue
         for (const q of sec.questions) {
+          if (!q) continue
           count++
           qList.push({
             order: q.order || count,
@@ -101,8 +105,10 @@ export function AutoCompletePage({
           })
         }
       }
-    } else {
-      // Fallback if paper structure wasn't fully parsed yet
+    }
+
+    if (qList.length === 0) {
+      // Fallback if paper structure wasn't fully parsed yet or has no questions
       const count = 10
       for (let i = 1; i <= count; i++) {
         qList.push({
@@ -114,8 +120,9 @@ export function AutoCompletePage({
       }
     }
 
-    const tQuestions = qList.length
-    const defaultTotal = homework.total_score && homework.total_score > 0 ? homework.total_score : 100
+    const tQuestions = Math.max(1, qList.length)
+    const rawTotal = Number(homework?.total_score)
+    const defaultTotal = Number.isFinite(rawTotal) && rawTotal > 0 ? rawTotal : 100
     // Proportional base point
     const pointPerQ = Number((defaultTotal / tQuestions).toFixed(2))
     qList = qList.map((q) => ({ ...q, maxScore: pointPerQ }))
@@ -143,18 +150,46 @@ export function AutoCompletePage({
     return Number((paperTotalScore * 0.95).toFixed(1))
   }, [paperTotalScore])
 
-  const [autoTargetTotal, setAutoTargetTotal] = useState<number>(() => {
-    return Math.min(Number((paperTotalScore * 0.88).toFixed(1)), maxAutoScore)
-  })
+  const [customAutoTargetTotal, setCustomAutoTargetTotal] = useState<number | null>(null)
+  const defaultAutoTarget = useMemo(() => {
+    return Number((paperTotalScore * 0.88).toFixed(1))
+  }, [paperTotalScore])
+
+  const autoTargetTotal = useMemo(() => {
+    const candidate = customAutoTargetTotal !== null ? customAutoTargetTotal : defaultAutoTarget
+    return Math.min(candidate, maxAutoScore)
+  }, [customAutoTargetTotal, defaultAutoTarget, maxAutoScore])
+
+  const handleUpdateAutoTargetTotal = (val: number) => {
+    if (val > maxAutoScore) {
+      setCustomAutoTargetTotal(maxAutoScore)
+      onToast?.(`已自动受风控限制截断为最高 95% (${maxAutoScore}分)`)
+    } else {
+      setCustomAutoTargetTotal(Number(val.toFixed(1)))
+    }
+  }
 
   // Manual per-question scores state
-  const [manualScores, setManualScores] = useState<Record<number, number>>(() => {
-    const initial: Record<number, number> = {}
+  const [customManualScores, setCustomManualScores] = useState<Record<number, number>>({})
+
+  const manualScores = useMemo<Record<number, number>>(() => {
+    const scores: Record<number, number> = {}
     questions.forEach((q) => {
-      initial[q.order] = Number((q.maxScore * 0.9).toFixed(1))
+      if (customManualScores[q.order] !== undefined) {
+        scores[q.order] = customManualScores[q.order]
+      } else {
+        scores[q.order] = Number((q.maxScore * 0.9).toFixed(1))
+      }
     })
-    return initial
-  })
+    return scores
+  }, [questions, customManualScores])
+
+  const handleUpdateManualScore = (order: number, val: number) => {
+    setCustomManualScores((prev) => ({
+      ...prev,
+      [order]: Number(val.toFixed(1)),
+    }))
+  }
 
   // Collapsible state for auto mode score breakdown
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false)
@@ -315,10 +350,18 @@ export function AutoCompletePage({
           </div>
           <h2>安全授权凭据缺失或已过期</h2>
           <p>进入自动完成页面前必须完成人机安全验证并获取准入令牌 (Permit Token)。</p>
-          <button type="button" className="control-primary" onClick={onBack} style={{ marginTop: 18 }}>
-            <Icon name="arrow_back" />
-            <span>返回作业列表</span>
-          </button>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 20 }}>
+            {onRequestPermit && (
+              <button type="button" className="control-primary" onClick={onRequestPermit}>
+                <Icon name="verified_user" />
+                <span>立即进行安全人机验证</span>
+              </button>
+            )}
+            <button type="button" className="control-secondary" onClick={onBack}>
+              <Icon name="arrow_back" />
+              <span>返回作业列表</span>
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -449,7 +492,7 @@ export function AutoCompletePage({
             <Icon name="bolt" filled />
           </div>
           <div>
-            <h2>{homework.name}</h2>
+            <h2>{homework?.name && homework.name !== '作业自动完成' ? homework.name : (activePaper?.title || activePaper?.paperName || homework?.name || '作业自动完成')}</h2>
             <p>高拟真作业自动完成调度工作台 · 请审慎配置分值与声音参数</p>
           </div>
         </div>
@@ -524,12 +567,7 @@ export function AutoCompletePage({
                       value={autoTargetTotal}
                       onChange={(e) => {
                         const val = parseFloat(e.target.value) || 0
-                        if (val > maxAutoScore) {
-                          setAutoTargetTotal(maxAutoScore)
-                          onToast?.(`已自动受风控限制截断为最高 95% (${maxAutoScore}分)`)
-                        } else {
-                          setAutoTargetTotal(Number(val.toFixed(1)))
-                        }
+                        handleUpdateAutoTargetTotal(val)
                       }}
                     />
                     <span>/ {paperTotalScore.toFixed(1)} 分</span>
@@ -544,7 +582,7 @@ export function AutoCompletePage({
                     max={maxAutoScore}
                     step={0.1}
                     value={autoTargetTotal}
-                    onChange={(e) => setAutoTargetTotal(Number(parseFloat(e.target.value).toFixed(1)))}
+                    onChange={(e) => handleUpdateAutoTargetTotal(parseFloat(e.target.value) || 0)}
                   />
                   <div className="fe-slider-ticks">
                     <span>0 分</span>
@@ -649,10 +687,7 @@ export function AutoCompletePage({
                           value={currentVal}
                           onChange={(e) => {
                             const val = parseFloat(e.target.value) || 0
-                            setManualScores((prev) => ({
-                              ...prev,
-                              [q.order]: Number(val.toFixed(1)),
-                            }))
+                            handleUpdateManualScore(q.order, val)
                           }}
                         />
                         <span>分</span>
