@@ -2743,7 +2743,29 @@ function App() {
                 accessToken={session.accessToken}
                 onBack={() => {
                   setAutoCompletePermitToken('')
-                  navigate('/')
+                  setHasLoadedHistory(false)
+                  setHasLoadedCurrent(false)
+                  void doFetchHomeworks(activeTab)
+                  navigate(activeTab === 'history' ? '/history' : '/')
+                }}
+                onCompleted={(res, hwId) => {
+                  const s = Number(res?.final_score ?? res?.score ?? 0)
+                  const ut = Number(res?.use_time ?? 0)
+                  const updateItem = (h: HomeworkItem) => {
+                    if (h.id === hwId) {
+                      return {
+                        ...h,
+                        status: 2,
+                        point: s,
+                        score: s,
+                        use_time: ut,
+                        completed_at: typeof res?.completed_at === 'string' ? res.completed_at : undefined,
+                      }
+                    }
+                    return h
+                  }
+                  setHomeworks((prev) => prev.map(updateItem))
+                  setHistoryHomeworks((prev) => prev.map(updateItem))
                 }}
                 onRequestPermit={() => {
                   const targetHw =

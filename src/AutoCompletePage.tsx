@@ -23,6 +23,7 @@ export type AutoCompletePageProps = {
   onRequestPermit?: () => void
   onOpenSettingsVoice?: () => void
   onToast?: (msg: string) => void
+  onCompleted?: (result: AutoCompleteTaskResponse['result'], hwId: string) => void
 }
 
 type QuestionScoreItem = {
@@ -46,6 +47,7 @@ export function AutoCompletePage({
   onRequestPermit,
   onOpenSettingsVoice,
   onToast,
+  onCompleted,
 }: AutoCompletePageProps) {
   // Mode selection
   const [mode, setMode] = useState<AutoCompleteMode>('auto')
@@ -447,6 +449,9 @@ export function AutoCompletePage({
           setTaskStatus(res)
           if (res.status === 'COMPLETED' || res.status === 'FAILED') {
             if (pollTimer) clearInterval(pollTimer)
+            if (res.status === 'COMPLETED') {
+              onCompleted?.(res.result, homework.id)
+            }
           }
         } catch {
           // Continue polling
