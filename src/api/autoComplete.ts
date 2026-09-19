@@ -84,3 +84,93 @@ export function getAutoCompleteTaskStatus(
     { accessToken }
   )
 }
+
+import type { HomeworkItem, Paper } from './homework'
+
+export const SUPPORTED_QUESTION_TYPES = [
+  'read_sentence',
+  'read_chapter',
+  'collector.read',
+  'collector.choose',
+  'choose',
+  'collector.role',
+  'collector.3q5a',
+  'collector.dialogue',
+  'collector.word',
+  'word.read',
+  'word.choice',
+  'word_question',
+  'repeat',
+]
+
+export const UNSUPPORTED_KEYWORD_PATTERNS = [
+  { pattern: /作文|composition/i, name: '英语作文' },
+  { pattern: /拼写|听写|write|dictation/i, name: '单词拼写/听写' },
+  { pattern: /模拟考|中考模拟|高考模拟|期末统考/i, name: '模拟考试' },
+]
+
+export function checkHomeworkCompatibility(
+  homework: HomeworkItem,
+  paper?: Paper | null
+): { supported: boolean; reason?: string; unsupportedList: string[] } {
+  const unsupportedList: string[] = []
+
+  const hw = homework as { kind?: string; set_type?: number; name?: string }
+  // 1. 检查作业类型是否为考试/模拟考
+  if (hw.kind === 'mock' || hw.set_type === 6) {
+    return {
+      supported: false,
+      reason: '该作业属于考场模拟卷（含严格防作弊及考场ID校验），暂未开放自动完成。',
+      unsupportedList: ['模拟考卷'],
+    }
+  }
+
+  // 2. 如果已有试卷结构，检查各个题型
+  if (paper && Array.isArray(paper.sections) && paper.sections.length > 0) {
+    for (const sec of paper.sections) {
+      const secType = (sec.typeName || sec.category || '').toLowerCase()
+      for (const rule of UNSUPPORTED_KEYWORD_PATTERNS) {
+        if (rule.pattern.test(secType) && !unsupportedList.includes(rule.name)) {
+          unsupportedList.push(rule.name)
+        }
+      }
+
+      if (Array.isArray(sec.questions)) {
+        for (const q of sec.questions) {
+          const qType = (q.typeName || q.category || '').toLowerCase()
+          for (const rule of UNSUPPORTED_KEYWORD_PATTERNS) {
+            if (rule.pattern.test(qType) && !unsupportedList.includes(rule.name)) {
+              unsupportedList.push(rule.name)
+            }
+          }
+        }
+      }
+    }
+
+    if (unsupportedList.length > 0) {
+      return {
+        supported: false,
+        reason: `该作业包含当前版本未适配的题型（${unsupportedList.join('、')}），暂未开放自动完成以保障成绩安全。`,
+        unsupportedList,
+      }
+    }
+  }
+
+  // 3. 检查作业名称与资源名称中是否有明确的未支持特征
+  const hwName = (homework.name || '').toLowerCase()
+  for (const rule of UNSUPPORTED_KEYWORD_PATTERNS) {
+    if (rule.pattern.test(hwName) && !unsupportedList.includes(rule.name)) {
+      unsupportedList.push(rule.name)
+    }
+  }
+
+  if (unsupportedList.length > 0) {
+    return {
+      supported: false,
+      reason: `该作业包含当前版本未适配的题型（${unsupportedList.join('、')}），暂未开放自动完成。`,
+      unsupportedList,
+    }
+  }
+
+  return { supported: true, unsupportedList: [] }
+}

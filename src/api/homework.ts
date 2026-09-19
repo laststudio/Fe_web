@@ -26,6 +26,7 @@ export type HomeworkItem = {
   parsed?: boolean
   set_type?: number
   pk?: number
+  kind?: string
   resource_id?: string
 }
 

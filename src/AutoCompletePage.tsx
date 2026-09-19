@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from './components/Icon'
 import {
+  checkHomeworkCompatibility,
   getAutoCompleteTaskStatus,
   startAutoComplete,
   type AutoCompleteMode,
@@ -9,7 +10,7 @@ import {
   type StartAutoCompletePayload,
 } from './api/autoComplete'
 import { getVoiceAudioUrl, getVoices, type VoiceProfile } from './api/voice'
-import type { HomeworkItem, Paper } from './api/homework'
+import { getHomeworkDetail, type HomeworkItem, type Paper } from './api/homework'
 
 const DISCLAIMER_PHRASE = '作者不为使用此功能造成的一切后果负责'
 
@@ -51,13 +52,45 @@ export function AutoCompletePage({
   const [isPlayingPreview, setIsPlayingPreview] = useState(false)
   const audioPreviewRef = useRef<HTMLAudioElement | null>(null)
 
+  // Loaded paper state (auto-load if not provided via props)
+  const [fetchedPaper, setFetchedPaper] = useState<Paper | null>(null)
+  const [isLoadingPaper, setIsLoadingPaper] = useState<boolean>(() => !paper)
+
+  const activePaper = paper || fetchedPaper
+
+  useEffect(() => {
+    if (paper || fetchedPaper) {
+      return
+    }
+    if (!homework.id || !accessToken) return
+    let active = true
+    getHomeworkDetail(accessToken, homework.id)
+      .then((res) => {
+        if (active && res) {
+          setFetchedPaper(res)
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to load paper detail in AutoCompletePage:', err)
+      })
+      .finally(() => {
+        if (active) setIsLoadingPaper(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [paper, fetchedPaper, homework.id, accessToken])
+  const compatibility = useMemo(() => {
+    return checkHomeworkCompatibility(homework, activePaper)
+  }, [homework, activePaper])
+
   // Paper & Questions calculation
   const { totalQuestions, paperTotalScore, questions } = useMemo(() => {
     let qList: Array<{ order: number; typeName: string; questionText: string; maxScore: number }> = []
 
-    if (paper && paper.sections && paper.sections.length > 0) {
+    if (activePaper && activePaper.sections && activePaper.sections.length > 0) {
       let count = 0
-      for (const sec of paper.sections) {
+      for (const sec of activePaper.sections) {
         for (const q of sec.questions) {
           count++
           qList.push({
@@ -92,7 +125,7 @@ export function AutoCompletePage({
       paperTotalScore: defaultTotal,
       questions: qList,
     }
-  }, [homework, paper])
+  }, [homework, activePaper])
 
   // Suggested time
   const suggestedTimeSeconds = useMemo(() => {
@@ -358,6 +391,16 @@ export function AutoCompletePage({
     }
   }
 
+  if (isLoadingPaper) {
+    return (
+      <div className="fe-autocomplete-container" style={{ textAlign: 'center', padding: '60px 20px' }}>
+        <Icon name="sync" className="fe-spin" style={{ fontSize: 36, color: '#3b82f6', marginBottom: 16 }} />
+        <h3 style={{ color: '#1e293b', margin: '0 0 8px' }}>正在拉取作业试卷与题目结构...</h3>
+        <p style={{ color: '#64748b', fontSize: 13, margin: 0 }}>系统正在核验作业题型适配性与分值参数</p>
+      </div>
+    )
+  }
+
   return (
     <div className="fe-autocomplete-container">
       {/* Top Breadcrumb & Return Nav */}
@@ -371,6 +414,33 @@ export function AutoCompletePage({
           <span>安全准入中 · 令牌已核验</span>
         </span>
       </div>
+
+      {/* Unsupported Question Types Warning Banner */}
+      {!compatibility.supported && (
+        <div
+          className="admin-status-strip is-danger"
+          style={{
+            margin: '0 0 20px',
+            padding: '16px 20px',
+            borderRadius: 12,
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 12,
+            background: '#fef2f2',
+            border: '1px solid #fca5a5',
+          }}
+        >
+          <Icon name="block" style={{ fontSize: 24, color: '#dc2626', flexShrink: 0, marginTop: 2 }} />
+          <div>
+            <strong style={{ color: '#991b1b', fontSize: 15, display: 'block', marginBottom: 4 }}>
+              该作业包含当前版本未适配的题型，已禁止自动完成
+            </strong>
+            <span style={{ color: '#b91c1c', fontSize: 13.5, lineHeight: 1.6 }}>
+              {compatibility.reason}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* 1. Homework Meta Banner */}
       <div className="fe-autocomplete-hero">
@@ -719,10 +789,19 @@ export function AutoCompletePage({
         <button
           type="button"
           className="control-primary fe-start-button"
-          onClick={handleOpenRiskModal}
+          disabled={!compatibility.supported}
+          style={!compatibility.supported ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+          title={!compatibility.supported ? compatibility.reason : '开始自动完成'}
+          onClick={() => {
+            if (!compatibility.supported) {
+              onToast?.(compatibility.reason || '该作业包含未适配题型，暂未开放自动完成')
+              return
+            }
+            handleOpenRiskModal()
+          }}
         >
-          <Icon name="bolt" />
-          <span>开始自动完成</span>
+          <Icon name={compatibility.supported ? 'bolt' : 'block'} />
+          <span>{compatibility.supported ? '开始自动完成' : '该作业暂不支持自动完成'}</span>
         </button>
       </div>
 

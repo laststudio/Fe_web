@@ -3,6 +3,7 @@ import { Icon } from './Icon'
 import {
   deleteVoice,
   getVoiceAudioUrl,
+  getVoiceClonePreview,
   getVoices,
   setDefaultVoice,
   uploadVoice,
@@ -26,6 +27,11 @@ export function VoiceManager({
   // Audio preview for existing voices
   const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null)
   const previewAudioRef = useRef<HTMLAudioElement | null>(null)
+
+  // Cloned voice preview state
+  const [cloningVoiceId, setCloningVoiceId] = useState<string | null>(null)
+  const [playingClonedId, setPlayingClonedId] = useState<string | null>(null)
+  const cloneAudioRef = useRef<HTMLAudioElement | null>(null)
 
   // Recording studio state
   const [isRecording, setIsRecording] = useState(false)
@@ -85,6 +91,10 @@ export function VoiceManager({
         studioAudioRef.current.pause()
         studioAudioRef.current = null
       }
+      if (cloneAudioRef.current) {
+        cloneAudioRef.current.pause()
+        cloneAudioRef.current = null
+      }
     }
   }, [accessToken])
 
@@ -103,6 +113,11 @@ export function VoiceManager({
       }
       setPlayingVoiceId(null)
       return
+    }
+
+    if (cloneAudioRef.current) {
+      cloneAudioRef.current.pause()
+      setPlayingClonedId(null)
     }
 
     if (previewAudioRef.current) {
@@ -125,6 +140,50 @@ export function VoiceManager({
       setPlayingVoiceId(null)
       onToast?.('音频播放被浏览器阻止或无法加载')
     })
+  }
+
+  const handleToggleClonePreview = async (voice: VoiceProfile) => {
+    if (playingClonedId === voice.id) {
+      if (cloneAudioRef.current) {
+        cloneAudioRef.current.pause()
+      }
+      setPlayingClonedId(null)
+      return
+    }
+
+    if (cloneAudioRef.current) {
+      cloneAudioRef.current.pause()
+      cloneAudioRef.current = null
+    }
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause()
+      setPlayingVoiceId(null)
+    }
+
+    setCloningVoiceId(voice.id)
+    try {
+      const blob = await getVoiceClonePreview(accessToken, voice.id)
+      const url = URL.createObjectURL(blob)
+      const audio = new Audio(url)
+      cloneAudioRef.current = audio
+      setPlayingClonedId(voice.id)
+
+      audio.onended = () => {
+        setPlayingClonedId(null)
+        URL.revokeObjectURL(url)
+      }
+      audio.onerror = () => {
+        setPlayingClonedId(null)
+        URL.revokeObjectURL(url)
+        onToast?.('克隆试听播放失败')
+      }
+      await audio.play()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '声音克隆试听生成失败'
+      onToast?.(msg)
+    } finally {
+      setCloningVoiceId(null)
+    }
   }
 
   const handleSetDefault = async (voiceId: string) => {
@@ -346,6 +405,40 @@ export function VoiceManager({
                   </div>
 
                   <div className="fe-voice-item-actions">
+                    <button
+                      type="button"
+                      className="control-secondary fe-voice-action-btn"
+                      onClick={() => handleToggleClonePreview(voice)}
+                      disabled={cloningVoiceId === voice.id}
+                      title="使用 tts.ai 试听基于此录音克隆出的朗读发音效果"
+                      style={
+                        playingClonedId === voice.id
+                          ? {
+                              borderColor: '#8b5cf6',
+                              color: '#7c3aed',
+                              background: '#f5f3ff',
+                            }
+                          : undefined
+                      }
+                    >
+                      <Icon
+                        name={
+                          cloningVoiceId === voice.id
+                            ? 'sync'
+                            : playingClonedId === voice.id
+                            ? 'pause'
+                            : 'auto_awesome'
+                        }
+                        className={cloningVoiceId === voice.id ? 'fe-spin' : ''}
+                      />
+                      <span>
+                        {cloningVoiceId === voice.id
+                          ? '正在克隆...'
+                          : playingClonedId === voice.id
+                          ? '暂停克隆'
+                          : '试听克隆效果'}
+                      </span>
+                    </button>
                     {!voice.is_default && (
                       <button
                         type="button"

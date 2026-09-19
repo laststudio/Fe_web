@@ -45,3 +45,31 @@ export function setDefaultVoice(accessToken: string, voiceId: string): Promise<{
 export function getVoiceAudioUrl(voiceId: string): string {
   return `${oauthConfig.apiUrl}/user/voices/${encodeURIComponent(voiceId)}/audio`
 }
+
+export async function getVoiceClonePreview(
+  accessToken: string,
+  voiceId: string,
+  text?: string
+): Promise<Blob> {
+  const url = `${oauthConfig.apiUrl}/user/voices/${encodeURIComponent(voiceId)}/clone-preview`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ text: text || undefined }),
+  })
+  if (!res.ok) {
+    let detail = '声音克隆试听生成失败'
+    try {
+      const data = await res.json()
+      if (data.detail) detail = data.detail
+    } catch {
+      // ignore
+    }
+    throw new Error(detail)
+  }
+  return await res.blob()
+}
+

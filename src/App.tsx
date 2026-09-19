@@ -29,7 +29,7 @@ import { transitionRoute, transitionTo } from './navigation/controller'
 import CapVerification from './CapVerification'
 import AutoCompletePage from './AutoCompletePage'
 import VoiceManager from './components/VoiceManager'
-import { getAutoCompletePermit } from './api/autoComplete'
+import { checkHomeworkCompatibility, getAutoCompletePermit } from './api/autoComplete'
 
 type Page = '/' | '/history' | '/pk' | '/settings' | string
 
@@ -583,17 +583,24 @@ function PaperReaderView({
                 </button>
               </>
             )}
-            {onAutoComplete && (
-              <button
-                className="control-primary fe-btn-auto-complete"
-                type="button"
-                onClick={onAutoComplete}
-                title="使用高拟真语音与控分算法自动完成此试卷"
-              >
-                <Icon name="bolt" />
-                <span>⚡ 自动完成此试卷</span>
-              </button>
-            )}
+            {onAutoComplete && (() => {
+              const compat = checkHomeworkCompatibility(homework, paper)
+              return (
+                <button
+                  className={`control-primary fe-btn-auto-complete ${!compat.supported ? 'control-disabled' : ''}`}
+                  type="button"
+                  style={{
+                    opacity: compat.supported ? 1 : 0.45,
+                    cursor: compat.supported ? 'pointer' : 'not-allowed',
+                  }}
+                  onClick={onAutoComplete}
+                  title={compat.supported ? '使用高拟真语音与控分算法自动完成此试卷' : (compat.reason || '该试卷包含暂不支持的题型')}
+                >
+                  <Icon name={compat.supported ? 'bolt' : 'block'} />
+                  <span>{compat.supported ? '⚡ 自动完成此试卷' : '题型暂不支持'}</span>
+                </button>
+              )
+            })()}
             <button
               className="control-secondary"
               type="button"
@@ -811,21 +818,29 @@ function HomeworkCard({
       </div>
 
       <div className="fe-homework-card__right">
-        {onAutoComplete && (!item.status || (item.status !== 2 && item.status !== '2')) && (
-          <button
-            className="control-secondary fe-btn-auto-complete"
-            type="button"
-            style={{ padding: '7px 14px', fontSize: 12.5 }}
-            onClick={(e) => {
-              e.stopPropagation()
-              onAutoComplete(item)
-            }}
-            title="一键安全自动完成此作业"
-          >
-            <Icon name="bolt" />
-            <span>⚡ 自动完成</span>
-          </button>
-        )}
+        {onAutoComplete && (!item.status || (item.status !== 2 && item.status !== '2')) && (() => {
+          const compat = checkHomeworkCompatibility(item)
+          return (
+            <button
+              className={`control-secondary fe-btn-auto-complete ${!compat.supported ? 'control-disabled' : ''}`}
+              type="button"
+              style={{
+                padding: '7px 14px',
+                fontSize: 12.5,
+                opacity: compat.supported ? 1 : 0.45,
+                cursor: compat.supported ? 'pointer' : 'not-allowed',
+              }}
+              onClick={(e) => {
+                e.stopPropagation()
+                onAutoComplete(item)
+              }}
+              title={compat.supported ? '一键安全自动完成此作业' : (compat.reason || '该作业包含暂不支持的题型')}
+            >
+              <Icon name={compat.supported ? 'bolt' : 'block'} />
+              <span>{compat.supported ? '⚡ 自动完成' : '题型暂不支持'}</span>
+            </button>
+          )
+        })()}
         {isParsing ? (
           <span className="status-pill status-pill--parsing">
             <Icon name="sync" className="status-pill__spin" />
@@ -2303,6 +2318,12 @@ function App() {
   const [autoCompleteTargetHw, setAutoCompleteTargetHw] = useState<HomeworkItem | null>(null)
 
   function handleTriggerAutoComplete(hw: HomeworkItem) {
+    const cachedPaper = paperCache[hw.id] || (viewingPaper?.homework.id === hw.id ? viewingPaper.paper : null)
+    const compat = checkHomeworkCompatibility(hw, cachedPaper)
+    if (!compat.supported) {
+      showToast(compat.reason || '该作业包含暂不支持自动完成的题型，暂未开放')
+      return
+    }
     setAutoCompleteModalHw(hw)
   }
 
@@ -2421,7 +2442,16 @@ function App() {
     )
   }
 
-  const meta = pageMeta[page]
+  const isAutoCompleteRoute = pathname.startsWith('/homework/') && pathname.endsWith('/auto-complete')
+  const meta = pageMeta[page] || (isAutoCompleteRoute
+    ? {
+        title: '作业自动完成',
+        caption: '高拟真自动化答题、分值调度与风控防呆',
+      }
+    : {
+        title: '作业工作台',
+        caption: '获取与查看作业标准答案',
+      })
   const avatarUrl = resolveAvatarUrl(currentUser?.avatar_url)
 
   return (
