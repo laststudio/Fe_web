@@ -540,6 +540,7 @@ export function AutoCompletePage({
       const payload: StartAutoCompletePayload = {
         homework_id: homework.id,
         homework_name: homework.name,
+        resource_id: homework.resource_id || ((activePaper as Record<string, unknown> | null)?.resource_id as string | undefined),
         mode,
         target_total: mode === 'auto' ? autoTargetTotal : Number(manualTotalSum.toFixed(2)),
         allow_over_max: mode === 'manual' ? isManualTotalOverMax || manualOverMaxQuestions.length > 0 : false,

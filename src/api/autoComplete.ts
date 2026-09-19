@@ -22,6 +22,7 @@ export type QuestionTaskDetail = {
 export type StartAutoCompletePayload = {
   homework_id: string
   homework_name: string
+  resource_id?: string
   mode: AutoCompleteMode
   target_total: number
   allow_over_max: boolean
