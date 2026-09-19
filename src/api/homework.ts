@@ -24,6 +24,9 @@ export type HomeworkItem = {
   total_score?: number
   contents: HomeworkContentItem[]
   parsed?: boolean
+  set_type?: number
+  pk?: number
+  resource_id?: string
 }
 
 export type HomeworkListResponse = {
@@ -151,7 +154,12 @@ export function getHomeworkList(
 
 export function startParseHomework(
   accessToken: string,
-  payload: { homework_id: string; homework_name: string; contents: HomeworkContentItem[] }
+  payload: {
+    homework_id: string
+    homework_name: string
+    contents: HomeworkContentItem[]
+    resource_id?: string
+  }
 ): Promise<ParseTaskResponse> {
   return apiRequest<ParseTaskResponse>('/homework/parse', {
     accessToken,

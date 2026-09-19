@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react'
 import './App.css'
 import { ApiError, getCurrentUser, setUnauthorizedHandler, type User } from './api/auth'
 import {
@@ -28,7 +28,7 @@ import type { AuthSession } from './auth/types'
 import { transitionRoute, transitionTo } from './navigation/controller'
 import CapVerification from './CapVerification'
 
-type Page = '/' | '/history' | '/settings'
+type Page = '/' | '/history' | '/pk' | '/settings'
 
 const logoSrc = '/fe_logo.png'
 const sidebarCollapsedStorageKey = 'fe-web.sidebar-collapsed'
@@ -54,6 +54,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     items: [
       { icon: 'assignment', label: '当前作业', caption: '作业索引与解析阅读器', page: '/' },
       { icon: 'history', label: '历史作业', caption: '已归档往期作业记录', page: '/history' },
+      { icon: 'sports_esports', label: '词汇PK', caption: '在线词汇竞技与专练', page: '/pk' },
     ],
   },
   {
@@ -73,17 +74,21 @@ const pageMeta: Record<Page, { title: string; caption: string }> = {
     title: '历史作业',
     caption: '往期归档试卷与答案速查',
   },
+  '/pk': {
+    title: '词汇PK',
+    caption: '在线词汇竞赛与训练专项目标',
+  },
   '/settings': {
     title: '设置与账号',
     caption: '平台账号绑定、系统公告与功能设置',
   },
 }
 
-function Icon({ name, className = '', filled = false }: { name: string; className?: string; filled?: boolean }) {
+function Icon({ name, className = '', filled = false, style }: { name: string; className?: string; filled?: boolean; style?: CSSProperties }) {
   return (
     <span
       className={`material-symbols-outlined ${className}`}
-      style={filled ? { fontVariationSettings: "'FILL' 1" } : undefined}
+      style={{ ...(filled ? { fontVariationSettings: "'FILL' 1" } : {}), ...style }}
       aria-hidden="true"
     >
       {name}
@@ -748,6 +753,19 @@ function HomeworkCard({
           <div className="fe-homework-title-row">
             <span className="fe-homework-name">{item.name}</span>
             <span className="fe-subject-tag">{item.subject_name || '英语'}</span>
+            {(item.pk === 1 || item.set_type === 6) && (
+              <span
+                className="fe-subject-tag fe-subject-tag--pk"
+                style={{
+                  background: 'var(--amber-light, #fef3c7)',
+                  color: 'var(--amber-dark, #b45309)',
+                  borderColor: 'var(--amber-border, #fde68a)',
+                  fontWeight: 600,
+                }}
+              >
+                词汇PK
+              </span>
+            )}
           </div>
           <div className="fe-homework-meta">
             <span>截止: {formatTime(item.end_time || item.create_time)}</span>
@@ -870,7 +888,7 @@ function HomeworkListView({
   onOpenHomework,
   onTriggerParse,
 }: {
-  activeTab: 'current' | 'history'
+  activeTab: 'current' | 'history' | 'pk'
   hasLoaded: boolean
   accountInfo: PlatformAccountInfo | null
   homeworks: HomeworkItem[]
@@ -890,8 +908,47 @@ function HomeworkListView({
   onTriggerParse: (hw: HomeworkItem) => void
 }) {
   const [query, setQuery] = useState('')
-  const currentList = activeTab === 'current' ? homeworks : historyHomeworks
-  const isLoading = activeTab === 'current' ? isLoadingHomeworks : isLoadingHistory
+
+  const pkHomeworks = useMemo<HomeworkItem[]>(() => {
+    const combined = [...homeworks, ...historyHomeworks]
+    const seen = new Set<string>()
+    return combined.filter((hw: HomeworkItem) => {
+      const key = hw.id || hw.name
+      if (seen.has(key)) return false
+      seen.add(key)
+      return hw.pk === 1 || hw.set_type === 6
+    })
+  }, [homeworks, historyHomeworks])
+
+  const currentList = useMemo<HomeworkItem[]>(() => {
+    if (activeTab === 'current') return homeworks
+    if (activeTab === 'history') return historyHomeworks
+    return pkHomeworks
+  }, [activeTab, homeworks, historyHomeworks, pkHomeworks])
+
+  const isLoading = activeTab === 'current'
+    ? isLoadingHomeworks
+    : activeTab === 'history'
+    ? isLoadingHistory
+    : (isLoadingHomeworks || isLoadingHistory)
+
+  const categoryMeta = {
+    current: {
+      title: '当前作业',
+      desc: '待完成的课堂与课后练习',
+      count: homeworks.length,
+    },
+    history: {
+      title: '历史作业',
+      desc: '已完成及逾期的往期归档',
+      count: historyHomeworks.length,
+    },
+    pk: {
+      title: '词汇PK',
+      desc: '在线词汇竞赛与专项目标',
+      count: pkHomeworks.length,
+    },
+  }[activeTab]
 
   const filtered = currentList.filter((hw) => {
     if (!query.trim()) return true
@@ -911,7 +968,7 @@ function HomeworkListView({
             <label>
               <Icon name="search" />
               <input
-                placeholder={`搜索${activeTab === 'history' ? '历史' : '当前'}作业名称或学科...`}
+                placeholder={`搜索${categoryMeta.title}名称或学科...`}
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -925,7 +982,7 @@ function HomeworkListView({
           <span className="admin-pill-badge is-muted">
             {accountInfo?.bound
               ? hasLoaded
-                ? `${activeTab === 'history' ? '往期归档' : '当前作业'} · 共 ${filtered.length} 份`
+                ? `${categoryMeta.title} · 共 ${filtered.length} 份`
                 : '待手动读取'
               : '未绑定 ETS100'}
           </span>
@@ -1123,9 +1180,17 @@ function HomeworkListView({
             <span className="admin-status-dot is-online" />
             <span>ETS100 账号：{accountInfo.account_display || '已关联'}</span>
           </div>
-          <h3>{activeTab === 'current' ? '云端当前作业读取' : '云端历史作业读取'}</h3>
+          <h3>
+            {activeTab === 'current'
+              ? '云端当前作业读取'
+              : activeTab === 'history'
+              ? '云端历史作业读取'
+              : '云端词汇PK作业读取'}
+          </h3>
           <p className="fe-list-prompt-desc">
-            系统支持从云端拉取{activeTab === 'current' ? '正在进行中的最新作业' : '往期完成及逾期的历史归档作业'}。
+            {activeTab === 'pk'
+              ? '系统支持从云端拉取正在进行中的词汇PK竞技及专练试卷。'
+              : `系统支持从云端拉取${activeTab === 'current' ? '正在进行中的最新作业' : '往期完成及逾期的历史归档作业'}。`}
           </p>
 
           <div className="fe-list-prompt-risk-box">
@@ -1151,7 +1216,9 @@ function HomeworkListView({
                 ? '正在同步作业列表中...'
                 : activeTab === 'current'
                 ? '确认安全，读取当前作业'
-                : '确认安全，读取历史作业'}
+                : activeTab === 'history'
+                ? '确认安全，读取历史作业'
+                : '确认安全，读取词汇PK'}
             </span>
           </button>
         </div>
@@ -1160,16 +1227,39 @@ function HomeworkListView({
           <div className="fe-empty-state__icon spinning">
             <Icon name="sync" />
           </div>
-          <h2>正在同步{activeTab === 'history' ? '历史' : '当前'}作业列表...</h2>
+          <h2>正在同步{categoryMeta.title}列表...</h2>
           <p style={{ color: 'var(--control-muted)', fontSize: 13 }}>正在从 ETS100 云端拉取最新作业，请稍候...</p>
         </div>
       ) : filtered.length === 0 ? (
         <div className="fe-empty-state" style={{ margin: '50px auto' }}>
-          <div className="fe-empty-state__icon">
-            <Icon name={activeTab === 'history' ? 'history_toggle_drop' : 'inbox'} />
+          <div
+            className="fe-empty-state__icon"
+            style={activeTab === 'pk' ? { background: '#f3e8ff', color: '#9333ea' } : undefined}
+          >
+            <Icon
+              name={
+                activeTab === 'history'
+                  ? 'history_toggle_drop'
+                  : activeTab === 'pk'
+                  ? 'sports_esports'
+                  : 'inbox'
+              }
+            />
           </div>
-          <h2>暂无{activeTab === 'history' ? '已归档的历史' : '待完成的当前'}作业</h2>
-          <p>{activeTab === 'history' ? '往期完成的试卷将归档在此处。' : '当前没有待完成的作业。'}</p>
+          <h2>
+            {activeTab === 'history'
+              ? '暂无已归档的历史作业'
+              : activeTab === 'pk'
+              ? '暂无词汇PK题目'
+              : '暂无待完成的当前作业'}
+          </h2>
+          <p>
+            {activeTab === 'history'
+              ? '往期完成的试卷将归档在此处。'
+              : activeTab === 'pk'
+              ? '当前列表中暂未发现词汇PK挑战或竞赛任务。可尝试刷新同步最新作业。'
+              : '当前没有待完成的作业。'}
+          </p>
         </div>
       ) : (
         <div className="fe-homework-list">
@@ -1422,7 +1512,7 @@ function SettingsPage({
 }
 
 function currentPage(pathname: string): Page | null {
-  if (pathname === '/' || pathname === '/history' || pathname === '/settings') return pathname
+  if (pathname === '/' || pathname === '/history' || pathname === '/pk' || pathname === '/settings') return pathname
   return null
 }
 
@@ -1453,7 +1543,7 @@ function App() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [hasLoadedCurrent, setHasLoadedCurrent] = useState(false)
   const [hasLoadedHistory, setHasLoadedHistory] = useState(false)
-  const activeTab: 'current' | 'history' = pathname === '/history' ? 'history' : 'current'
+  const activeTab: 'current' | 'history' | 'pk' = pathname === '/history' ? 'history' : pathname === '/pk' ? 'pk' : 'current'
 
   // Viewing Paper State (Full-width reader view)
   const [viewingPaper, setViewingPaper] = useState<{ homework: HomeworkItem; paper: Paper | null } | null>(null)
@@ -1817,6 +1907,7 @@ function App() {
         homework_id: item.id,
         homework_name: item.name,
         contents: item.contents,
+        resource_id: item.resource_id,
       })
 
       if (resp.status === 'COMPLETED' && resp.result) {
@@ -1962,7 +2053,7 @@ function App() {
     showToast('已导出答案 TXT 文件')
   }
 
-  async function doFetchHomeworks(tab: 'current' | 'history', capToken?: string) {
+  async function doFetchHomeworks(tab: 'current' | 'history' | 'pk' = activeTab, capToken?: string) {
     if (!session) return
     if (isFetchingHomeworksRef.current) return
     isFetchingHomeworksRef.current = true
@@ -1982,26 +2073,27 @@ function App() {
       return
     }
 
-    const hasLoaded = tab === 'current' ? hasLoadedCurrent : hasLoadedHistory
-    const existingList = tab === 'current' ? homeworks : historyHomeworks
+    const targetTab = tab === 'pk' ? 'current' : tab
+    const hasLoaded = targetTab === 'current' ? hasLoadedCurrent : hasLoadedHistory
+    const existingList = targetTab === 'current' ? homeworks : historyHomeworks
     const hasData = hasLoaded && existingList.length > 0
 
     if (!hasData) {
       setHomeworkError(null)
     }
 
-    if (tab === 'current') {
+    if (targetTab === 'current') {
       setIsLoadingHomeworks(true)
       try {
         const res = await getHomeworkList(session.accessToken, '1', capToken)
         setHomeworks(res.homeworks || [])
         setHasLoadedCurrent(true)
         setHomeworkError(null)
-        showToast('已同步当前作业列表')
+        showToast(tab === 'pk' ? '已同步作业与词汇PK' : '已同步当前作业列表')
       } catch (err) {
         if (err instanceof ApiError && (err.captchaRequired || err.status === 429)) {
           pendingRefreshRef.current = (token?: string) => {
-            void doFetchHomeworks('current', token)
+            void doFetchHomeworks(tab, token)
           }
           setShowCaptchaModal(true)
           return
@@ -2507,7 +2599,13 @@ function App() {
           ) : (
             <HomeworkListView
               activeTab={activeTab}
-              hasLoaded={activeTab === 'current' ? hasLoadedCurrent : hasLoadedHistory}
+              hasLoaded={
+                activeTab === 'current'
+                  ? hasLoadedCurrent
+                  : activeTab === 'history'
+                  ? hasLoadedHistory
+                  : (hasLoadedCurrent || hasLoadedHistory)
+              }
               accountInfo={accountInfo}
               homeworks={homeworks}
               historyHomeworks={historyHomeworks}
