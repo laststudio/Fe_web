@@ -24,6 +24,7 @@ export type StartAutoCompletePayload = {
   homework_name: string
   resource_id?: string
   set_id?: string
+  set_type?: number
   status?: string
   mode: AutoCompleteMode
   target_total: number

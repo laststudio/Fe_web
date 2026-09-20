@@ -464,7 +464,7 @@ export function AutoCompletePage({
     return () => {
       if (pollTimer) clearInterval(pollTimer)
     }
-  }, [activeTaskId, accessToken])
+  }, [activeTaskId, accessToken, homework.id, onCompleted])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -547,6 +547,7 @@ export function AutoCompletePage({
         homework_name: homework.name,
         resource_id: homework.resource_id || ((activePaper as Record<string, unknown> | null)?.resource_id as string | undefined),
         set_id: homework.set_id || ((activePaper as Record<string, unknown> | null)?.set_id as string | undefined),
+        set_type: homework.set_type !== undefined ? Number(homework.set_type) : ((activePaper as Record<string, unknown> | null)?.set_type as number | undefined),
         status: homework.status !== undefined ? String(homework.status) : undefined,
         mode,
         target_total: mode === 'auto' ? autoTargetTotal : Number(manualTotalSum.toFixed(2)),
