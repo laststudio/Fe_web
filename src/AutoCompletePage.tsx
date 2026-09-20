@@ -323,25 +323,40 @@ export function AutoCompletePage({
   // Collapsible state for auto mode score breakdown
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false)
 
-  // Compute proportional allocation with zero rounding error:
-  // sum(score_i) MUST EQUAL autoTargetTotal exactly!
+  // Compute slot-based round-robin allocation matching backend & reference ise_helper.php
   const allocatedQuestionScores = useMemo<QuestionScoreItem[]>(() => {
+    const graduation = 0.125
     const totalMax = questions.reduce((sum, q) => sum + q.maxScore, 0)
-    let allocatedSum = 0
-    const results: QuestionScoreItem[] = []
+    const n = questions.length
+    if (n === 0) return []
 
-    for (let idx = 0; idx < questions.length; idx++) {
-      const q = questions[idx]
-      let allocated: number
-      if (idx === questions.length - 1) {
-        allocated = Number((autoTargetTotal - allocatedSum).toFixed(2))
-      } else {
-        const ratio = totalMax > 0 ? q.maxScore / totalMax : 1 / questions.length
-        allocated = Number((autoTargetTotal * ratio).toFixed(2))
-        allocatedSum = Number((allocatedSum + allocated).toFixed(2))
+    const maxSlots = questions.map((q) => (graduation > 0 ? Math.ceil(Math.max(0, q.maxScore) / graduation) : 0))
+    const totalMaxSlots = maxSlots.reduce((a, b) => a + b, 0)
+    const targetTotal = Math.min(totalMax, Math.max(0, autoTargetTotal))
+    let targetSlots = graduation > 0 ? Math.round(targetTotal / graduation) : 0
+    targetSlots = Math.max(0, Math.min(totalMaxSlots, targetSlots))
+
+    const slots = [...maxSlots]
+    let delta = totalMaxSlots - targetSlots
+    let roundIdx = 0
+    while (delta > 0) {
+      let reduced = false
+      for (let i = 0; i < n; i++) {
+        if (delta <= 0) break
+        const j = (i + roundIdx) % n
+        if (slots[j] > 0) {
+          slots[j]--
+          delta--
+          reduced = true
+        }
       }
+      if (!reduced) break
+      roundIdx++
+    }
 
-      results.push({
+    return questions.map((q, idx) => {
+      const allocated = Number((slots[idx] * graduation).toFixed(2))
+      return {
         order: q.order,
         sectionCaption: q.sectionCaption,
         typeName: q.typeName,
@@ -351,10 +366,8 @@ export function AutoCompletePage({
         maxScore: q.maxScore,
         allocatedScore: allocated,
         manualScore: manualScores[q.order] ?? 0,
-      })
-    }
-
-    return results
+      }
+    })
   }, [questions, autoTargetTotal, manualScores])
 
   // Manual mode validations:
