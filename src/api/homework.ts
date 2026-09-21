@@ -137,17 +137,20 @@ export function formatPaperAsText(paper: Paper): string {
   return lines.join('\n').trimEnd()
 }
 
-export function getPlatformAccount(accessToken: string): Promise<PlatformAccountInfo> {
-  return apiRequest<PlatformAccountInfo>('/homework/account', { accessToken })
+export function getPlatformAccount(accessToken: string, refresh?: boolean): Promise<PlatformAccountInfo> {
+  const query = refresh ? '?refresh=1' : ''
+  return apiRequest<PlatformAccountInfo>(`/homework/account${query}`, { accessToken })
 }
 
 export function getHomeworkList(
   accessToken: string,
   status: '1' | '2' | '3' = '1',
-  capToken?: string
+  capToken?: string,
+  refresh?: boolean
 ): Promise<HomeworkListResponse> {
   const query = new URLSearchParams({ status })
   if (capToken) query.set('cap_token', capToken)
+  if (refresh) query.set('refresh', '1')
   return apiRequest<HomeworkListResponse>(`/homework/list?${query.toString()}`, {
     accessToken,
     headers: capToken ? { 'X-Cap-Token': capToken } : undefined,

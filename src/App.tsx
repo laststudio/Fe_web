@@ -1948,6 +1948,11 @@ function App() {
       setViewingPaper((curr) => (curr?.homework.id === item.id ? { homework: item, paper: detail } : curr))
       showToast('已重新从云端读取试卷与答案')
     } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        showToast('试卷解析缓存已过期，正在重新向云端解析...')
+        void executeParse(item)
+        return
+      }
       console.error('Failed to re-read paper detail:', err)
       if (err instanceof ApiError) {
         if (err.isNetworkError) {
@@ -2159,7 +2164,21 @@ function App() {
     showToast('已导出答案 TXT 文件')
   }
 
-  async function doFetchHomeworks(tab: 'current' | 'history' | 'pk' = activeTab, capToken?: string) {
+  function isTokenExpiredError(err: unknown): boolean {
+    if (!(err instanceof ApiError)) return false
+    if (err.status === 401) return true
+    const msg = (err.message || '').toLowerCase()
+    const codes = ['30004', '30005', '30014', '40001', '40002', '40003', '40004', '40020', '10001']
+    if (codes.some((c) => msg.includes(c))) return true
+    const keywords = ['token', '登录', '凭证', '过期', '失效', '重新登录', '未登录', 'auth']
+    return keywords.some((kw) => msg.includes(kw))
+  }
+
+  async function doFetchHomeworks(
+    tab: 'current' | 'history' | 'pk' = activeTab,
+    capToken?: string,
+    forceRefresh?: boolean
+  ) {
     if (!session) return
     if (isFetchingHomeworksRef.current) return
     isFetchingHomeworksRef.current = true
@@ -2191,15 +2210,21 @@ function App() {
     if (targetTab === 'current') {
       setIsLoadingHomeworks(true)
       try {
-        const res = await getHomeworkList(session.accessToken, '1', capToken)
+        const res = await getHomeworkList(session.accessToken, '1', capToken, forceRefresh)
         setHomeworks(res.homeworks || [])
         setHasLoadedCurrent(true)
         setHomeworkError(null)
         showToast(tab === 'pk' ? '已同步作业与词汇PK' : '已同步当前作业列表')
       } catch (err) {
+        if (isTokenExpiredError(err) && !forceRefresh) {
+          console.warn('ETS token expired or invalid, auto-refreshing session and retrying...')
+          setIsLoadingHomeworks(false)
+          isFetchingHomeworksRef.current = false
+          return doFetchHomeworks(tab, capToken, true)
+        }
         if (err instanceof ApiError && (err.captchaRequired || err.status === 429)) {
           pendingRefreshRef.current = (token?: string) => {
-            void doFetchHomeworks(tab, token)
+            void doFetchHomeworks(tab, token, forceRefresh)
           }
           setShowCaptchaModal(true)
           return
@@ -2239,16 +2264,22 @@ function App() {
     } else {
       setIsLoadingHistory(true)
       try {
-        const res2 = await getHomeworkList(session.accessToken, '2', capToken)
-        const res3 = await getHomeworkList(session.accessToken, '3')
+        const res2 = await getHomeworkList(session.accessToken, '2', capToken, forceRefresh)
+        const res3 = await getHomeworkList(session.accessToken, '3', undefined, forceRefresh)
         setHistoryHomeworks([...(res2.homeworks || []), ...(res3.homeworks || [])])
         setHasLoadedHistory(true)
         setHomeworkError(null)
         showToast('已同步历史与逾期作业')
       } catch (err) {
+        if (isTokenExpiredError(err) && !forceRefresh) {
+          console.warn('ETS token expired or invalid, auto-refreshing session and retrying...')
+          setIsLoadingHistory(false)
+          isFetchingHomeworksRef.current = false
+          return doFetchHomeworks('history', capToken, true)
+        }
         if (err instanceof ApiError && (err.captchaRequired || err.status === 429)) {
           pendingRefreshRef.current = (token?: string) => {
-            void doFetchHomeworks('history', token)
+            void doFetchHomeworks('history', token, forceRefresh)
           }
           setShowCaptchaModal(true)
           return
@@ -2288,19 +2319,19 @@ function App() {
     }
   }
 
-  async function refreshAccountAndHomeworks(capToken?: string) {
+  async function refreshAccountAndHomeworks(capToken?: string, forceRefresh: boolean = true) {
     if (!session) return
     setHomeworkError(null)
     try {
-      const account = await getPlatformAccount(session.accessToken)
+      const account = await getPlatformAccount(session.accessToken, forceRefresh)
       setAccountInfo(account)
       if (account.bound) {
-        await doFetchHomeworks(activeTab, capToken)
+        await doFetchHomeworks(activeTab, capToken, forceRefresh)
       }
     } catch (err) {
       if (err instanceof ApiError && (err.captchaRequired || err.status === 429)) {
         pendingRefreshRef.current = (token?: string) => {
-          void refreshAccountAndHomeworks(token)
+          void refreshAccountAndHomeworks(token, forceRefresh)
         }
         setShowCaptchaModal(true)
         return
