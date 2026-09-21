@@ -4416,7 +4416,8 @@ html:has(.control-shell) {
   font-size: 13.5px;
   font-weight: 700;
   color: var(--control-ink);
-  user-select: none; /* discourage copying */
+  user-select: text; /* allow copying */
+  cursor: text;
 }
 
 .fe-phrase-input {

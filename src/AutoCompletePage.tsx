@@ -423,9 +423,8 @@ export function AutoCompletePage({
   // Risk modal & Countdown state
   const [isRiskModalOpen, setIsRiskModalOpen] = useState(false)
   const [riskStep, setRiskStep] = useState<number>(1) // 1, 2, 3 (for manual mode)
-  const [countdown, setCountdown] = useState<number>(10)
+  const [countdown, setCountdown] = useState<number>(5)
   const [typedPhrase, setTypedPhrase] = useState<string>('')
-  const [pasteWarning, setPasteWarning] = useState<string | null>(null)
   const [isStartingTask, setIsStartingTask] = useState(false)
 
   // Execution Board state
@@ -519,16 +518,15 @@ export function AutoCompletePage({
   const handleOpenRiskModal = () => {
     setIsRiskModalOpen(true)
     setRiskStep(1)
-    setCountdown(10)
+    setCountdown(5)
     setTypedPhrase('')
-    setPasteWarning(null)
   }
 
   // Step advancement for manual mode
   const handleNextRiskStep = () => {
     if (riskStep < 3) {
       setRiskStep(riskStep + 1)
-      setCountdown(10)
+      setCountdown(5)
     }
   }
 
@@ -1106,7 +1104,7 @@ export function AutoCompletePage({
                 <h2>高风控安全确认与免责誓词</h2>
                 <p>
                   {mode === 'auto'
-                    ? '一键自动模式安全审核流程 · 强制 10 秒倒计时防呆机制'
+                    ? '一键自动模式安全审核流程 · 强制 5 秒倒计时安全机制'
                     : `手动自定义模式三重递进确认 · 当前阶段 (${riskStep}/3)`}
                 </p>
               </div>
@@ -1138,29 +1136,37 @@ export function AutoCompletePage({
                   ) : (
                     <div className="fe-risk-input-section">
                       <div className="fe-disclaimer-instruction">
-                        <span>为确保您已完全知晓并自愿承担后果，请在下方输入框中手动键入以下誓词：</span>
-                        <blockquote className="fe-target-phrase">
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                          <span>为确保您已知晓风险，请在下方输入或粘贴以下承诺声明：</span>
+                          <button
+                            type="button"
+                            className="control-secondary fe-btn-sm"
+                            style={{ padding: '3px 10px', fontSize: 12, height: 26, gap: 4 }}
+                            onClick={() => {
+                              try {
+                                void navigator.clipboard.writeText(DISCLAIMER_PHRASE)
+                              } catch {
+                                // fallback
+                              }
+                              setTypedPhrase(DISCLAIMER_PHRASE)
+                              onToast?.('已复制并填入承诺书誓词')
+                            }}
+                          >
+                            <Icon name="content_copy" style={{ fontSize: 13 }} />
+                            <span>点击复制并填入</span>
+                          </button>
+                        </div>
+                        <blockquote className="fe-target-phrase" style={{ userSelect: 'text', cursor: 'text' }}>
                           {DISCLAIMER_PHRASE}
                         </blockquote>
                       </div>
 
-                      {pasteWarning && (
-                        <div className="admin-status-strip is-danger" style={{ marginBottom: 12 }}>
-                          <Icon name="block" />
-                          <span>{pasteWarning}</span>
-                        </div>
-                      )}
-
                       <input
                         type="text"
                         className="fe-phrase-input"
-                        placeholder="在此处手打输入上述文本（禁止粘贴）"
+                        placeholder="在此处输入或直接粘贴上述承诺誓词"
                         value={typedPhrase}
                         onChange={(e) => setTypedPhrase(e.target.value)}
-                        onPaste={(e) => {
-                          e.preventDefault()
-                          setPasteWarning('检测到剪贴板粘贴！风控系统已禁止粘贴，必须由您亲手键入以确保充分知情。')
-                        }}
                         autoComplete="off"
                         autoCorrect="off"
                       />
@@ -1224,30 +1230,38 @@ export function AutoCompletePage({
                         第三重：免责誓词输入校验
                       </div>
                       <div className="fe-disclaimer-instruction" style={{ marginTop: 12 }}>
-                        <span>最后一步：请在下方输入框完整手打输入免责誓词（禁止粘贴）：</span>
-                        <blockquote className="fe-target-phrase">
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                          <span>最后一步：请在下方输入或粘贴免责承诺誓词：</span>
+                          <button
+                            type="button"
+                            className="control-secondary fe-btn-sm"
+                            style={{ padding: '3px 10px', fontSize: 12, height: 26, gap: 4 }}
+                            onClick={() => {
+                              try {
+                                void navigator.clipboard.writeText(DISCLAIMER_PHRASE)
+                              } catch {
+                                // fallback
+                              }
+                              setTypedPhrase(DISCLAIMER_PHRASE)
+                              onToast?.('已复制并填入承诺书誓词')
+                            }}
+                          >
+                            <Icon name="content_copy" style={{ fontSize: 13 }} />
+                            <span>点击复制并填入</span>
+                          </button>
+                        </div>
+                        <blockquote className="fe-target-phrase" style={{ userSelect: 'text', cursor: 'text' }}>
                           {DISCLAIMER_PHRASE}
                         </blockquote>
                       </div>
-
-                      {pasteWarning && (
-                        <div className="admin-status-strip is-danger" style={{ marginBottom: 12 }}>
-                          <Icon name="block" />
-                          <span>{pasteWarning}</span>
-                        </div>
-                      )}
 
                       {countdown === 0 && (
                         <input
                           type="text"
                           className="fe-phrase-input"
-                          placeholder="手打输入誓词（严格禁止粘贴）"
+                          placeholder="在此处输入或直接粘贴上述承诺誓词"
                           value={typedPhrase}
                           onChange={(e) => setTypedPhrase(e.target.value)}
-                          onPaste={(e) => {
-                            e.preventDefault()
-                            setPasteWarning('检测到粘贴行为！风控系统已禁止粘贴，必须由您亲手键入。')
-                          }}
                           autoComplete="off"
                         />
                       )}
@@ -1259,7 +1273,7 @@ export function AutoCompletePage({
                       <div className="fe-countdown-ring">
                         <span className="fe-countdown-digits">{countdown}s</span>
                       </div>
-                      <span>请强制等待倒计时完成以确保深入理解当前风险 ({countdown} 秒)...</span>
+                      <span>请等待确认倒计时完成以确保理解当前风险 ({countdown} 秒)...</span>
                     </div>
                   )}
                 </div>
@@ -1292,7 +1306,7 @@ export function AutoCompletePage({
                       : countdown > 0
                       ? `请等待倒计时 (${countdown}s)`
                       : typedPhrase.trim() !== DISCLAIMER_PHRASE
-                      ? '请手打输入完整誓词'
+                      ? '请输入承诺誓词'
                       : '我已明确风险，立即开始'}
                   </span>
                 </button>
@@ -1306,7 +1320,7 @@ export function AutoCompletePage({
                       onClick={handleNextRiskStep}
                     >
                       <span>
-                        {countdown > 0 ? `强制等待确认 (${countdown}s)` : `进入下一步 (${riskStep + 1}/3)`}
+                        {countdown > 0 ? `等待确认 (${countdown}s)` : `进入下一步 (${riskStep + 1}/3)`}
                       </span>
                       <Icon name="arrow_forward" />
                     </button>
@@ -1326,7 +1340,7 @@ export function AutoCompletePage({
                           : countdown > 0
                           ? `请等待 (${countdown}s)`
                           : typedPhrase.trim() !== DISCLAIMER_PHRASE
-                          ? '请手打输入完整誓词'
+                          ? '请输入承诺誓词'
                           : '终审通过，正式开始'}
                       </span>
                     </button>
