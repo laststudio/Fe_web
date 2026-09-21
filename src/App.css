@@ -3571,6 +3571,140 @@ html:has(.control-shell) {
   outline: 2px solid #22c55e;
 }
 
+/* Studio Mode Tabs */
+.fe-studio-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--control-line);
+  padding-bottom: 12px;
+}
+
+.fe-studio-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--control-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.fe-studio-tab-btn:hover {
+  background: var(--control-surface-soft, rgba(0, 0, 0, 0.04));
+  color: var(--control-text);
+}
+
+.fe-studio-tab-btn.is-active {
+  background: var(--control-primary-soft, #eef2ff);
+  color: var(--control-primary, #4f46e5);
+  border-color: var(--control-primary-border, #c7d2fe);
+  font-weight: 600;
+}
+
+/* Audio Visualizer Wave */
+.fe-studio-visualizer {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 24px;
+  padding: 0 6px;
+  background: rgba(239, 68, 68, 0.08);
+  border-radius: 6px;
+}
+
+.fe-visualizer-bar {
+  width: 3px;
+  background: #ef4444;
+  border-radius: 2px;
+  transition: height 0.08s ease;
+  min-height: 4px;
+}
+
+/* Upload Dropzone */
+.fe-upload-dropzone {
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 32px 20px;
+  text-align: center;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.fe-upload-dropzone:hover,
+.fe-upload-dropzone.is-dragover {
+  border-color: #6366f1;
+  background: #eef2ff;
+}
+
+.fe-upload-dropzone-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: #e0e7ff;
+  color: #4f46e5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+}
+
+.fe-upload-dropzone-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.fe-upload-dropzone-hint {
+  font-size: 12.5px;
+  color: var(--control-muted);
+  max-width: 420px;
+  line-height: 1.5;
+}
+
+.fe-upload-selected-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  padding: 16px 20px;
+  border-radius: 10px;
+}
+
+.fe-upload-file-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.fe-upload-file-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fe-upload-file-info strong {
+  font-size: 14px;
+  color: #15803d;
+}
+
+.fe-upload-file-info span {
+  font-size: 12px;
+  color: var(--control-muted);
+}
+
 /* ==========================================================================
    Auto Complete Main Page
    ========================================================================== */

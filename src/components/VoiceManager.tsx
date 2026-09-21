@@ -9,6 +9,7 @@ import {
   uploadVoice,
   type VoiceProfile,
 } from '../api/voice'
+import { AudioRecorder } from '../utils/audioRecorder'
 
 const SAMPLE_TEXT =
   'The quick brown fox jumps over the lazy dog. Continuous learning and daily practice are the golden keys to mastering spoken English and unlocking endless new opportunities across the world.'
@@ -33,20 +34,40 @@ export function VoiceManager({
   const [playingClonedId, setPlayingClonedId] = useState<string | null>(null)
   const cloneAudioRef = useRef<HTMLAudioElement | null>(null)
 
+  // Studio tabs: 'mic' | 'upload'
+  const isSecure = typeof window !== 'undefined' ? (window.isSecureContext ?? true) : true
+  const hasMicSupport = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
+  const [studioMode, setStudioMode] = useState<'mic' | 'upload'>(
+    !isSecure || !hasMicSupport ? 'upload' : 'mic'
+  )
+
   // Recording studio state
   const [isRecording, setIsRecording] = useState(false)
-  const [countdown, setCountdown] = useState(10)
+  const [recordingSeconds, setRecordingSeconds] = useState(0)
+  const [audioLevel, setAudioLevel] = useState(0)
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null)
+  const [recordedDuration, setRecordedDuration] = useState<number>(0)
   const [recordedUrl, setRecordedUrl] = useState<string | null>(null)
   const [isPlayingRecorded, setIsPlayingRecorded] = useState(false)
   const [voiceName, setVoiceName] = useState('')
   const [isUploading, setIsUploading] = useState(false)
   const [recordError, setRecordError] = useState<string | null>(null)
 
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const audioChunksRef = useRef<Blob[]>([])
-  const timerRef = useRef<number | null>(null)
+  const recorderRef = useRef<AudioRecorder | null>(null)
+  const recordTimerRef = useRef<number | null>(null)
   const studioAudioRef = useRef<HTMLAudioElement | null>(null)
+
+  // Local file upload state
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [uploadFile, setUploadFile] = useState<File | null>(null)
+  const [uploadFileDuration, setUploadFileDuration] = useState<number | null>(null)
+  const [uploadFileUrl, setUploadFileUrl] = useState<string | null>(null)
+  const [uploadVoiceName, setUploadVoiceName] = useState('')
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [isUploadingFile, setIsUploadingFile] = useState(false)
+  const [isPlayingUploadFile, setIsPlayingUploadFile] = useState(false)
+  const uploadAudioRef = useRef<HTMLAudioElement | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
 
   const loadVoices = async () => {
     if (!accessToken) return
@@ -95,16 +116,23 @@ export function VoiceManager({
         cloneAudioRef.current.pause()
         cloneAudioRef.current = null
       }
+      if (uploadAudioRef.current) {
+        uploadAudioRef.current.pause()
+        uploadAudioRef.current = null
+      }
+      if (recorderRef.current) {
+        recorderRef.current.cancel()
+      }
     }
   }, [accessToken])
 
   useEffect(() => {
     return () => {
-      if (recordedUrl) {
-        URL.revokeObjectURL(recordedUrl)
-      }
+      if (recordedUrl) URL.revokeObjectURL(recordedUrl)
+      if (uploadFileUrl) URL.revokeObjectURL(uploadFileUrl)
+      if (recordTimerRef.current) clearInterval(recordTimerRef.current)
     }
-  }, [recordedUrl])
+  }, [recordedUrl, uploadFileUrl])
 
   const handleTogglePlay = (voiceId: string) => {
     if (playingVoiceId === voiceId) {
@@ -213,7 +241,8 @@ export function VoiceManager({
     }
   }
 
-  // Recording controls
+  // --- Online Mic Recording Controls ---
+
   const startRecording = async () => {
     setRecordError(null)
     if (recordedUrl) {
@@ -223,72 +252,91 @@ export function VoiceManager({
     }
 
     if (!navigator.mediaDevices?.getUserMedia) {
-      setRecordError('当前浏览器不支持音频录制或未开启 HTTPS 权限')
+      setRecordError(
+        '当前浏览器不支持麦克风录音，或未处于安全上下文 (HTTPS/localhost)。请切换至上方「本地上传」直接上传音频。'
+      )
       return
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : MediaRecorder.isTypeSupported('audio/webm')
-        ? 'audio/webm'
-        : ''
+      const recorder = new AudioRecorder()
+      recorderRef.current = recorder
 
-      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
-      mediaRecorderRef.current = recorder
-      audioChunksRef.current = []
+      await recorder.start((level) => {
+        setAudioLevel(level)
+      })
 
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-          audioChunksRef.current.push(e.data)
-        }
-      }
-
-      recorder.onstop = () => {
-        stream.getTracks().forEach((track) => track.stop())
-        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/wav' })
-        const url = URL.createObjectURL(blob)
-        setRecordedBlob(blob)
-        setRecordedUrl(url)
-        setIsRecording(false)
-        if (!voiceName) {
-          setVoiceName(`我的声音_${new Date().getMonth() + 1}${new Date().getDate()}`)
-        }
-      }
-
-      recorder.start()
       setIsRecording(true)
-      setCountdown(10)
+      setRecordingSeconds(0)
 
-      let timeLeft = 10
-      if (timerRef.current) clearInterval(timerRef.current)
-      timerRef.current = window.setInterval(() => {
-        timeLeft -= 1
-        setCountdown(timeLeft)
-        if (timeLeft <= 0) {
-          if (timerRef.current) clearInterval(timerRef.current)
-          timerRef.current = null
-          if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-            mediaRecorderRef.current.stop()
-          }
+      let sec = 0
+      if (recordTimerRef.current) clearInterval(recordTimerRef.current)
+      recordTimerRef.current = window.setInterval(() => {
+        sec += 1
+        setRecordingSeconds(sec)
+        if (sec >= 30) {
+          void stopRecording()
         }
       }, 1000)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '无法访问麦克风设备'
-      setRecordError(`麦克风权限异常: ${msg}`)
+      setRecordError(`麦克风启动异常: ${msg}。若无法解决，建议使用「本地上传」方式。`)
       setIsRecording(false)
+      if (recordTimerRef.current) {
+        clearInterval(recordTimerRef.current)
+        recordTimerRef.current = null
+      }
     }
   }
 
-  const stopRecordingEarly = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current)
-      timerRef.current = null
+  const stopRecording = async () => {
+    if (recordTimerRef.current) {
+      clearInterval(recordTimerRef.current)
+      recordTimerRef.current = null
     }
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.stop()
+
+    if (!recorderRef.current) return
+
+    try {
+      const { blob, duration } = await recorderRef.current.stop()
+      if (duration < 2.8) {
+        setRecordError(`录音时长仅 ${duration.toFixed(1)} 秒，系统要求至少需录制 3 秒，请重新录制。`)
+        setIsRecording(false)
+        return
+      }
+
+      const url = URL.createObjectURL(blob)
+      setRecordedBlob(blob)
+      setRecordedDuration(duration)
+      setRecordedUrl(url)
+      setIsRecording(false)
+
+      const now = new Date()
+      const defaultName = `我的原声_${now.getMonth() + 1}${now.getDate()}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
+      setVoiceName(defaultName)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '录音数据获取失败'
+      setRecordError(msg)
+      setIsRecording(false)
+    } finally {
+      recorderRef.current = null
+      setAudioLevel(0)
     }
+  }
+
+  const cancelRecording = () => {
+    if (recordTimerRef.current) {
+      clearInterval(recordTimerRef.current)
+      recordTimerRef.current = null
+    }
+    if (recorderRef.current) {
+      recorderRef.current.cancel()
+      recorderRef.current = null
+    }
+    setIsRecording(false)
+    setRecordingSeconds(0)
+    setAudioLevel(0)
+    setRecordError(null)
   }
 
   const togglePlayRecorded = () => {
@@ -312,12 +360,12 @@ export function VoiceManager({
 
   const handleUploadRecorded = async () => {
     if (!recordedBlob) return
-    const finalName = voiceName.trim() || `声音克隆_${Date.now().toString().slice(-4)}`
+    const finalName = voiceName.trim() || `我的原声_${Date.now().toString().slice(-4)}`
     setIsUploading(true)
     try {
       await uploadVoice(accessToken, recordedBlob, finalName)
-      onToast?.('声音上传并保存成功！')
-      // Reset studio
+      onToast?.('声音上传并保存成功！已加入您的克隆声音资产库')
+      // Reset studio recording
       if (recordedUrl) URL.revokeObjectURL(recordedUrl)
       setRecordedBlob(null)
       setRecordedUrl(null)
@@ -328,6 +376,109 @@ export function VoiceManager({
       onToast?.(msg)
     } finally {
       setIsUploading(false)
+    }
+  }
+
+  // --- Local File Upload Controls ---
+
+  const processSelectedFile = (file: File) => {
+    setUploadError(null)
+    if (uploadFileUrl) {
+      URL.revokeObjectURL(uploadFileUrl)
+      setUploadFileUrl(null)
+    }
+    setUploadFile(null)
+    setUploadFileDuration(null)
+
+    // Check size limit: 5MB
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError(`文件大小为 ${(file.size / (1024 * 1024)).toFixed(1)}MB，不能超过 5MB`)
+      return
+    }
+
+    const url = URL.createObjectURL(file)
+    const audio = new Audio(url)
+
+    audio.onloadedmetadata = () => {
+      const dur = audio.duration
+      if (!dur || isNaN(dur)) {
+        // Fallback if browser can't read duration directly
+        setUploadFile(file)
+        setUploadFileUrl(url)
+        setUploadVoiceName(file.name.replace(/\.[^/.]+$/, '').slice(0, 30))
+        return
+      }
+
+      if (dur < 2.9) {
+        setUploadError(`音频时长过短（仅 ${dur.toFixed(1)} 秒），声音克隆要求至少 3 秒`)
+        URL.revokeObjectURL(url)
+        return
+      }
+      if (dur > 30.5) {
+        setUploadError(`音频时长过长（${dur.toFixed(1)} 秒），声音克隆要求在 30 秒以内，请裁剪后上传`)
+        URL.revokeObjectURL(url)
+        return
+      }
+
+      setUploadFile(file)
+      setUploadFileDuration(dur)
+      setUploadFileUrl(url)
+      setUploadVoiceName(file.name.replace(/\.[^/.]+$/, '').slice(0, 30))
+    }
+
+    audio.onerror = () => {
+      // Browser couldn't decode metadata directly, still allow upload as backend ffmpeg will transcode
+      setUploadFile(file)
+      setUploadFileUrl(url)
+      setUploadVoiceName(file.name.replace(/\.[^/.]+$/, '').slice(0, 30))
+    }
+  }
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      processSelectedFile(file)
+    }
+  }
+
+  const handleTogglePlayUploadFile = () => {
+    if (!uploadFileUrl) return
+    if (isPlayingUploadFile) {
+      if (uploadAudioRef.current) uploadAudioRef.current.pause()
+      setIsPlayingUploadFile(false)
+      return
+    }
+
+    const audio = new Audio(uploadFileUrl)
+    uploadAudioRef.current = audio
+    setIsPlayingUploadFile(true)
+    audio.onended = () => setIsPlayingUploadFile(false)
+    audio.onerror = () => {
+      setIsPlayingUploadFile(false)
+      onToast?.('无法试听该文件')
+    }
+    audio.play().catch(() => setIsPlayingUploadFile(false))
+  }
+
+  const handleSaveUploadedFile = async () => {
+    if (!uploadFile) return
+    const finalName = uploadVoiceName.trim() || uploadFile.name.replace(/\.[^/.]+$/, '').slice(0, 30) || '本地导入原声'
+    setIsUploadingFile(true)
+    try {
+      await uploadVoice(accessToken, uploadFile, finalName)
+      onToast?.('音频文件上传成功！已加入您的克隆声音资产库')
+      if (uploadFileUrl) URL.revokeObjectURL(uploadFileUrl)
+      setUploadFile(null)
+      setUploadFileUrl(null)
+      setUploadFileDuration(null)
+      setUploadVoiceName('')
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      await loadVoices()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '音频文件上传失败'
+      onToast?.(msg)
+    } finally {
+      setIsUploadingFile(false)
     }
   }
 
@@ -352,7 +503,7 @@ export function VoiceManager({
                 <Icon name="refresh" className={loading ? 'fe-spin' : ''} />
               </button>
             </div>
-            <p>已录制并同步至云端的声音样本，可用于 tts.ai 高拟真自动朗读答题</p>
+            <p>已录制或上传并同步至云端的声音样本，可用于 tts.ai 高拟真自动朗读答题</p>
           </div>
         </div>
 
@@ -373,7 +524,7 @@ export function VoiceManager({
             <div className="fe-voice-empty">
               <Icon name="mic_none" />
               <p>暂无已录制声音样本</p>
-              <small>请在下方「在线录音棚」录制一段 10 秒语音，开启专属音色克隆。</small>
+              <small>请在下方「声音采集棚」录制一段 3~30 秒语音或直接上传音频，开启专属音色克隆。</small>
             </div>
           ) : (
             voices.map((voice) => {
@@ -465,119 +616,302 @@ export function VoiceManager({
         </div>
       </section>
 
-      {/* 2. Online Recording Studio Card */}
+      {/* 2. Recording & Upload Studio Card */}
       <section className="admin-policy-card fe-studio-card">
         <div className="admin-policy-card-head">
           <div className="fe-voice-head-icon is-studio">
             <Icon name="mic" />
           </div>
           <div>
-            <h3>在线录音棚 (10秒样本采集)</h3>
-            <p>朗读下方标准化 30 词英语文本，算法将提取您的发音音色、声学特征与共鸣腔</p>
+            <h3>声音样本采集棚 (3~30秒录制或上传)</h3>
+            <p>朗读标准化 30 词英语文本或上传已有音频，提取您的发音音色、声学特征与共鸣腔</p>
           </div>
         </div>
 
         <div className="fe-studio-body">
+          {/* Mode Switch Tabs */}
+          <div className="fe-studio-tabs">
+            <button
+              type="button"
+              className={`fe-studio-tab-btn ${studioMode === 'mic' ? 'is-active' : ''}`}
+              onClick={() => {
+                if (!isSecure && !hasMicSupport) {
+                  onToast?.('当前非 HTTPS 环境，浏览器禁止麦克风调用，请使用本地上传')
+                }
+                setStudioMode('mic')
+              }}
+            >
+              <Icon name="mic" />
+              <span>麦克风在线录音 (3~30秒)</span>
+            </button>
+            <button
+              type="button"
+              className={`fe-studio-tab-btn ${studioMode === 'upload' ? 'is-active' : ''}`}
+              onClick={() => setStudioMode('upload')}
+            >
+              <Icon name="cloud_upload" />
+              <span>本地音频文件上传 (MP3 / WAV / M4A)</span>
+            </button>
+          </div>
+
+          {/* Insecure Context Hint */}
+          {(!isSecure || !hasMicSupport) && studioMode === 'mic' && (
+            <div className="admin-status-strip is-warning" style={{ marginBottom: 14 }}>
+              <Icon name="info" />
+              <span>
+                检测到当前页面未处于安全上下文（HTTPS 或 localhost），浏览器限制了麦克风权限。建议直接切换至「本地音频文件上传」上传已有音频。
+              </span>
+            </div>
+          )}
+
           {/* Sample Text Banner */}
           <div className="fe-studio-sample-box">
             <div className="fe-studio-sample-header">
               <span className="fe-studio-tag">朗读范本 (30 词)</span>
-              <small>请以自然语速、吐字清晰地朗读以下内容：</small>
+              <small>请以自然语速、清晰吐字朗读以下标准文本（录制 3~30 秒均可）：</small>
             </div>
             <blockquote className="fe-studio-text">
               “{SAMPLE_TEXT}”
             </blockquote>
           </div>
 
-          {recordError && (
-            <div className="admin-status-strip is-danger" style={{ marginTop: 14 }}>
-              <Icon name="warning" />
-              <span>{recordError}</span>
+          {/* TAB 1: Microphone Recording */}
+          {studioMode === 'mic' && (
+            <div className="fe-studio-recorder-row">
+              {recordError && (
+                <div className="admin-status-strip is-danger" style={{ marginBottom: 14 }}>
+                  <Icon name="warning" />
+                  <span>{recordError}</span>
+                </div>
+              )}
+
+              {isRecording ? (
+                <div className="fe-studio-active-state">
+                  <div className="fe-studio-pulse-ring">
+                    <span className="fe-pulse-dot" />
+                    <span className="fe-studio-countdown-num">
+                      {String(Math.floor(recordingSeconds / 60)).padStart(2, '0')}:
+                      {String(recordingSeconds % 60).padStart(2, '0')}
+                    </span>
+                  </div>
+
+                  <div className="fe-studio-recording-info">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <strong>
+                        {recordingSeconds < 3
+                          ? `正在录音中... (还需 ${3 - recordingSeconds} 秒达到有效时长)`
+                          : '正在录音中... 朗读完毕可随时点击「完成录音」'}
+                      </strong>
+                      {/* Audio Level Equalizer Visualizer */}
+                      <div className="fe-studio-visualizer" title="麦克风音量动态波形">
+                        {[0.2, 0.5, 0.8, 1.0, 0.7, 0.4, 0.9, 0.6, 0.3].map((factor, idx) => {
+                          const height = Math.max(4, Math.min(22, Math.round(audioLevel * 22 * factor + 4)))
+                          return (
+                            <span
+                              key={idx}
+                              className="fe-visualizer-bar"
+                              style={{ height: `${height}px` }}
+                            />
+                          )
+                        })}
+                      </div>
+                    </div>
+                    <div className="fe-studio-progress-track">
+                      <div
+                        className="fe-studio-progress-fill"
+                        style={{ width: `${(recordingSeconds / 30) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {recordingSeconds >= 3 ? (
+                      <button
+                        type="button"
+                        className="control-primary is-success"
+                        style={{ padding: '8px 16px', background: '#16a34a', borderColor: '#15803d' }}
+                        onClick={() => void stopRecording()}
+                      >
+                        <Icon name="check" /> 完成录音 ({recordingSeconds}s)
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="control-secondary"
+                        disabled
+                        style={{ padding: '8px 14px', opacity: 0.6 }}
+                      >
+                        需录制满 3 秒
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="control-secondary is-danger"
+                      onClick={cancelRecording}
+                    >
+                      <Icon name="close" /> 取消
+                    </button>
+                  </div>
+                </div>
+              ) : recordedUrl ? (
+                <div className="fe-studio-recorded-state">
+                  <div className="fe-studio-preview-controls">
+                    <button
+                      type="button"
+                      className="control-secondary"
+                      onClick={togglePlayRecorded}
+                    >
+                      <Icon name={isPlayingRecorded ? 'pause' : 'play_arrow'} />
+                      <span>{isPlayingRecorded ? '暂停试听' : `试听录音 (${recordedDuration.toFixed(1)}s)`}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="control-secondary"
+                      onClick={startRecording}
+                    >
+                      <Icon name="replay" />
+                      <span>重新录制</span>
+                    </button>
+                  </div>
+
+                  <div className="fe-studio-save-form">
+                    <input
+                      type="text"
+                      className="fe-studio-name-input"
+                      placeholder="输入此音色名称，例如：我的原声 1"
+                      value={voiceName}
+                      onChange={(e) => setVoiceName(e.target.value)}
+                      maxLength={30}
+                    />
+                    <button
+                      type="button"
+                      className="control-primary"
+                      onClick={handleUploadRecorded}
+                      disabled={isUploading}
+                    >
+                      <Icon name={isUploading ? 'sync' : 'cloud_upload'} className={isUploading ? 'fe-spin' : ''} />
+                      <span>{isUploading ? '正在上传保存...' : '保存至声音库'}</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="fe-studio-idle-state">
+                  <button
+                    type="button"
+                    className="control-primary fe-studio-record-btn"
+                    onClick={startRecording}
+                  >
+                    <Icon name="mic" />
+                    <span>开始麦克风录音</span>
+                  </button>
+                  <span className="fe-studio-hint">
+                    录制 3~30 秒的高保真声音样本，浏览器将直接编码为无损 WAV 音频。
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Recording Progress & Controls */}
-          <div className="fe-studio-recorder-row">
-            {isRecording ? (
-              <div className="fe-studio-active-state">
-                <div className="fe-studio-pulse-ring">
-                  <span className="fe-pulse-dot" />
-                  <span className="fe-studio-countdown-num">{countdown}s</span>
+          {/* TAB 2: Local File Upload */}
+          {studioMode === 'upload' && (
+            <div className="fe-studio-recorder-row">
+              {uploadError && (
+                <div className="admin-status-strip is-danger" style={{ marginBottom: 14 }}>
+                  <Icon name="warning" />
+                  <span>{uploadError}</span>
                 </div>
-                <div className="fe-studio-recording-info">
-                  <strong>正在录音中... 请保持环境安静并朗读上方文本</strong>
-                  <div className="fe-studio-progress-track">
-                    <div
-                      className="fe-studio-progress-fill"
-                      style={{ width: `${((10 - countdown) / 10) * 100}%` }}
+              )}
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.webm"
+                style={{ display: 'none' }}
+                onChange={handleFileInputChange}
+              />
+
+              {uploadFile ? (
+                <div className="fe-upload-selected-card">
+                  <div className="fe-upload-file-header">
+                    <div className="fe-upload-file-info">
+                      <Icon name="audio_file" style={{ fontSize: 24, color: '#16a34a' }} />
+                      <div>
+                        <strong>{uploadFile.name}</strong>
+                        <span>
+                          {(uploadFile.size / 1024).toFixed(0)} KB
+                          {uploadFileDuration ? ` · 约 ${uploadFileDuration.toFixed(1)} 秒` : ''}
+                        </span>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        type="button"
+                        className="control-secondary fe-btn-sm"
+                        onClick={handleTogglePlayUploadFile}
+                      >
+                        <Icon name={isPlayingUploadFile ? 'pause' : 'play_arrow'} />
+                        <span>{isPlayingUploadFile ? '暂停' : '试听'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="control-secondary fe-btn-sm"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <Icon name="swap_horiz" />
+                        <span>更换文件</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="fe-studio-save-form">
+                    <input
+                      type="text"
+                      className="fe-studio-name-input"
+                      placeholder="设置声音名称"
+                      value={uploadVoiceName}
+                      onChange={(e) => setUploadVoiceName(e.target.value)}
+                      maxLength={30}
                     />
+                    <button
+                      type="button"
+                      className="control-primary"
+                      onClick={handleSaveUploadedFile}
+                      disabled={isUploadingFile}
+                    >
+                      <Icon name={isUploadingFile ? 'sync' : 'cloud_upload'} className={isUploadingFile ? 'fe-spin' : ''} />
+                      <span>{isUploadingFile ? '正在上传保存...' : '上传并保存至声音库'}</span>
+                    </button>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  className="control-secondary is-danger"
-                  onClick={stopRecordingEarly}
+              ) : (
+                <div
+                  className={`fe-upload-dropzone ${isDragging ? 'is-dragover' : ''}`}
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    setIsDragging(true)
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    setIsDragging(false)
+                    const file = e.dataTransfer.files?.[0]
+                    if (file) processSelectedFile(file)
+                  }}
                 >
-                  <Icon name="stop" /> 提前完成
-                </button>
-              </div>
-            ) : recordedUrl ? (
-              <div className="fe-studio-recorded-state">
-                <div className="fe-studio-preview-controls">
-                  <button
-                    type="button"
-                    className="control-secondary"
-                    onClick={togglePlayRecorded}
-                  >
-                    <Icon name={isPlayingRecorded ? 'pause' : 'play_arrow'} />
-                    <span>{isPlayingRecorded ? '暂停试听' : '试听录音 (10s)'}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="control-secondary"
-                    onClick={startRecording}
-                  >
-                    <Icon name="replay" />
-                    <span>重新录制</span>
-                  </button>
+                  <div className="fe-upload-dropzone-icon">
+                    <Icon name="cloud_upload" />
+                  </div>
+                  <div className="fe-upload-dropzone-title">
+                    点击选择音频文件，或将音频拖拽至此处
+                  </div>
+                  <div className="fe-upload-dropzone-hint">
+                    支持 MP3, WAV, M4A, AAC, WebM, OGG 等常见格式；大小不超过 5MB；时长 3 ~ 30 秒（系统将自动转码并归一化为标准高拟真样本）。
+                  </div>
                 </div>
-
-                <div className="fe-studio-save-form">
-                  <input
-                    type="text"
-                    className="fe-studio-name-input"
-                    placeholder="输入此音色名称，例如：我的原声 1"
-                    value={voiceName}
-                    onChange={(e) => setVoiceName(e.target.value)}
-                    maxLength={20}
-                  />
-                  <button
-                    type="button"
-                    className="control-primary"
-                    onClick={handleUploadRecorded}
-                    disabled={isUploading}
-                  >
-                    <Icon name={isUploading ? 'sync' : 'cloud_upload'} className={isUploading ? 'fe-spin' : ''} />
-                    <span>{isUploading ? '正在上传保存...' : '保存至声音库'}</span>
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="fe-studio-idle-state">
-                <button
-                  type="button"
-                  className="control-primary fe-studio-record-btn"
-                  onClick={startRecording}
-                >
-                  <Icon name="mic" />
-                  <span>开始 10 秒录音</span>
-                </button>
-                <span className="fe-studio-hint">
-                  点击后浏览器将请求麦克风权限，录音满 10 秒后自动生成试听。
-                </span>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
       </section>
     </div>
