@@ -1,6 +1,9 @@
 name: Deploy Fe Web
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       confirm:
@@ -20,7 +23,7 @@ concurrency:
 
 jobs:
   build-and-deploy:
-    if: inputs.confirm == 'DEPLOY'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.confirm == 'DEPLOY')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production

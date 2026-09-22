@@ -42,8 +42,9 @@ export function setDefaultVoice(accessToken: string, voiceId: string): Promise<{
   })
 }
 
-export function getVoiceAudioUrl(voiceId: string): string {
-  return `${oauthConfig.apiUrl}/user/voices/${encodeURIComponent(voiceId)}/audio`
+export function getVoiceAudioUrl(voiceId: string, accessToken?: string): string {
+  const base = `${oauthConfig.apiUrl}/user/voices/${encodeURIComponent(voiceId)}/audio`
+  return accessToken ? `${base}?token=${encodeURIComponent(accessToken)}` : base
 }
 
 export async function getVoiceClonePreview(

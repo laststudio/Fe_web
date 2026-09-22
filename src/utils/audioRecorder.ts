@@ -54,7 +54,7 @@ export class AudioRecorder {
 
   async start(onLevelChange?: (level: number) => void): Promise<void> {
     if (!navigator.mediaDevices?.getUserMedia) {
-      throw new Error('当前浏览器不支持音频录制，或页面未处于安全上下文 (HTTPS/localhost)')
+      throw new Error('当前浏览器不支持音频录制，或页面未处于安全上下文 (HTTPS 或安全源)')
     }
 
     this.pcmChunks = []

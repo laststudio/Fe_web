@@ -12,7 +12,7 @@ import {
 import { AudioRecorder } from '../utils/audioRecorder'
 
 const SAMPLE_TEXT =
-  'The quick brown fox jumps over the lazy dog. Continuous learning and daily practice are the golden keys to mastering spoken English and unlocking endless new opportunities across the world.'
+  'Hello! My name is Mike. I am a student. I like reading books and playing basketball with my friends. Nice to meet you.'
 
 export function VoiceManager({
   accessToken,
@@ -40,6 +40,8 @@ export function VoiceManager({
   const [studioMode, setStudioMode] = useState<'mic' | 'upload'>(
     !isSecure || !hasMicSupport ? 'upload' : 'mic'
   )
+
+  const isAtLimit = voices.length >= 3
 
   // Recording studio state
   const [isRecording, setIsRecording] = useState(false)
@@ -152,7 +154,7 @@ export function VoiceManager({
       previewAudioRef.current.pause()
     }
 
-    const audioUrl = getVoiceAudioUrl(voiceId)
+    const audioUrl = getVoiceAudioUrl(voiceId, accessToken)
     const audio = new Audio(audioUrl)
     previewAudioRef.current = audio
     setPlayingVoiceId(voiceId)
@@ -162,7 +164,7 @@ export function VoiceManager({
     }
     audio.onerror = () => {
       setPlayingVoiceId(null)
-      onToast?.('音频播放失败，请检查文件是否存在')
+      onToast?.('音频播放失败，请检查文件是否存在或权限是否有效')
     }
     audio.play().catch(() => {
       setPlayingVoiceId(null)
@@ -244,6 +246,11 @@ export function VoiceManager({
   // --- Online Mic Recording Controls ---
 
   const startRecording = async () => {
+    if (isAtLimit) {
+      onToast?.('每个账号最多保存 3 个声音样本，请先删除已有声音')
+      return
+    }
+
     setRecordError(null)
     if (recordedUrl) {
       URL.revokeObjectURL(recordedUrl)
@@ -253,7 +260,7 @@ export function VoiceManager({
 
     if (!navigator.mediaDevices?.getUserMedia) {
       setRecordError(
-        '当前浏览器不支持麦克风录音，或未处于安全上下文 (HTTPS/localhost)。请切换至上方「本地上传」直接上传音频。'
+        '当前浏览器不支持麦克风录音，或未处于安全上下文 (HTTPS 或安全源)。请切换至上方「本地上传」直接上传音频。'
       )
       return
     }
@@ -360,6 +367,11 @@ export function VoiceManager({
 
   const handleUploadRecorded = async () => {
     if (!recordedBlob) return
+    if (isAtLimit) {
+      onToast?.('每个账号最多保存 3 个声音样本，请先删除旧声音后再保存')
+      return
+    }
+
     const finalName = voiceName.trim() || `我的原声_${Date.now().toString().slice(-4)}`
     setIsUploading(true)
     try {
@@ -382,6 +394,11 @@ export function VoiceManager({
   // --- Local File Upload Controls ---
 
   const processSelectedFile = (file: File) => {
+    if (isAtLimit) {
+      setUploadError('当前账号已达到 3 个声音上限，请先在上方资产库中删除旧声音后再上传。')
+      return
+    }
+
     setUploadError(null)
     if (uploadFileUrl) {
       URL.revokeObjectURL(uploadFileUrl)
@@ -462,6 +479,11 @@ export function VoiceManager({
 
   const handleSaveUploadedFile = async () => {
     if (!uploadFile) return
+    if (isAtLimit) {
+      onToast?.('每个账号最多保存 3 个声音样本，请先删除旧声音后再保存')
+      return
+    }
+
     const finalName = uploadVoiceName.trim() || uploadFile.name.replace(/\.[^/.]+$/, '').slice(0, 30) || '本地导入原声'
     setIsUploadingFile(true)
     try {
@@ -492,7 +514,15 @@ export function VoiceManager({
           </div>
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-              <h3>我的克隆声音资产库</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <h3>我的克隆声音资产库</h3>
+                <span
+                  className={`admin-pill-badge ${isAtLimit ? 'is-warning' : 'is-success'}`}
+                  title="每个账号最多可保存 3 个声音样本"
+                >
+                  已用 {voices.length} / 3
+                </span>
+              </div>
               <button
                 type="button"
                 className="control-icon-button"
@@ -503,7 +533,7 @@ export function VoiceManager({
                 <Icon name="refresh" className={loading ? 'fe-spin' : ''} />
               </button>
             </div>
-            <p>已录制或上传并同步至云端的声音样本，可用于 tts.ai 高拟真自动朗读答题</p>
+            <p>已录制或上传并同步至云端的声音样本，每个账号最多保留 3 个，可用于 tts.ai 高拟真自动朗读答题</p>
           </div>
         </div>
 
@@ -511,6 +541,13 @@ export function VoiceManager({
           <div className="admin-status-strip is-danger" style={{ margin: '0 20px 16px' }}>
             <Icon name="error" />
             <span>{error}</span>
+          </div>
+        )}
+
+        {isAtLimit && (
+          <div className="admin-status-strip is-warning" style={{ margin: '0 20px 14px' }}>
+            <Icon name="info" />
+            <span>当前账号已达到 3 个声音样本的保存上限（3/3）。如需录制新声音或上传新音频，请先删除不需要的旧声音。</span>
           </div>
         )}
 
@@ -524,7 +561,7 @@ export function VoiceManager({
             <div className="fe-voice-empty">
               <Icon name="mic_none" />
               <p>暂无已录制声音样本</p>
-              <small>请在下方「声音采集棚」录制一段 3~30 秒语音或直接上传音频，开启专属音色克隆。</small>
+              <small>请在下方「声音采集棚」录制一段 3~30 秒语音或直接上传音频，开启专属音色克隆（上限 3 个）。</small>
             </div>
           ) : (
             voices.map((voice) => {
@@ -623,8 +660,8 @@ export function VoiceManager({
             <Icon name="mic" />
           </div>
           <div>
-            <h3>声音样本采集棚 (3~30秒录制或上传)</h3>
-            <p>朗读标准化 30 词英语文本或上传已有音频，提取您的发音音色、声学特征与共鸣腔</p>
+            <h3>声音样本采集棚 (3~30秒录制或上传 · 每个账号上限3个)</h3>
+            <p>朗读下方简单通用的示范英语或直接上传已有音频，每个账号最多保留 3 个音色样本</p>
           </div>
         </div>
 
@@ -654,12 +691,22 @@ export function VoiceManager({
             </button>
           </div>
 
+          {/* Limit Reached Banner */}
+          {isAtLimit && (
+            <div className="admin-status-strip is-warning" style={{ marginBottom: 14 }}>
+              <Icon name="warning" />
+              <span>
+                当前账号已达 3 个声音样本上限（3/3）。请先在上方资产库中删除旧声音后再录制或上传新音频。
+              </span>
+            </div>
+          )}
+
           {/* Insecure Context Hint */}
           {(!isSecure || !hasMicSupport) && studioMode === 'mic' && (
             <div className="admin-status-strip is-warning" style={{ marginBottom: 14 }}>
               <Icon name="info" />
               <span>
-                检测到当前页面未处于安全上下文（HTTPS 或 localhost），浏览器限制了麦克风权限。建议直接切换至「本地音频文件上传」上传已有音频。
+                检测到当前页面未处于安全上下文（HTTPS 或安全源），浏览器限制了麦克风权限。建议直接切换至「本地音频文件上传」直接选择已有音频文件。
               </span>
             </div>
           )}
@@ -667,8 +714,8 @@ export function VoiceManager({
           {/* Sample Text Banner */}
           <div className="fe-studio-sample-box">
             <div className="fe-studio-sample-header">
-              <span className="fe-studio-tag">朗读范本 (30 词)</span>
-              <small>请以自然语速、清晰吐字朗读以下标准文本（录制 3~30 秒均可）：</small>
+              <span className="fe-studio-tag">朗读范本 (简单通用)</span>
+              <small>请以自然语速、吐字清晰地朗读以下标准基础文本（录制 3~30 秒均可）：</small>
             </div>
             <blockquote className="fe-studio-text">
               “{SAMPLE_TEXT}”
@@ -768,6 +815,7 @@ export function VoiceManager({
                       type="button"
                       className="control-secondary"
                       onClick={startRecording}
+                      disabled={isAtLimit}
                     >
                       <Icon name="replay" />
                       <span>重新录制</span>
@@ -787,10 +835,11 @@ export function VoiceManager({
                       type="button"
                       className="control-primary"
                       onClick={handleUploadRecorded}
-                      disabled={isUploading}
+                      disabled={isUploading || isAtLimit}
+                      title={isAtLimit ? '已达每个账号上限 3/3，请先删除已有声音' : undefined}
                     >
                       <Icon name={isUploading ? 'sync' : 'cloud_upload'} className={isUploading ? 'fe-spin' : ''} />
-                      <span>{isUploading ? '正在上传保存...' : '保存至声音库'}</span>
+                      <span>{isUploading ? '正在上传保存...' : isAtLimit ? '已达上限 (3/3)' : '保存至声音库'}</span>
                     </button>
                   </div>
                 </div>
@@ -800,12 +849,16 @@ export function VoiceManager({
                     type="button"
                     className="control-primary fe-studio-record-btn"
                     onClick={startRecording}
+                    disabled={isAtLimit}
+                    title={isAtLimit ? '已达每个账号上限 3/3，请先删除已有声音' : undefined}
                   >
                     <Icon name="mic" />
-                    <span>开始麦克风录音</span>
+                    <span>{isAtLimit ? '已达 3 个声音上限' : '开始麦克风录音'}</span>
                   </button>
                   <span className="fe-studio-hint">
-                    录制 3~30 秒的高保真声音样本，浏览器将直接编码为无损 WAV 音频。
+                    {isAtLimit
+                      ? '每个账号最多保存 3 个声音样本，如需新录制请先删除已有声音。'
+                      : '录制 3~30 秒的声音样本，浏览器将直接编码为无损高拟真 WAV 音频。'}
                   </span>
                 </div>
               )}
@@ -855,7 +908,8 @@ export function VoiceManager({
                       <button
                         type="button"
                         className="control-secondary fe-btn-sm"
-                        onClick={() => fileInputRef.current?.click()}
+                        onClick={() => !isAtLimit && fileInputRef.current?.click()}
+                        disabled={isAtLimit}
                       >
                         <Icon name="swap_horiz" />
                         <span>更换文件</span>
@@ -876,37 +930,51 @@ export function VoiceManager({
                       type="button"
                       className="control-primary"
                       onClick={handleSaveUploadedFile}
-                      disabled={isUploadingFile}
+                      disabled={isUploadingFile || isAtLimit}
+                      title={isAtLimit ? '已达每个账号上限 3/3，请先删除已有声音' : undefined}
                     >
                       <Icon name={isUploadingFile ? 'sync' : 'cloud_upload'} className={isUploadingFile ? 'fe-spin' : ''} />
-                      <span>{isUploadingFile ? '正在上传保存...' : '上传并保存至声音库'}</span>
+                      <span>{isUploadingFile ? '正在上传保存...' : isAtLimit ? '已达上限 (3/3)' : '上传并保存至声音库'}</span>
                     </button>
                   </div>
                 </div>
               ) : (
                 <div
                   className={`fe-upload-dropzone ${isDragging ? 'is-dragover' : ''}`}
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => {
+                    if (isAtLimit) {
+                      onToast?.('当前账号已达 3 个声音上限，请先删除旧声音')
+                      return
+                    }
+                    fileInputRef.current?.click()
+                  }}
                   onDragOver={(e) => {
                     e.preventDefault()
-                    setIsDragging(true)
+                    if (!isAtLimit) setIsDragging(true)
                   }}
                   onDragLeave={() => setIsDragging(false)}
                   onDrop={(e) => {
                     e.preventDefault()
                     setIsDragging(false)
+                    if (isAtLimit) {
+                      onToast?.('当前账号已达 3 个声音上限，请先删除旧声音')
+                      return
+                    }
                     const file = e.dataTransfer.files?.[0]
                     if (file) processSelectedFile(file)
                   }}
+                  style={isAtLimit ? { opacity: 0.6, cursor: 'not-allowed' } : undefined}
                 >
                   <div className="fe-upload-dropzone-icon">
                     <Icon name="cloud_upload" />
                   </div>
                   <div className="fe-upload-dropzone-title">
-                    点击选择音频文件，或将音频拖拽至此处
+                    {isAtLimit ? '已达到每个账号 3 个声音上限' : '点击选择音频文件，或将音频拖拽至此处'}
                   </div>
                   <div className="fe-upload-dropzone-hint">
-                    支持 MP3, WAV, M4A, AAC, WebM, OGG 等常见格式；大小不超过 5MB；时长 3 ~ 30 秒（系统将自动转码并归一化为标准高拟真样本）。
+                    {isAtLimit
+                      ? '每个账号最多保存 3 个声音样本，请先在上方资产库中删除已有声音后再上传新文件。'
+                      : '支持 MP3, WAV, M4A, AAC, WebM, OGG 等常见格式；大小不超过 5MB；时长 3 ~ 30 秒（系统将自动转码并归一化为标准高拟真样本）。'}
                   </div>
                 </div>
               )}

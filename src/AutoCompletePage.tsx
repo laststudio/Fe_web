@@ -408,7 +408,7 @@ export function AutoCompletePage({
     }
 
     if (audioPreviewRef.current) audioPreviewRef.current.pause()
-    const url = getVoiceAudioUrl(selectedVoiceId)
+    const url = getVoiceAudioUrl(selectedVoiceId, accessToken)
     const audio = new Audio(url)
     audioPreviewRef.current = audio
     setIsPlayingPreview(true)
