@@ -63,7 +63,7 @@ export function setUnauthorizedHandler(handler: (() => void) | null) {
   unauthorizedHandler = handler
 }
 
-export async function apiRequest<T>(path: string, { accessToken, ...init }: ApiRequestOptions = {}): Promise<T> {
+export async function executeApiRequest(path: string, { accessToken, ...init }: ApiRequestOptions = {}): Promise<Response> {
   const headers = new Headers(init.headers)
   const method = (init.method || 'GET').toUpperCase()
   const deviceId = getOrCreateDeviceId()
@@ -170,7 +170,18 @@ export async function apiRequest<T>(path: string, { accessToken, ...init }: ApiR
       isNetworkError: false,
     })
   }
+
+  return response
+}
+
+export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+  const response = await executeApiRequest(path, options)
   return response.json() as Promise<T>
+}
+
+export async function apiBlobRequest(path: string, options: ApiRequestOptions = {}): Promise<Blob> {
+  const response = await executeApiRequest(path, options)
+  return response.blob()
 }
 
 export function getCurrentUser(accessToken: string) {

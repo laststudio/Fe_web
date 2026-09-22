@@ -1,4 +1,4 @@
-import { apiRequest } from './auth'
+import { apiBlobRequest, apiRequest } from './auth'
 import { oauthConfig } from '../auth/config'
 
 export type VoiceProfile = {
@@ -47,30 +47,18 @@ export function getVoiceAudioUrl(voiceId: string, accessToken?: string): string 
   return accessToken ? `${base}?token=${encodeURIComponent(accessToken)}` : base
 }
 
-export async function getVoiceClonePreview(
+export function getVoiceClonePreview(
   accessToken: string,
   voiceId: string,
   text?: string
 ): Promise<Blob> {
-  const url = `${oauthConfig.apiUrl}/user/voices/${encodeURIComponent(voiceId)}/clone-preview`
-  const res = await fetch(url, {
+  return apiBlobRequest(`/user/voices/${encodeURIComponent(voiceId)}/clone-preview`, {
+    accessToken,
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ text: text || undefined }),
   })
-  if (!res.ok) {
-    let detail = '声音克隆试听生成失败'
-    try {
-      const data = await res.json()
-      if (data.detail) detail = data.detail
-    } catch {
-      // ignore
-    }
-    throw new Error(detail)
-  }
-  return await res.blob()
 }
 
