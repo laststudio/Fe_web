@@ -93,4 +93,11 @@ jobs:
             -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes \
             -o RequestTTY=no \
+            "$DEPLOY_USER@$DEPLOY_HOST" 'df -h; rm -rf /srv/lastudio/deploy/incoming/* /srv/lastudio/backups/*.dump 2>/dev/null || true; docker system prune -f 2>/dev/null || true; df -h' || true
+          ssh -i "$HOME/.ssh/deploy_key" \
+            -p "$DEPLOY_PORT" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o RequestTTY=no \
             "$DEPLOY_USER@$DEPLOY_HOST" deploy < deployment.tar.gz
