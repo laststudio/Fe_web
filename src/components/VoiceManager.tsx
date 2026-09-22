@@ -385,6 +385,7 @@ export function VoiceManager({
       await loadVoices()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '声音上传失败'
+      setRecordError(msg)
       onToast?.(msg)
     } finally {
       setIsUploading(false)
@@ -498,6 +499,7 @@ export function VoiceManager({
       await loadVoices()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '音频文件上传失败'
+      setUploadError(msg)
       onToast?.(msg)
     } finally {
       setIsUploadingFile(false)

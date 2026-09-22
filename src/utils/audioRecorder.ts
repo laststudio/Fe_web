@@ -3,6 +3,36 @@
  * Produces standard 16-bit mono RIFF WAV files universally compatible with all audio decoders and APIs.
  */
 
+export function downsampleBuffer(
+  buffer: Float32Array,
+  inputSampleRate: number,
+  outputSampleRate = 16000
+): Float32Array {
+  if (outputSampleRate >= inputSampleRate) {
+    return buffer
+  }
+  const ratio = inputSampleRate / outputSampleRate
+  const newLength = Math.round(buffer.length / ratio)
+  const result = new Float32Array(newLength)
+  let offsetResult = 0
+  let offsetBuffer = 0
+
+  while (offsetResult < result.length) {
+    const nextOffsetBuffer = Math.round((offsetResult + 1) * ratio)
+    let accum = 0
+    let count = 0
+    for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
+      accum += buffer[i]
+      count++
+    }
+    result[offsetResult] = count > 0 ? accum / count : buffer[offsetBuffer]
+    offsetResult++
+    offsetBuffer = nextOffsetBuffer
+  }
+
+  return result
+}
+
 export function encodeWav(samples: Float32Array, sampleRate: number): Blob {
   const buffer = new ArrayBuffer(44 + samples.length * 2)
   const view = new DataView(buffer)
@@ -153,7 +183,12 @@ export class AudioRecorder {
         offset += chunk.length
       }
 
-      const blob = encodeWav(merged, sampleRate)
+      // Resample to 16kHz standard for speech recognition and voice cloning
+      const targetRate = 16000
+      const downsampled = sampleRate > targetRate ? downsampleBuffer(merged, sampleRate, targetRate) : merged
+      const finalRate = sampleRate > targetRate ? targetRate : sampleRate
+
+      const blob = encodeWav(downsampled, finalRate)
       this.cleanup()
       return { blob, duration }
     }
