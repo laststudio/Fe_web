@@ -69,6 +69,8 @@ export type AutoCompleteTaskResponse = {
   progress: number
   stage_text?: string
   stage_label?: string
+  homework_id?: string
+  homework_name?: string
   current_question_index?: number
   total_questions?: number
   current_question_text?: string
@@ -114,6 +116,15 @@ export function getAutoCompleteTaskStatus(
 ): Promise<AutoCompleteTaskResponse> {
   return apiRequest<AutoCompleteTaskResponse>(
     `/homework/auto-complete/tasks/${encodeURIComponent(taskId)}`,
+    { accessToken }
+  )
+}
+
+export function getLatestAutoCompleteTask(
+  accessToken: string
+): Promise<{ task: AutoCompleteTaskResponse | null }> {
+  return apiRequest<{ task: AutoCompleteTaskResponse | null }>(
+    '/homework/auto-complete/latest-task',
     { accessToken }
   )
 }

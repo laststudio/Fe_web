@@ -24,6 +24,8 @@ export type AutoCompletePageProps = {
   onOpenSettingsVoice?: () => void
   onToast?: (msg: string) => void
   onCompleted?: (result: AutoCompleteTaskResponse['result'], hwId: string) => void
+  activeTask?: AutoCompleteTaskResponse | null
+  onTaskChange?: (task: AutoCompleteTaskResponse | null) => void
 }
 
 type QuestionScoreItem = {
@@ -48,6 +50,8 @@ export function AutoCompletePage({
   onOpenSettingsVoice,
   onToast,
   onCompleted,
+  activeTask,
+  onTaskChange,
 }: AutoCompletePageProps) {
   // Mode selection
   const [mode, setMode] = useState<AutoCompleteMode>('auto')
@@ -428,9 +432,13 @@ export function AutoCompletePage({
   const [isStartingTask, setIsStartingTask] = useState(false)
 
   // Execution Board state
-  const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
-  const [taskStatus, setTaskStatus] = useState<AutoCompleteTaskResponse | null>(null)
+  const [localTaskId, setLocalTaskId] = useState<string | null>(null)
+  const [localTaskStatus, setLocalTaskStatus] = useState<AutoCompleteTaskResponse | null>(null)
   const [isMinimized, setIsMinimized] = useState(false)
+
+  // Current effective task & ID from props or local
+  const currentTask = activeTask || localTaskStatus
+  const currentTaskId = activeTask?.task_id || localTaskId || currentTask?.task_id || null
 
   // Countdown timer effect
   useEffect(() => {
@@ -451,14 +459,15 @@ export function AutoCompletePage({
     }
   }, [isRiskModalOpen, countdown, riskStep])
 
-  // Poll task status effect
+  // Poll task status effect (if not already polled globally or if local is needed)
   useEffect(() => {
     let pollTimer: number | null = null
-    if (activeTaskId && accessToken) {
+    if (currentTaskId && accessToken) {
       const poll = async () => {
         try {
-          const res = await getAutoCompleteTaskStatus(accessToken, activeTaskId)
-          setTaskStatus(res)
+          const res = await getAutoCompleteTaskStatus(accessToken, currentTaskId)
+          setLocalTaskStatus(res)
+          onTaskChange?.(res)
           if (res.status === 'COMPLETED' || res.status === 'FAILED') {
             if (pollTimer) clearInterval(pollTimer)
             if (res.status === 'COMPLETED') {
@@ -476,7 +485,7 @@ export function AutoCompletePage({
     return () => {
       if (pollTimer) clearInterval(pollTimer)
     }
-  }, [activeTaskId, accessToken, homework.id, onCompleted])
+  }, [currentTaskId, accessToken, homework.id, onCompleted, onTaskChange])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -487,8 +496,8 @@ export function AutoCompletePage({
     }
   }, [])
 
-  // Check valid permit token
-  if (!permitToken) {
+  // Check valid permit token (only needed if NOT viewing an active or finished task)
+  if (!permitToken && !currentTaskId && !currentTask) {
     return (
       <div className="fe-autocomplete-container">
         <div className="fe-empty-state" style={{ margin: '60px auto' }}>
@@ -577,16 +586,20 @@ export function AutoCompletePage({
 
       const res = await startAutoComplete(accessToken, payload)
       setIsRiskModalOpen(false)
-      setActiveTaskId(res.task_id)
+      setLocalTaskId(res.task_id)
       setIsMinimized(false)
       // Immediate visual feedback so user sees the pipeline active
-      setTaskStatus({
+      const initialTask: AutoCompleteTaskResponse = {
         task_id: res.task_id,
         status: 'PREPARING',
         progress: 10,
         stage_label: '[1/8] 正在通过国内代理初始化 ETS 会话...',
         stage_text: '[1/8] 正在通过国内代理初始化 ETS 会话...',
-      })
+        homework_id: homework.id,
+        homework_name: homework.name,
+      }
+      setLocalTaskStatus(initialTask)
+      onTaskChange?.(initialTask)
       onToast?.('自动完成任务已发起，正在为您执行！')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '发起任务失败'
@@ -1357,27 +1370,26 @@ export function AutoCompletePage({
       )}
 
       {/* 6. EXECUTION BOARD (FULLSCREEN MODAL OR MINIMIZED FLOATING BAR) */}
-      {/* 6. EXECUTION BOARD (FULLSCREEN MODAL OR MINIMIZED FLOATING BAR) */}
-      {activeTaskId && (
+      {currentTaskId && (
         <>
           {isMinimized ? (
             /* Floating Capsule in bottom-right corner */
             <div className="fe-minimized-floating-capsule" onClick={() => setIsMinimized(false)}>
               <div className="fe-capsule-spinner">
                 <Icon
-                  name={taskStatus?.status === 'COMPLETED' ? 'check_circle' : 'sync'}
-                  className={taskStatus?.status === 'COMPLETED' ? '' : 'fe-spin'}
+                  name={currentTask?.status === 'COMPLETED' ? 'check_circle' : 'sync'}
+                  className={currentTask?.status === 'COMPLETED' ? '' : 'fe-spin'}
                 />
               </div>
               <div className="fe-capsule-info">
                 <strong>
-                  {taskStatus?.status === 'COMPLETED'
+                  {currentTask?.status === 'COMPLETED'
                     ? '已完成自动做题'
-                    : taskStatus?.status === 'FAILED'
+                    : currentTask?.status === 'FAILED'
                     ? '任务执行中断'
-                    : `正在自动完成 (${taskStatus?.progress || 10}%)`}
+                    : `正在自动完成 (${currentTask?.progress || 10}%)`}
                 </strong>
-                <small>{taskStatus?.stage_label || taskStatus?.stage_text || '后台流水线处理中...'}</small>
+                <small>{currentTask?.stage_label || currentTask?.stage_text || '后台流水线处理中...'}</small>
               </div>
               <button
                 type="button"
@@ -1400,35 +1412,50 @@ export function AutoCompletePage({
                     <h2>自动完成任务执行看板</h2>
                     <p>正在调度云端双代理与语音引擎，模拟逐题完成与上报</p>
                   </div>
-                  <button
-                    type="button"
-                    className="control-secondary fe-btn-sm"
-                    onClick={() => setIsMinimized(true)}
-                    title="最小化至右下角后台运行"
-                  >
-                    <Icon name="close_fullscreen" />
-                    <span>最小化至后台</span>
-                  </button>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      className="control-secondary fe-btn-sm"
+                      onClick={onBack}
+                      title="返回主界面并在侧边栏后台监控"
+                    >
+                      <Icon name="arrow_back" />
+                      <span>返回主界面</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="control-secondary fe-btn-sm"
+                      onClick={() => setIsMinimized(true)}
+                      title="最小化至右下角后台运行"
+                    >
+                      <Icon name="close_fullscreen" />
+                      <span>最小化悬浮</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="fe-execution-body">
-                  {taskStatus?.status === 'FAILED' ? (
+                  {currentTask?.status === 'FAILED' ? (
                     <div className="fe-empty-state">
                       <div className="fe-empty-state__icon" style={{ background: '#fef2f2', color: '#dc2626' }}>
                         <Icon name="error" />
                       </div>
                       <h2>任务执行遇到问题</h2>
-                      <p>{taskStatus.error || '云端同步或平台通信发生错误，请稍后重试。'}</p>
+                      <p>{currentTask.error || '云端同步或平台通信发生错误，请稍后重试。'}</p>
                       <button
                         type="button"
                         className="control-secondary"
-                        onClick={() => setActiveTaskId(null)}
+                        onClick={() => {
+                          setLocalTaskId(null)
+                          setLocalTaskStatus(null)
+                          onTaskChange?.(null)
+                        }}
                         style={{ marginTop: 16 }}
                       >
                         关闭看板
                       </button>
                     </div>
-                  ) : taskStatus?.status === 'COMPLETED' ? (
+                  ) : currentTask?.status === 'COMPLETED' ? (
                     /* Settlement card (做题效果全景展示) */
                     <div className="fe-settlement-card">
                       <div className="fe-settlement-icon-wrap">
@@ -1444,7 +1471,7 @@ export function AutoCompletePage({
                         <div className="fe-settlement-tile">
                           <small>官方最终得分</small>
                           <strong style={{ color: '#16a34a' }}>
-                            {Number((taskStatus.result?.score ?? taskStatus.result?.final_score ?? (mode === 'auto' ? autoTargetTotal : manualTotalSum)).toFixed(2))} 分
+                            {Number((currentTask.result?.score ?? currentTask.result?.final_score ?? (mode === 'auto' ? autoTargetTotal : manualTotalSum)).toFixed(2))} 分
                           </strong>
                         </div>
                         <div className="fe-settlement-tile">
@@ -1454,16 +1481,16 @@ export function AutoCompletePage({
                         <div className="fe-settlement-tile">
                           <small>最终得分率</small>
                           <strong style={{ color: '#2563eb' }}>
-                            {taskStatus.result?.score_rate ?? (
+                            {currentTask.result?.score_rate ?? (
                               paperTotalScore > 0
-                                ? ((Number(taskStatus.result?.score ?? taskStatus.result?.final_score ?? (mode === 'auto' ? autoTargetTotal : manualTotalSum)) / paperTotalScore) * 100).toFixed(1)
+                                ? ((Number(currentTask.result?.score ?? currentTask.result?.final_score ?? (mode === 'auto' ? autoTargetTotal : manualTotalSum)) / paperTotalScore) * 100).toFixed(1)
                                 : '95.0'
                             )}%
                           </strong>
                         </div>
                         <div className="fe-settlement-tile">
                           <small>实际做题用时</small>
-                          <strong>{formatSeconds(taskStatus.result?.use_time || suggestedTimeSeconds)}</strong>
+                          <strong>{formatSeconds(currentTask.result?.use_time || suggestedTimeSeconds)}</strong>
                         </div>
                       </div>
 
@@ -1481,7 +1508,7 @@ export function AutoCompletePage({
                             </tr>
                           </thead>
                           <tbody>
-                            {(taskStatus.result?.question_details || taskStatus.question_results || allocatedQuestionScores).map((rawItem: unknown, idx: number) => {
+                            {(currentTask.result?.question_details || currentTask.question_results || allocatedQuestionScores).map((rawItem: unknown, idx: number) => {
                               const item = rawItem as Record<string, unknown>
                               const order = Number(item.order || idx + 1)
                               const typeName = String(item.type_name || item.typeName || '题目')
@@ -1513,7 +1540,11 @@ export function AutoCompletePage({
                         <button
                           type="button"
                           className="control-secondary"
-                          onClick={() => setActiveTaskId(null)}
+                          onClick={() => {
+                            setLocalTaskId(null)
+                            setLocalTaskStatus(null)
+                            onTaskChange?.(null)
+                          }}
                         >
                           <Icon name="tune" />
                           <span>留在本页查看配置</span>
@@ -1546,7 +1577,7 @@ export function AutoCompletePage({
                           { num: 7, label: '用时终审', p: 85 },
                           { num: 8, label: '云端核对', p: 95 },
                         ].map((s) => {
-                          const curP = taskStatus?.progress || 10
+                          const curP = currentTask?.progress || 10
                           const isDone = curP > s.p + 8
                           const isActive = curP >= s.p && curP <= s.p + 8
                           return (
@@ -1565,17 +1596,17 @@ export function AutoCompletePage({
                       <div className="fe-exec-progress-track">
                         <div
                           className="fe-exec-progress-bar"
-                          style={{ width: `${Math.max(6, taskStatus?.progress || 10)}%` }}
+                          style={{ width: `${Math.max(6, currentTask?.progress || 10)}%` }}
                         />
                       </div>
 
                       <div className="fe-exec-progress-meta">
                         <span className="fe-exec-stage-text">
                           <Icon name="sync" className="fe-spin" />
-                          {taskStatus?.stage_label || taskStatus?.stage_text || '正在连接国内代理节点并初始化做题环境...'}
+                          {currentTask?.stage_label || currentTask?.stage_text || '正在连接国内代理节点并初始化做题环境...'}
                         </span>
                         <strong className="fe-exec-percentage">
-                          {taskStatus?.progress || 10}%
+                          {currentTask?.progress || 10}%
                         </strong>
                       </div>
 
@@ -1583,24 +1614,24 @@ export function AutoCompletePage({
                       <div className="fe-exec-stem-preview">
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                           <small>
-                            当前作答题干 (第 {taskStatus?.current_question_index || 1} / {taskStatus?.total_questions || totalQuestions} 题)：
+                            当前作答题干 (第 {currentTask?.current_question_index || 1} / {currentTask?.total_questions || totalQuestions} 题)：
                           </small>
                           <span className="admin-pill-badge is-muted" style={{ fontSize: 11 }}>
                             {voiceMode === 'clone' ? '专属音色克隆中' : voiceMode === 'edge' ? 'Edge-TTS 合成中' : '静音模式'}
                           </span>
                         </div>
                         <p className="fe-stem-text">
-                          {taskStatus?.current_question_text || '正在逐题提取作答素材与发音词汇表...'}
+                          {currentTask?.current_question_text || '正在逐题提取作答素材与发音词汇表...'}
                         </p>
                       </div>
 
                       {/* Live Questions Checklist */}
-                      {taskStatus?.question_results && taskStatus.question_results.length > 0 && (
+                      {currentTask?.question_results && currentTask.question_results.length > 0 && (
                         <div className="fe-exec-questions-checklist">
                           <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--control-muted)', marginBottom: 2 }}>
-                            已完成题目流水明细 ({taskStatus.question_results.length}/{taskStatus.total_questions || totalQuestions})：
+                            已完成题目流水明细 ({currentTask.question_results.length}/{currentTask.total_questions || totalQuestions})：
                           </div>
-                          {taskStatus.question_results.map((q) => (
+                          {currentTask.question_results.map((q) => (
                             <div key={q.order} className="fe-exec-q-item is-done">
                               <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                 <Icon name="check_circle" style={{ fontSize: 14, color: '#16a34a' }} />

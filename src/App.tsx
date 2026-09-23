@@ -30,19 +30,39 @@ import CapVerification from './CapVerification'
 import AutoCompletePage from './AutoCompletePage'
 import VoiceManager from './components/VoiceManager'
 import { ErrorBoundary } from './components/ErrorBoundary'
-import { checkHomeworkCompatibility, getAutoCompletePermit } from './api/autoComplete'
+import {
+  checkHomeworkCompatibility,
+  getAutoCompletePermit,
+  getAutoCompleteTaskStatus,
+  getLatestAutoCompleteTask,
+  type AutoCompleteTaskResponse,
+} from './api/autoComplete'
 
-type Page = '/' | '/history' | '/pk' | '/settings' | string
+type Page = '/' | '/history' | '/pk' | '/settings' | '/auto-complete' | string
 
 const logoSrc = '/fe_logo.png'
 const sidebarCollapsedStorageKey = 'fe-web.sidebar-collapsed'
 const skipRiskWarningStorageKey = 'fe-web.skip-risk-warning'
+const STORAGE_KEY_ACTIVE_TASK = 'fe_auto_complete_active_task'
+
+function readStoredActiveTask(): AutoCompleteTaskResponse | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_ACTIVE_TASK)
+    if (!raw) return null
+    return JSON.parse(raw) as AutoCompleteTaskResponse
+  } catch {
+    return null
+  }
+}
 
 type NavItem = {
   icon: string
   label: string
   caption: string
   page: Page
+  badge?: string
+  badgeType?: 'running' | 'success' | 'failed'
+  isRunning?: boolean
 }
 
 export type HomeworkErrorInfo = {
@@ -51,23 +71,6 @@ export type HomeworkErrorInfo = {
   actionUrl?: string
   actionText?: string
 }
-
-const navGroups: { label: string; items: NavItem[] }[] = [
-  {
-    label: '作业业务',
-    items: [
-      { icon: 'assignment', label: '当前作业', caption: '作业索引与解析阅读器', page: '/' },
-      { icon: 'history', label: '历史作业', caption: '已归档往期作业记录', page: '/history' },
-      { icon: 'sports_esports', label: '词汇PK', caption: '在线词汇竞技与专练', page: '/pk' },
-    ],
-  },
-  {
-    label: '系统与服务',
-    items: [
-      { icon: 'settings', label: '设置与账号', caption: 'ETS 账号与功能设置', page: '/settings' },
-    ],
-  },
-]
 
 const pageMeta: Record<string, { title: string; caption: string }> = {
   '/': {
@@ -85,6 +88,10 @@ const pageMeta: Record<string, { title: string; caption: string }> = {
   '/settings': {
     title: '设置与账号',
     caption: '平台账号绑定、系统公告与功能设置',
+  },
+  '/auto-complete': {
+    title: '作业自动完成',
+    caption: '高拟真自动化答题、分值调度与后台执行看板',
   },
 }
 
@@ -1581,7 +1588,7 @@ function SettingsPage({
 }
 
 function isAutoCompletePath(path: string): boolean {
-  return /^\/homework\/[^/]+\/auto-complete\/?$/.test(path)
+  return /^\/homework\/[^/]+\/auto-complete\/?$/.test(path) || path === '/auto-complete'
 }
 
 function currentPage(pathname: string): Page | null {
@@ -1608,6 +1615,22 @@ function App() {
     window.addEventListener('scroll', updateHeader, { passive: true })
     return () => window.removeEventListener('scroll', updateHeader)
   }, [])
+
+  // Active Auto Complete Task State (persisted to localStorage)
+  const [activeTask, setActiveTask] = useState<AutoCompleteTaskResponse | null>(readStoredActiveTask)
+
+  const updateActiveTask = (task: AutoCompleteTaskResponse | null) => {
+    setActiveTask(task)
+    try {
+      if (task) {
+        localStorage.setItem(STORAGE_KEY_ACTIVE_TASK, JSON.stringify(task))
+      } else {
+        localStorage.removeItem(STORAGE_KEY_ACTIVE_TASK)
+      }
+    } catch {
+      // ignore
+    }
+  }
 
   // ETS100 & Homework State
   const [accountInfo, setAccountInfo] = useState<PlatformAccountInfo | null>(null)
@@ -2453,6 +2476,127 @@ function App() {
     }
   }
 
+  // Restore latest active auto-complete task on session init
+  useEffect(() => {
+    if (!session?.accessToken) return
+    let active = true
+    getLatestAutoCompleteTask(session.accessToken)
+      .then((res) => {
+        if (!active) return
+        if (res.task) {
+          setActiveTask((prev) => {
+            if (!prev) {
+              try {
+                localStorage.setItem(STORAGE_KEY_ACTIVE_TASK, JSON.stringify(res.task))
+              } catch {}
+              return res.task
+            }
+            if (res.task && res.task.task_id === prev.task_id) {
+              const merged = { ...prev, ...res.task }
+              try {
+                localStorage.setItem(STORAGE_KEY_ACTIVE_TASK, JSON.stringify(merged))
+              } catch {}
+              return merged
+            }
+            return prev
+          })
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to fetch latest auto-complete task:', err)
+      })
+    return () => {
+      active = false
+    }
+  }, [session?.accessToken])
+
+  // Global background polling for active task
+  useEffect(() => {
+    if (!session?.accessToken || !activeTask?.task_id) return
+    if (activeTask.status === 'COMPLETED' || activeTask.status === 'FAILED') return
+
+    const taskId = activeTask.task_id
+    const pollTimer = setInterval(async () => {
+      try {
+        const updated = await getAutoCompleteTaskStatus(session.accessToken, taskId)
+        updateActiveTask(updated)
+        if (updated.status === 'COMPLETED') {
+          showToast('🎉 后台自动完成任务已圆满完成！')
+          setHasLoadedCurrent(false)
+          setHasLoadedHistory(false)
+          void doFetchHomeworks(activeTab, undefined, true)
+        } else if (updated.status === 'FAILED') {
+          showToast(`❌ 自动完成任务执行失败: ${updated.error || '未知错误'}`)
+        }
+      } catch (err) {
+        console.warn('Global task polling error:', err)
+      }
+    }, 1800)
+
+    return () => clearInterval(pollTimer)
+  }, [session?.accessToken, activeTask?.task_id, activeTask?.status])
+
+  // Dynamic sidebar navigation groups with live background task status
+  const computedNavGroups = useMemo<{ label: string; items: NavItem[] }[]>(() => {
+    const homeworkItems: NavItem[] = [
+      { icon: 'assignment', label: '当前作业', caption: '作业索引与解析阅读器', page: '/' },
+      { icon: 'history', label: '历史作业', caption: '已归档往期作业记录', page: '/history' },
+      { icon: 'sports_esports', label: '词汇PK', caption: '在线词汇竞技与专练', page: '/pk' },
+    ]
+
+    const isAutoRoute = isAutoCompletePath(pathname)
+    if (activeTask || isAutoRoute) {
+      let caption = '后台执行看板与进度监控'
+      let badge: string | undefined
+      let badgeType: 'running' | 'success' | 'failed' | undefined
+      let isRunning = false
+
+      if (activeTask) {
+        if (activeTask.status === 'COMPLETED') {
+          caption = activeTask.homework_name ? `${activeTask.homework_name} · 已完成` : '任务已顺利完成'
+          badge = '已完成'
+          badgeType = 'success'
+        } else if (activeTask.status === 'FAILED') {
+          caption = activeTask.error ? `失败: ${activeTask.error}` : '任务执行失败中断'
+          badge = '失败'
+          badgeType = 'failed'
+        } else {
+          caption = activeTask.stage_label || activeTask.stage_text || '后台极速执行中...'
+          badge = `${activeTask.progress || 0}%`
+          badgeType = 'running'
+          isRunning = true
+        }
+      }
+
+      const taskPage = activeTask?.homework_id
+        ? `/homework/${activeTask.homework_id}/auto-complete`
+        : (isAutoRoute ? pathname : '/auto-complete')
+
+      homeworkItems.push({
+        icon: 'auto_awesome',
+        label: '自动完成',
+        caption,
+        page: taskPage,
+        badge,
+        badgeType,
+        isRunning,
+      })
+    }
+
+    return [
+      {
+        label: '作业业务',
+        items: homeworkItems,
+      },
+      {
+        label: '系统与服务',
+        items: [
+          { icon: 'settings', label: '设置与账号', caption: 'ETS 账号与功能设置', page: '/settings' },
+        ],
+      },
+    ]
+  }, [activeTask, pathname])
+
   function navigate(nextPage: Page) {
     setUserMenuOpen(false)
     setViewingPaper(null)
@@ -2808,24 +2952,34 @@ function App() {
           </div>
 
           <nav aria-label="工作台模块">
-            {navGroups.map((group) => (
+            {computedNavGroups.map((group) => (
               <section key={group.label}>
                 <small>{group.label}</small>
-                {group.items.map((item) => (
-                  <button
-                    key={item.page}
-                    className={page === item.page ? 'is-active' : ''}
-                    onClick={() => navigate(item.page)}
-                    title={sidebarCollapsed ? item.label : undefined}
-                    type="button"
-                  >
-                    <Icon name={item.icon} />
-                    <span className="control-nav-label">
-                      <strong>{item.label}</strong>
-                      <small>{item.caption}</small>
-                    </span>
-                  </button>
-                ))}
+                {group.items.map((item) => {
+                  const isActive = page === item.page || (item.label === '自动完成' && isAutoCompleteRoute)
+                  return (
+                    <button
+                      key={item.page}
+                      className={isActive ? 'is-active' : ''}
+                      onClick={() => navigate(item.page)}
+                      title={sidebarCollapsed ? (item.badge ? `${item.label} (${item.badge})` : item.label) : undefined}
+                      type="button"
+                    >
+                      <Icon name={item.icon} />
+                      <span className="control-nav-label">
+                        <span className="fe-nav-title-row">
+                          <strong>{item.label}</strong>
+                          {item.badge && (
+                            <span className={`fe-nav-badge ${item.badgeType || ''}`}>
+                              {item.badge}
+                            </span>
+                          )}
+                        </span>
+                        <small>{item.caption}</small>
+                      </span>
+                    </button>
+                  )
+                })}
               </section>
             ))}
           </nav>
@@ -2923,20 +3077,30 @@ function App() {
                 homework={
                   autoCompleteTargetHw ||
                   homeworks.find((h) => pathname.includes(h.id)) ||
-                  historyHomeworks.find((h) => pathname.includes(h.id)) || {
-                    id: pathname.replace('/homework/', '').replace('/auto-complete', '').replace(/\//g, ''),
-                    name: '作业自动完成',
-                    contents: [],
-                  }
+                  historyHomeworks.find((h) => pathname.includes(h.id)) ||
+                  (activeTask?.homework_id
+                    ? {
+                        id: activeTask.homework_id,
+                        name: activeTask.homework_name || '作业自动完成',
+                        contents: [],
+                      }
+                    : {
+                        id: pathname.replace('/homework/', '').replace('/auto-complete', '').replace(/\//g, ''),
+                        name: '作业自动完成',
+                        contents: [],
+                      })
                 }
                 paper={
                   (autoCompleteTargetHw && paperCache[autoCompleteTargetHw.id]) ||
-                  (viewingPaper && viewingPaper.homework.id === autoCompleteTargetHw?.id
+                  (activeTask?.homework_id && paperCache[activeTask.homework_id]) ||
+                  (viewingPaper && viewingPaper.homework.id === (autoCompleteTargetHw?.id || activeTask?.homework_id)
                     ? viewingPaper.paper
                     : null)
                 }
                 permitToken={autoCompletePermitToken}
                 accessToken={session.accessToken}
+                activeTask={activeTask}
+                onTaskChange={updateActiveTask}
                 onBack={() => {
                   setAutoCompletePermitToken('')
                   setHasLoadedHistory(false)
@@ -2967,12 +3131,16 @@ function App() {
                   const targetHw =
                     autoCompleteTargetHw ||
                     homeworks.find((h) => pathname.includes(h.id)) ||
-                    historyHomeworks.find((h) => pathname.includes(h.id)) || {
-                      id: pathname.replace('/homework/', '').replace('/auto-complete', '').replace(/\//g, ''),
-                      name: '作业自动完成',
-                      contents: [],
-                    }
-                  handleTriggerAutoComplete(targetHw)
+                    historyHomeworks.find((h) => pathname.includes(h.id)) ||
+                    (activeTask?.homework_id
+                      ? homeworks.find((h) => h.id === activeTask.homework_id) ||
+                        historyHomeworks.find((h) => h.id === activeTask.homework_id)
+                      : null)
+                  if (targetHw) {
+                    handleTriggerAutoComplete(targetHw)
+                  } else {
+                    navigate('/')
+                  }
                 }}
                 onOpenSettingsVoice={() => {
                   navigate('/settings')
