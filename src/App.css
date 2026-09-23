@@ -1066,7 +1066,13 @@ html:has(.control-shell) {
   justify-content: center;
 }
 
-.control-sidebar.is-collapsed :is(nav > section > small, .control-nav-label, .admin-footer-label) {
+.control-sidebar.is-collapsed :is(nav > section > small, .control-nav-label) {
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.control-sidebar.is-collapsed .admin-footer-label {
   display: none !important;
   opacity: 0;
 }
@@ -2780,6 +2786,7 @@ html:has(.control-shell) {
 
   .control-sidebar.is-collapsed :is(nav > section > small, .control-nav-label, .admin-footer-label) {
     display: grid !important;
+    visibility: visible;
     opacity: 1;
     width: auto;
     height: auto;
