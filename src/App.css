@@ -5088,3 +5088,146 @@ html:has(.control-shell) {
   font-weight: 600;
   color: var(--control-muted);
 }
+
+/* Auto Complete Hub & History */
+.fe-hub-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fe-running-task-card {
+  background: linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%);
+  border: 1px solid #86efac;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.08);
+}
+
+.fe-running-task-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fe-running-task-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fe-running-task-title h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #1e293b;
+}
+
+.fe-history-section {
+  background: var(--control-panel);
+  border: 1px solid var(--control-line);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.fe-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.fe-history-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fe-history-title-wrap h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--control-ink);
+}
+
+.fe-history-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--control-line);
+  border-radius: 8px;
+}
+
+.fe-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  text-align: left;
+}
+
+.fe-history-table th {
+  background: #f8fafc;
+  padding: 10px 14px;
+  color: var(--control-muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--control-line);
+  white-space: nowrap;
+}
+
+.fe-history-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #f1f5f9;
+  color: var(--control-ink);
+}
+
+.fe-history-table tr:hover td {
+  background: #f8fafc;
+}
+
+.fe-audio-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fe-audio-player {
+  height: 28px;
+  width: 200px;
+  border-radius: 14px;
+  outline: none;
+}
+
+.fe-launcher-section {
+  background: var(--control-panel);
+  border: 1px solid var(--control-line);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.fe-launcher-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.fe-launcher-card {
+  background: var(--control-paper);
+  border: 1px solid var(--control-line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  transition: all 0.15s ease;
+}
+
+.fe-launcher-card:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.08);
+}

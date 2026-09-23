@@ -22,6 +22,11 @@ export type HomeworkItem = {
   create_time?: string
   status?: string | number
   total_score?: number
+  score?: number
+  point?: number
+  deadline?: string
+  use_time?: number
+  completed_at?: string
   contents: HomeworkContentItem[]
   parsed?: boolean
   set_type?: number

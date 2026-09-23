@@ -2555,7 +2555,6 @@ function App() {
 
   // Dynamic sidebar navigation groups with live background task status
   const computedNavGroups = useMemo<{ label: string; items: NavItem[] }[]>(() => {
-    const isAutoRoute = isAutoCompletePath(pathname)
     let caption = '高拟真自动化答题与执行看板'
     let badge: string | undefined
     let badgeType: 'running' | 'success' | 'failed' | undefined
@@ -2578,9 +2577,7 @@ function App() {
       }
     }
 
-    const taskPage = activeTask?.homework_id
-      ? `/homework/${activeTask.homework_id}/auto-complete`
-      : (isAutoRoute ? pathname : '/auto-complete')
+    const taskPage = '/auto-complete'
 
     const homeworkItems: NavItem[] = [
       { icon: 'assignment', label: '当前作业', caption: '作业索引与解析阅读器', page: '/' },
@@ -2609,7 +2606,7 @@ function App() {
         ],
       },
     ]
-  }, [activeTask, pathname])
+  }, [activeTask])
 
   function navigate(nextPage: Page) {
     setUserMenuOpen(false)
@@ -3160,6 +3157,9 @@ function App() {
                   navigate('/settings')
                 }}
                 onToast={showToast}
+                homeworks={homeworks}
+                historyHomeworks={historyHomeworks}
+                onTriggerAutoComplete={handleTriggerAutoComplete}
               />
             </ErrorBoundary>
           ) : page === '/settings' ? (

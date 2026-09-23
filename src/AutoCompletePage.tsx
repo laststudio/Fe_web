@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from './components/Icon'
 import {
   checkHomeworkCompatibility,
+  getAutoCompleteTasks,
   getAutoCompleteTaskStatus,
   startAutoComplete,
   type AutoCompleteMode,
@@ -15,9 +16,9 @@ import { getHomeworkDetail, startParseHomework, type HomeworkItem, type Paper } 
 const DISCLAIMER_PHRASE = '作者不为使用此功能造成的一切后果负责'
 
 export type AutoCompletePageProps = {
-  homework: HomeworkItem
-  paper: Paper | null
-  permitToken: string
+  homework?: HomeworkItem | null
+  paper?: Paper | null
+  permitToken?: string
   accessToken: string
   onBack: () => void
   onRequestPermit?: () => void
@@ -26,6 +27,9 @@ export type AutoCompletePageProps = {
   onCompleted?: (result: AutoCompleteTaskResponse['result'], hwId: string) => void
   activeTask?: AutoCompleteTaskResponse | null
   onTaskChange?: (task: AutoCompleteTaskResponse | null) => void
+  homeworks?: HomeworkItem[]
+  historyHomeworks?: HomeworkItem[]
+  onTriggerAutoComplete?: (hw: HomeworkItem) => void
 }
 
 type QuestionScoreItem = {
@@ -52,7 +56,72 @@ export function AutoCompletePage({
   onCompleted,
   activeTask,
   onTaskChange,
+  homeworks,
+  historyHomeworks,
+  onTriggerAutoComplete,
 }: AutoCompletePageProps) {
+  // Current active homework fallback
+  const currentHw = useMemo<HomeworkItem>(() => {
+    if (homework && homework.id) return homework
+    if (activeTask?.homework_id) {
+      return {
+        id: activeTask.homework_id,
+        name: activeTask.homework_name || '作业自动完成',
+        contents: [],
+      }
+    }
+    return {
+      id: '',
+      name: '作业自动完成',
+      contents: [],
+    }
+  }, [homework, activeTask])
+
+  // History & Hub states
+  const [historyTasks, setHistoryTasks] = useState<AutoCompleteTaskResponse[]>([])
+  const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(() => Boolean(accessToken))
+  const [selectedHistoryTask, setSelectedHistoryTask] = useState<AutoCompleteTaskResponse | null>(null)
+  const [taskFilter, setTaskFilter] = useState<'all' | 'completed' | 'failed'>('all')
+  const [hwTab, setHwTab] = useState<'current' | 'history'>('current')
+  const [hwSearch, setHwSearch] = useState<string>('')
+
+  const loadHistoryTasks = useCallback(() => {
+    if (!accessToken) return
+    setIsLoadingHistory(true)
+    getAutoCompleteTasks(accessToken)
+      .then((res) => {
+        setHistoryTasks(Array.isArray(res.tasks) ? res.tasks : [])
+      })
+      .catch((err) => {
+        console.warn('Failed to load auto complete tasks:', err)
+      })
+      .finally(() => {
+        setIsLoadingHistory(false)
+      })
+  }, [accessToken])
+
+  useEffect(() => {
+    if (!accessToken) return
+    let active = true
+    getAutoCompleteTasks(accessToken)
+      .then((res) => {
+        if (active) {
+          setHistoryTasks(Array.isArray(res.tasks) ? res.tasks : [])
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to load auto complete tasks:', err)
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoadingHistory(false)
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [accessToken])
+
   // Mode selection
   const [mode, setMode] = useState<AutoCompleteMode>('auto')
 
@@ -65,17 +134,17 @@ export function AutoCompletePage({
 
   // Loaded paper state (auto-load if not provided via props)
   const [fetchedPaper, setFetchedPaper] = useState<Paper | null>(null)
-  const [isLoadingPaper, setIsLoadingPaper] = useState<boolean>(() => !paper)
+  const [isLoadingPaper, setIsLoadingPaper] = useState<boolean>(() => Boolean(permitToken && currentHw.id && !paper))
 
   const activePaper = paper || fetchedPaper
 
   useEffect(() => {
+    if (!permitToken || !currentHw.id || !accessToken) return
     if (paper || fetchedPaper) {
       return
     }
-    if (!homework.id || !accessToken) return
     let active = true
-    getHomeworkDetail(accessToken, homework.id)
+    getHomeworkDetail(accessToken, currentHw.id)
       .then((res) => {
         if (active && res) {
           setFetchedPaper(res)
@@ -86,12 +155,12 @@ export function AutoCompletePage({
         if (!active) return
         try {
           const parseRes = await startParseHomework(accessToken, {
-            homework_id: homework.id,
-            homework_name: homework.name || '英语作业',
-            contents: homework.contents || [],
-            resource_id: homework.resource_id,
-            pk: homework.pk,
-            set_type: homework.set_type,
+            homework_id: currentHw.id,
+            homework_name: currentHw.name || '英语作业',
+            contents: currentHw.contents || [],
+            resource_id: currentHw.resource_id,
+            pk: currentHw.pk,
+            set_type: currentHw.set_type,
           })
           if (active && parseRes?.result) {
             setFetchedPaper(parseRes.result)
@@ -106,10 +175,11 @@ export function AutoCompletePage({
     return () => {
       active = false
     }
-  }, [paper, fetchedPaper, homework.id, accessToken, homework.name, homework.contents, homework.resource_id, homework.pk, homework.set_type])
+  }, [paper, fetchedPaper, currentHw.id, accessToken, currentHw.name, currentHw.contents, currentHw.resource_id, currentHw.pk, currentHw.set_type, permitToken])
+
   const compatibility = useMemo(() => {
-    return checkHomeworkCompatibility(homework, activePaper)
-  }, [homework, activePaper])
+    return checkHomeworkCompatibility(currentHw, activePaper)
+  }, [currentHw, activePaper])
 
   // Paper & Questions calculation
   const { totalQuestions, paperTotalScore, questions } = useMemo(() => {
@@ -163,7 +233,7 @@ export function AutoCompletePage({
     }
 
     const tQuestions = qList.length
-    const hwObj = homework as Record<string, unknown>
+    const hwObj = currentHw as Record<string, unknown>
     const paperObj = activePaper as Record<string, unknown> | null
     const rawTotal = Number(
       hwObj?.total_score ||
@@ -172,12 +242,12 @@ export function AutoCompletePage({
       paperObj?.total_score
     )
     const isPkOrVocab =
-      homework?.pk === 1 ||
-      homework?.set_type === 6 ||
-      /词汇|单词|默写|word|pk/i.test(homework?.name || '') ||
+      currentHw?.pk === 1 ||
+      currentHw?.set_type === 6 ||
+      /词汇|单词|默写|word|pk/i.test(currentHw?.name || '') ||
       /词汇|单词|默写|word|pk/i.test(activePaper?.title || activePaper?.paperName || '')
 
-    const hwTitle = homework?.name || activePaper?.title || activePaper?.paperName || ''
+    const hwTitle = currentHw?.name || activePaper?.title || activePaper?.paperName || ''
     const isBeijing = /北京/i.test(hwTitle)
     const oralStandardTotal = isBeijing ? 40.0 : 30.0
 
@@ -238,7 +308,7 @@ export function AutoCompletePage({
       paperTotalScore: calculatedPaperTotal,
       questions: qList,
     }
-  }, [homework, activePaper])
+  }, [currentHw, activePaper])
 
   // Suggested time
   const suggestedTimeSeconds = useMemo(() => {
@@ -470,8 +540,9 @@ export function AutoCompletePage({
           onTaskChange?.(res)
           if (res.status === 'COMPLETED' || res.status === 'FAILED') {
             if (pollTimer) clearInterval(pollTimer)
+            void loadHistoryTasks()
             if (res.status === 'COMPLETED') {
-              onCompleted?.(res.result, homework.id)
+              onCompleted?.(res.result, currentHw.id)
             }
           }
         } catch {
@@ -485,7 +556,7 @@ export function AutoCompletePage({
     return () => {
       if (pollTimer) clearInterval(pollTimer)
     }
-  }, [currentTaskId, accessToken, homework.id, onCompleted, onTaskChange])
+  }, [currentTaskId, accessToken, currentHw.id, onCompleted, onTaskChange, loadHistoryTasks])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -496,34 +567,656 @@ export function AutoCompletePage({
     }
   }, [])
 
-  // Check valid permit token (only needed if NOT viewing an active or finished task)
-  if (!permitToken && !currentTaskId && !currentTask) {
+  // Render full effect inspection for a chosen task
+  const renderTaskEffectView = (task: AutoCompleteTaskResponse) => {
+    const qDetails = task.result?.question_details || task.question_results || []
+    const isCompleted = task.status === 'COMPLETED'
+    const isFailed = task.status === 'FAILED'
+    const finalScore = task.result?.final_score ?? task.result?.score ?? null
+    const maxScore = task.result?.max_score ?? task.result?.total_point ?? null
+    const scoreRate =
+      task.result?.score_rate ??
+      (finalScore !== null && maxScore
+        ? ((Number(finalScore) / Number(maxScore)) * 100).toFixed(1)
+        : null)
+    const useTime = task.result?.use_time ? formatSeconds(task.result.use_time) : null
+    const completedAt =
+      task.result?.completed_at ||
+      (task.created_at ? new Date(task.created_at * 1000).toLocaleString() : null)
+
+    const matchingHw =
+      homeworks?.find((h) => String(h.id) === String(task.homework_id)) ||
+      historyHomeworks?.find((h) => String(h.id) === String(task.homework_id))
+
     return (
       <div className="fe-autocomplete-container">
-        <div className="fe-empty-state" style={{ margin: '60px auto', maxWidth: 520 }}>
-          <div className="fe-empty-state__icon" style={{ background: '#eff6ff', color: '#2563eb' }}>
-            <Icon name="auto_awesome" />
+        {/* Navigation Breadcrumb */}
+        <div className="fe-reader-top-nav" style={{ marginBottom: 16 }}>
+          <button
+            className="control-secondary fe-back-btn"
+            type="button"
+            onClick={() => setSelectedHistoryTask(null)}
+          >
+            <Icon name="arrow_back" />
+            <span>返回任务列表</span>
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span
+              className={`admin-pill-badge ${
+                isCompleted ? 'is-active' : isFailed ? 'is-danger' : 'is-muted'
+              }`}
+            >
+              <Icon
+                name={isCompleted ? 'check_circle' : isFailed ? 'error' : 'sync'}
+                className={!isCompleted && !isFailed ? 'fe-spin' : ''}
+                style={{ fontSize: 14 }}
+              />
+              <span>
+                {isCompleted ? '官方已核验完成' : isFailed ? '执行中断或失败' : '正在运行中'}
+              </span>
+            </span>
           </div>
-          <h2>暂无正在运行的自动完成任务</h2>
-          <p>
-            自动完成支持当前待做作业与历史归档作业的高拟真智能答题、音色克隆与分值调度。
-            请从作业列表选择对应试卷，点击「⚡ 自动完成」或「⚡ 重新作答」开启。
-          </p>
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 24 }}>
-            <button type="button" className="control-primary" onClick={onBack}>
-              <Icon name="assignment" />
-              <span>前往作业列表</span>
+        </div>
+
+        {/* Task Hero Card */}
+        <div className="fe-autocomplete-hero">
+          <div className="fe-autocomplete-hero-head">
+            <div
+              className="fe-hero-icon-box"
+              style={{
+                background: isCompleted
+                  ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)'
+                  : undefined,
+              }}
+            >
+              <Icon name={isCompleted ? 'task_alt' : 'bolt'} filled />
+            </div>
+            <div>
+              <h2>{task.homework_name || '作业自动完成任务'}</h2>
+              <p>
+                任务ID: {task.task_id} · 音色模式:{' '}
+                {task.voice_mode === 'clone'
+                  ? '专属声音克隆 (tts.ai)'
+                  : task.voice_mode === 'edge'
+                  ? 'Edge-TTS 原声'
+                  : '无录音'}
+                {completedAt ? ` · 完成时间: ${completedAt}` : ''}
+              </p>
+            </div>
+          </div>
+
+          <div className="fe-autocomplete-stats-grid">
+            <div className="fe-stat-tile">
+              <span className="fe-stat-label">官方最终得分</span>
+              <strong className="fe-stat-value" style={{ color: isCompleted ? '#16a34a' : undefined }}>
+                {finalScore !== null ? `${Number(finalScore).toFixed(2)} 分` : '--'}
+              </strong>
+            </div>
+            <div className="fe-stat-tile">
+              <span className="fe-stat-label">试卷总满分</span>
+              <strong className="fe-stat-value">
+                {maxScore !== null ? `${Number(maxScore).toFixed(1)} 分` : '--'}
+              </strong>
+            </div>
+            <div className="fe-stat-tile">
+              <span className="fe-stat-label">最终得分率</span>
+              <strong className="fe-stat-value" style={{ color: '#2563eb' }}>
+                {scoreRate !== null ? `${scoreRate}%` : '--'}
+              </strong>
+            </div>
+            <div className="fe-stat-tile">
+              <span className="fe-stat-label">实际答题用时</span>
+              <strong className="fe-stat-value">{useTime || '--'}</strong>
+            </div>
+          </div>
+        </div>
+
+        {/* Error Alert if Failed */}
+        {isFailed && (
+          <div
+            className="admin-status-strip is-danger"
+            style={{
+              margin: '0 0 20px',
+              padding: '16px 20px',
+              borderRadius: 12,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              background: '#fef2f2',
+              border: '1px solid #fca5a5',
+            }}
+          >
+            <Icon name="error" style={{ fontSize: 24, color: '#dc2626', flexShrink: 0 }} />
+            <div>
+              <strong style={{ color: '#991b1b', fontSize: 14, display: 'block', marginBottom: 2 }}>
+                任务执行异常
+              </strong>
+              <span style={{ color: '#b91c1c', fontSize: 13 }}>
+                {task.error || task.stage_label || '任务在执行中遇到未知错误中断'}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Question by question breakdown and audio players */}
+        <div className="fe-history-section">
+          <div className="fe-history-header">
+            <div className="fe-history-title-wrap">
+              <Icon name="headphones" style={{ color: '#2563eb' }} />
+              <h3>逐题得分与克隆录音效果试听 ({qDetails.length} 题)</h3>
+            </div>
+            <span className="fe-stat-label" style={{ fontSize: 12 }}>
+              可直接在列表试听生成的克隆音频，核验发音语调与音质效果
+            </span>
+          </div>
+
+          {qDetails.length === 0 ? (
+            <div
+              style={{
+                textAlign: 'center',
+                padding: '36px 16px',
+                color: 'var(--control-muted)',
+                fontSize: 13,
+              }}
+            >
+              暂未记录到小题音频详情 (可能处于等待队列中或为非语音作业)
+            </div>
+          ) : (
+            <div className="fe-history-table-wrap">
+              <table className="fe-history-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: 60 }}>题号</th>
+                    <th style={{ width: 100 }}>题型</th>
+                    <th>题目/作答内容节选</th>
+                    <th style={{ width: 90 }}>单题满分</th>
+                    <th style={{ width: 90 }}>实际得分</th>
+                    <th style={{ width: 230 }}>克隆录音试听</th>
+                    <th style={{ width: 90 }}>官方状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {qDetails.map((q, idx) => {
+                    const order = q.order || idx + 1
+                    const typeName = q.type_name || '题目'
+                    const text = q.text || `第 ${order} 题`
+                    return (
+                      <tr key={order}>
+                        <td>
+                          <strong>Q{order}</strong>
+                        </td>
+                        <td>
+                          <span className="fe-td-type">{typeName}</span>
+                        </td>
+                        <td
+                          style={{
+                            maxWidth: 240,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                          title={text}
+                        >
+                          {text}
+                        </td>
+                        <td>{Number(q.max_score || 0).toFixed(2)} 分</td>
+                        <td>
+                          <strong style={{ color: '#16a34a' }}>
+                            {Number(q.awarded_score || 0).toFixed(2)} 分
+                          </strong>
+                        </td>
+                        <td>
+                          {q.audio_url ? (
+                            <div className="fe-audio-cell">
+                              <audio
+                                controls
+                                src={q.audio_url}
+                                preload="none"
+                                className="fe-audio-player"
+                              />
+                            </div>
+                          ) : (
+                            <span style={{ color: '#94a3b8', fontSize: 11 }}>无音频 (免录音题)</span>
+                          )}
+                        </td>
+                        <td>
+                          <span className="admin-pill-badge is-active" style={{ fontSize: 11 }}>
+                            <Icon name="check" style={{ fontSize: 12 }} /> 已核验
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginTop: 20,
+            }}
+          >
+            <button
+              type="button"
+              className="control-secondary"
+              onClick={() => setSelectedHistoryTask(null)}
+            >
+              <Icon name="arrow_back" />
+              <span>返回记录列表</span>
             </button>
-            {onRequestPermit && (
-              <button type="button" className="control-secondary" onClick={onRequestPermit}>
-                <Icon name="verified_user" />
-                <span>立即安全验证进入</span>
+
+            {matchingHw && onTriggerAutoComplete && (
+              <button
+                type="button"
+                className="control-primary"
+                onClick={() => {
+                  setSelectedHistoryTask(null)
+                  onTriggerAutoComplete(matchingHw)
+                }}
+              >
+                <Icon name="bolt" />
+                <span>⚡ 重新发起此作业自动完成</span>
               </button>
             )}
           </div>
         </div>
       </div>
     )
+  }
+
+  // Render main Hub Dashboard View
+  const renderHubView = () => {
+    const isRunning = Boolean(
+      activeTask && !['COMPLETED', 'FAILED'].includes(activeTask.status)
+    )
+
+    const completedTasksCount = historyTasks.filter((t) => t.status === 'COMPLETED').length
+    const failedTasksCount = historyTasks.filter((t) => t.status === 'FAILED').length
+
+    const filteredTasks = historyTasks.filter((t) => {
+      if (taskFilter === 'completed') return t.status === 'COMPLETED'
+      if (taskFilter === 'failed') return t.status === 'FAILED'
+      return true
+    })
+
+    const allHws = hwTab === 'current' ? homeworks || [] : historyHomeworks || []
+    const filteredHws = allHws.filter((h) => {
+      if (!hwSearch.trim()) return true
+      return (h.name || '').toLowerCase().includes(hwSearch.trim().toLowerCase())
+    })
+
+    return (
+      <div className="fe-autocomplete-container">
+        {/* Top Header */}
+        <div className="fe-autocomplete-hero" style={{ marginBottom: 20 }}>
+          <div className="fe-autocomplete-hero-head" style={{ marginBottom: 0 }}>
+            <div className="fe-hero-icon-box">
+              <Icon name="auto_awesome" filled />
+            </div>
+            <div style={{ flex: 1 }}>
+              <h2>自动完成中心</h2>
+              <p>高拟真智能作业答题流水线 · 支持全套历史作答核验与专属声音克隆回放</p>
+            </div>
+            <div className="fe-hub-header-actions">
+              <button
+                type="button"
+                className="control-secondary"
+                onClick={loadHistoryTasks}
+                disabled={isLoadingHistory}
+                title="刷新历史任务列表"
+              >
+                <Icon name="refresh" className={isLoadingHistory ? 'fe-spin' : ''} />
+                <span>刷新记录</span>
+              </button>
+              {onOpenSettingsVoice && (
+                <button
+                  type="button"
+                  className="control-secondary"
+                  onClick={onOpenSettingsVoice}
+                >
+                  <Icon name="record_voice_over" />
+                  <span>管理专属声音</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* 1. Live Running Task Card (if any) */}
+        {isRunning && activeTask && (
+          <div className="fe-running-task-card">
+            <div className="fe-running-task-head">
+              <div className="fe-running-task-title">
+                <span className="fe-capsule-spinner">
+                  <Icon name="sync" className="fe-spin" style={{ color: '#059669', fontSize: 20 }} />
+                </span>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 16 }}>
+                    正在执行: {activeTask.homework_name || '作业自动完成'}
+                  </h3>
+                  <small style={{ color: '#047857' }}>
+                    {activeTask.stage_label || activeTask.stage_text || '后台流水线极速处理中...'}
+                  </small>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="control-primary fe-btn-sm"
+                onClick={() => setSelectedHistoryTask(activeTask)}
+              >
+                <Icon name="visibility" />
+                <span>进入做题看板</span>
+              </button>
+            </div>
+
+            <div className="fe-exec-progress-track" style={{ height: 8, margin: '10px 0 6px' }}>
+              <div
+                className="fe-exec-progress-bar"
+                style={{ width: `${Math.max(8, activeTask.progress || 10)}%` }}
+              />
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontSize: 12,
+                color: '#065f46',
+              }}
+            >
+              <span>
+                当前进度: <strong>{activeTask.progress || 10}%</strong>
+              </span>
+              <span>
+                {activeTask.current_question_index && activeTask.total_questions
+                  ? `作答进度: ${activeTask.current_question_index} / ${activeTask.total_questions} 题`
+                  : '正在初始化题型与分值参数'}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* 2. Historical Tasks Section */}
+        <div className="fe-history-section">
+          <div className="fe-history-header">
+            <div className="fe-history-title-wrap">
+              <Icon name="history" style={{ color: '#2563eb' }} />
+              <h3>历史自动完成记录</h3>
+              <div className="fe-ratio-presets" style={{ margin: 0 }}>
+                <button
+                  type="button"
+                  className={`fe-ratio-preset-btn ${taskFilter === 'all' ? 'is-active' : ''}`}
+                  onClick={() => setTaskFilter('all')}
+                >
+                  全部 ({historyTasks.length})
+                </button>
+                <button
+                  type="button"
+                  className={`fe-ratio-preset-btn ${taskFilter === 'completed' ? 'is-active' : ''}`}
+                  onClick={() => setTaskFilter('completed')}
+                >
+                  已完成 ({completedTasksCount})
+                </button>
+                <button
+                  type="button"
+                  className={`fe-ratio-preset-btn ${taskFilter === 'failed' ? 'is-active' : ''}`}
+                  onClick={() => setTaskFilter('failed')}
+                >
+                  失败/中断 ({failedTasksCount})
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {isLoadingHistory ? (
+            <div
+              style={{
+                textAlign: 'center',
+                padding: '40px 16px',
+                color: 'var(--control-muted)',
+              }}
+            >
+              <Icon
+                name="sync"
+                className="fe-spin"
+                style={{ fontSize: 24, marginBottom: 8, color: '#2563eb' }}
+              />
+              <div>正在获取自动完成历史记录...</div>
+            </div>
+          ) : filteredTasks.length === 0 ? (
+            <div
+              style={{
+                textAlign: 'center',
+                padding: '36px 16px',
+                color: 'var(--control-muted)',
+                fontSize: 13.5,
+              }}
+            >
+              <Icon name="inbox" style={{ fontSize: 32, color: '#94a3b8', marginBottom: 8 }} />
+              <p style={{ margin: '0 0 6px' }}>暂无符合条件的自动完成记录</p>
+              <small>可在下方作业列表中选择作业，一键开启高拟真智能自动作答！</small>
+            </div>
+          ) : (
+            <div className="fe-history-table-wrap">
+              <table className="fe-history-table">
+                <thead>
+                  <tr>
+                    <th>序号</th>
+                    <th>作业名称</th>
+                    <th>提交/完成时间</th>
+                    <th>得分 / 满分</th>
+                    <th>得分率</th>
+                    <th>做题用时</th>
+                    <th>音色模式</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTasks.map((t, idx) => {
+                    const isDone = t.status === 'COMPLETED'
+                    const isErr = t.status === 'FAILED'
+                    const score = t.result?.final_score ?? t.result?.score
+                    const maxS = t.result?.max_score ?? t.result?.total_point
+                    const rate =
+                      t.result?.score_rate ??
+                      (score !== undefined && maxS
+                        ? ((Number(score) / Number(maxS)) * 100).toFixed(1)
+                        : undefined)
+                    const timeStr =
+                      t.result?.completed_at ||
+                      (t.created_at ? new Date(t.created_at * 1000).toLocaleString() : '-')
+
+                    return (
+                      <tr key={t.task_id || idx}>
+                        <td style={{ color: 'var(--control-muted)', fontSize: 12 }}>#{idx + 1}</td>
+                        <td>
+                          <strong style={{ color: 'var(--control-ink)' }}>
+                            {t.homework_name || '作业自动完成'}
+                          </strong>
+                        </td>
+                        <td style={{ color: 'var(--control-muted)', fontSize: 12 }}>{timeStr}</td>
+                        <td>
+                          {score !== undefined ? (
+                            <strong style={{ color: '#16a34a' }}>
+                              {Number(score).toFixed(2)} / {Number(maxS || 0).toFixed(1)} 分
+                            </strong>
+                          ) : (
+                            '--'
+                          )}
+                        </td>
+                        <td>
+                          {rate !== undefined ? (
+                            <span style={{ fontWeight: 600, color: '#2563eb' }}>{rate}%</span>
+                          ) : (
+                            '--'
+                          )}
+                        </td>
+                        <td style={{ fontSize: 12 }}>
+                          {t.result?.use_time ? formatSeconds(t.result.use_time) : '--'}
+                        </td>
+                        <td>
+                          <span className="fe-td-type">
+                            {t.voice_mode === 'clone'
+                              ? '声音克隆'
+                              : t.voice_mode === 'edge'
+                              ? 'Edge-TTS'
+                              : '原声'}
+                          </span>
+                        </td>
+                        <td>
+                          <span
+                            className={`admin-pill-badge ${
+                              isDone ? 'is-active' : isErr ? 'is-danger' : 'is-muted'
+                            }`}
+                            style={{ fontSize: 11 }}
+                          >
+                            <Icon
+                              name={isDone ? 'check' : isErr ? 'close' : 'sync'}
+                              className={!isDone && !isErr ? 'fe-spin' : ''}
+                              style={{ fontSize: 12 }}
+                            />
+                            <span>{isDone ? '已完成' : isErr ? '失败' : '执行中'}</span>
+                          </span>
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            className="control-primary fe-btn-sm"
+                            style={{ padding: '4px 10px', fontSize: 12, height: 28, gap: 4 }}
+                            onClick={() => setSelectedHistoryTask(t)}
+                          >
+                            <Icon name="headphones" style={{ fontSize: 13 }} />
+                            <span>查看效果</span>
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* 3. Quick Launcher for Homeworks */}
+        <div className="fe-launcher-section">
+          <div className="fe-history-header">
+            <div className="fe-history-title-wrap">
+              <Icon name="assignment" style={{ color: '#2563eb' }} />
+              <h3>发起作业自动完成</h3>
+              <div className="fe-ratio-presets" style={{ margin: 0 }}>
+                <button
+                  type="button"
+                  className={`fe-ratio-preset-btn ${hwTab === 'current' ? 'is-active' : ''}`}
+                  onClick={() => setHwTab('current')}
+                >
+                  当前待做 ({homeworks?.length || 0})
+                </button>
+                <button
+                  type="button"
+                  className={`fe-ratio-preset-btn ${hwTab === 'history' ? 'is-active' : ''}`}
+                  onClick={() => setHwTab('history')}
+                >
+                  往期归档 ({historyHomeworks?.length || 0})
+                </button>
+              </div>
+            </div>
+
+            <div style={{ minWidth: 200 }}>
+              <input
+                type="text"
+                className="fe-phrase-input"
+                style={{ padding: '6px 12px', fontSize: 13, height: 32 }}
+                placeholder="筛选作业名称..."
+                value={hwSearch}
+                onChange={(e) => setHwSearch(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {filteredHws.length === 0 ? (
+            <div
+              style={{
+                textAlign: 'center',
+                padding: '30px 16px',
+                color: 'var(--control-muted)',
+                fontSize: 13,
+              }}
+            >
+              没有找到匹配的作业
+            </div>
+          ) : (
+            <div className="fe-launcher-grid">
+              {filteredHws.map((hw) => {
+                const isFinished = hw.status === 2 || hw.score !== undefined
+                return (
+                  <div key={hw.id} className="fe-launcher-card">
+                    <div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          marginBottom: 6,
+                        }}
+                      >
+                        <span className="admin-pill-badge is-muted" style={{ fontSize: 11 }}>
+                          {hw.subject_name || '英语'}
+                        </span>
+                        {isFinished && (
+                          <span className="admin-pill-badge is-active" style={{ fontSize: 11 }}>
+                            已提交 · {hw.score ?? hw.point ?? 0}分
+                          </span>
+                        )}
+                      </div>
+                      <strong
+                        style={{
+                          fontSize: 14,
+                          color: 'var(--control-ink)',
+                          display: 'block',
+                          marginBottom: 4,
+                        }}
+                      >
+                        {hw.name}
+                      </strong>
+                      <small style={{ color: 'var(--control-muted)', fontSize: 12 }}>
+                        {hw.deadline ? `截止: ${hw.deadline}` : '长期有效'}
+                      </small>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+                      <button
+                        type="button"
+                        className="control-primary fe-btn-sm"
+                        style={{ padding: '6px 12px', fontSize: 12 }}
+                        onClick={() => onTriggerAutoComplete?.(hw)}
+                      >
+                        <Icon name="bolt" style={{ fontSize: 14 }} />
+                        <span>{isFinished ? '⚡ 重新作答' : '⚡ 发起自动完成'}</span>
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // If user selected a specific historical task to inspect effect
+  if (selectedHistoryTask) {
+    return renderTaskEffectView(selectedHistoryTask)
+  }
+
+  // Check valid permit token - if not configuring a specific task, render Hub
+  if (!permitToken && (!currentTaskId || currentTask?.status === 'COMPLETED' || currentTask?.status === 'FAILED')) {
+    return renderHubView()
   }
 
   // Trigger Risk Modal
@@ -570,12 +1263,12 @@ export function AutoCompletePage({
       }
 
       const payload: StartAutoCompletePayload = {
-        homework_id: homework.id,
-        homework_name: homework.name,
-        resource_id: homework.resource_id || ((activePaper as Record<string, unknown> | null)?.resource_id as string | undefined),
-        set_id: homework.set_id || ((activePaper as Record<string, unknown> | null)?.set_id as string | undefined),
-        set_type: homework.set_type !== undefined ? Number(homework.set_type) : ((activePaper as Record<string, unknown> | null)?.set_type as number | undefined),
-        status: homework.status !== undefined ? String(homework.status) : undefined,
+        homework_id: currentHw.id,
+        homework_name: currentHw.name,
+        resource_id: currentHw.resource_id || ((activePaper as Record<string, unknown> | null)?.resource_id as string | undefined),
+        set_id: currentHw.set_id || ((activePaper as Record<string, unknown> | null)?.set_id as string | undefined),
+        set_type: currentHw.set_type !== undefined ? Number(currentHw.set_type) : ((activePaper as Record<string, unknown> | null)?.set_type as number | undefined),
+        status: currentHw.status !== undefined ? String(currentHw.status) : undefined,
         mode,
         target_total: mode === 'auto' ? autoTargetTotal : Number(manualTotalSum.toFixed(2)),
         allow_over_max: mode === 'manual' ? isManualTotalOverMax || manualOverMaxQuestions.length > 0 : false,
@@ -583,13 +1276,13 @@ export function AutoCompletePage({
         voice_mode: voiceMode,
         voice_id: voiceMode === 'clone' ? (selectedVoiceId || undefined) : undefined,
         per_question_scores: perQuestionScoresPayload,
-        permit_token: permitToken,
+        permit_token: permitToken || '',
         disclaimer_text: typedPhrase.trim(),
       }
 
       if (
         currentTask &&
-        String(currentTask.homework_id) === String(homework.id) &&
+        String(currentTask.homework_id) === String(currentHw.id) &&
         !['COMPLETED', 'FAILED'].includes(currentTask.status)
       ) {
         onToast?.('当前作业已有正在运行的任务，无需重复发起')
@@ -608,8 +1301,8 @@ export function AutoCompletePage({
         progress: 10,
         stage_label: '[1/8] 正在通过国内代理初始化 ETS 会话...',
         stage_text: '[1/8] 正在通过国内代理初始化 ETS 会话...',
-        homework_id: homework.id,
-        homework_name: homework.name,
+        homework_id: currentHw.id,
+        homework_name: currentHw.name,
       }
       setLocalTaskStatus(initialTask)
       onTaskChange?.(initialTask)
@@ -680,7 +1373,7 @@ export function AutoCompletePage({
             <Icon name="bolt" filled />
           </div>
           <div>
-            <h2>{homework?.name && homework.name !== '作业自动完成' ? homework.name : (activePaper?.title || activePaper?.paperName || homework?.name || '作业自动完成')}</h2>
+            <h2>{currentHw?.name && currentHw.name !== '作业自动完成' ? currentHw.name : (activePaper?.title || activePaper?.paperName || currentHw?.name || '作业自动完成')}</h2>
             <p>高拟真作业自动完成调度工作台 · 请审慎配置分值与声音参数</p>
           </div>
         </div>
@@ -700,7 +1393,7 @@ export function AutoCompletePage({
           </div>
           <div className="fe-stat-tile">
             <span className="fe-stat-label">所属学科</span>
-            <strong className="fe-stat-value">{homework.subject_name || '英语'}</strong>
+            <strong className="fe-stat-value">{currentHw.subject_name || '英语'}</strong>
           </div>
         </div>
       </div>
@@ -1534,6 +2227,7 @@ export function AutoCompletePage({
                               <th>题目内容节选</th>
                               <th>真实满分</th>
                               <th>最终实际得分</th>
+                              <th>克隆音频回放</th>
                               <th>官方状态</th>
                             </tr>
                           </thead>
@@ -1545,6 +2239,7 @@ export function AutoCompletePage({
                               const text = String(item.text || item.questionText || `第 ${order} 题`)
                               const maxS = (item.max_score ?? item.maxScore ?? (paperTotalScore / Math.max(1, totalQuestions))) as number
                               const score = (item.awarded_score ?? item.allocatedScore ?? (manualScores[order] || 0)) as number
+                              const audioUrl = item.audio_url as string | undefined
                               return (
                                 <tr key={order}>
                                   <td><strong>Q{order}</strong></td>
@@ -1554,6 +2249,15 @@ export function AutoCompletePage({
                                   </td>
                                   <td>{Number(maxS).toFixed(2)} 分</td>
                                   <td><strong style={{ color: '#16a34a' }}>{Number(score).toFixed(2)} 分</strong></td>
+                                  <td>
+                                    {audioUrl ? (
+                                      <div className="fe-audio-cell">
+                                        <audio controls src={audioUrl} preload="none" className="fe-audio-player" />
+                                      </div>
+                                    ) : (
+                                      <span style={{ color: '#94a3b8', fontSize: 11 }}>无音频 (免录音题)</span>
+                                    )}
+                                  </td>
                                   <td>
                                     <span className="admin-pill-badge is-active" style={{ fontSize: 11 }}>
                                       <Icon name="check" style={{ fontSize: 12 }} /> 官方已核验
@@ -1574,10 +2278,12 @@ export function AutoCompletePage({
                             setLocalTaskId(null)
                             setLocalTaskStatus(null)
                             onTaskChange?.(null)
+                            void loadHistoryTasks()
+                            setSelectedHistoryTask(null)
                           }}
                         >
-                          <Icon name="tune" />
-                          <span>留在本页查看配置</span>
+                          <Icon name="history" />
+                          <span>返回任务中心</span>
                         </button>
                         <button
                           type="button"

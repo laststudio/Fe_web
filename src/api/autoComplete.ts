@@ -71,6 +71,9 @@ export type AutoCompleteTaskResponse = {
   stage_label?: string
   homework_id?: string
   homework_name?: string
+  mode?: string
+  voice_mode?: string
+  created_at?: number
   current_question_index?: number
   total_questions?: number
   current_question_text?: string
@@ -125,6 +128,15 @@ export function getLatestAutoCompleteTask(
 ): Promise<{ task: AutoCompleteTaskResponse | null }> {
   return apiRequest<{ task: AutoCompleteTaskResponse | null }>(
     '/homework/auto-complete/latest-task',
+    { accessToken }
+  )
+}
+
+export function getAutoCompleteTasks(
+  accessToken: string
+): Promise<{ tasks: AutoCompleteTaskResponse[] }> {
+  return apiRequest<{ tasks: AutoCompleteTaskResponse[] }>(
+    '/homework/auto-complete/tasks',
     { accessToken }
   )
 }
