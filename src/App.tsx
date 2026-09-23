@@ -2581,6 +2581,7 @@ function App() {
                 className="control-header-link control-announcement-link"
                 onClick={() => setShowAnnouncementModal(true)}
                 title="查看系统公告"
+                aria-label="查看系统公告"
                 type="button"
               >
                 <Icon name="campaign" />
@@ -2754,15 +2755,6 @@ function App() {
               )}
             </div>
 
-            <a
-              className="control-header-link control-header-admin-link"
-              href="https://lastudio.cc/admin"
-              target="_blank"
-              rel="noreferrer"
-            >
-              <Icon name="admin_panel_settings" />
-              <span>管理中心</span>
-            </a>
             <button
               className="control-icon-button control-header-logout-button"
               onClick={() => transitionTo(oauthConfig.logoutUrl)}

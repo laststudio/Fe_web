@@ -2767,9 +2767,7 @@ html:has(.control-shell) {
     gap: 8px;
   }
 
-  /* Personal buttons squeeze fix on mobile:
-     Individual Admin link and Logout button are neatly relocated into the User Dropdown Popover */
-  .control-header-actions .control-header-admin-link,
+  /* The account menu provides logout on mobile. */
   .control-header-actions .control-header-logout-button {
     display: none !important;
   }
@@ -2808,7 +2806,7 @@ html:has(.control-shell) {
     border-radius: 10px;
   }
 
-  .control-header-link span {
+  .control-header-link > span:not(.material-symbols-outlined) {
     display: none !important;
   }
 
@@ -5024,5 +5022,4 @@ html:has(.control-shell) {
   font-weight: 600;
   color: var(--control-muted);
 }
-
 
