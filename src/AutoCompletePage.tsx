@@ -27,9 +27,6 @@ export type AutoCompletePageProps = {
   onCompleted?: (result: AutoCompleteTaskResponse['result'], hwId: string) => void
   activeTask?: AutoCompleteTaskResponse | null
   onTaskChange?: (task: AutoCompleteTaskResponse | null) => void
-  homeworks?: HomeworkItem[]
-  historyHomeworks?: HomeworkItem[]
-  onTriggerAutoComplete?: (hw: HomeworkItem) => void
 }
 
 type QuestionScoreItem = {
@@ -56,9 +53,6 @@ export function AutoCompletePage({
   onCompleted,
   activeTask,
   onTaskChange,
-  homeworks,
-  historyHomeworks,
-  onTriggerAutoComplete,
 }: AutoCompletePageProps) {
   // Current active homework fallback
   const currentHw = useMemo<HomeworkItem>(() => {
@@ -82,8 +76,6 @@ export function AutoCompletePage({
   const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(() => Boolean(accessToken))
   const [selectedHistoryTask, setSelectedHistoryTask] = useState<AutoCompleteTaskResponse | null>(null)
   const [taskFilter, setTaskFilter] = useState<'all' | 'completed' | 'failed'>('all')
-  const [hwTab, setHwTab] = useState<'current' | 'history'>('current')
-  const [hwSearch, setHwSearch] = useState<string>('')
 
   const loadHistoryTasks = useCallback(() => {
     if (!accessToken) return
@@ -584,10 +576,6 @@ export function AutoCompletePage({
       task.result?.completed_at ||
       (task.created_at ? new Date(task.created_at * 1000).toLocaleString() : null)
 
-    const matchingHw =
-      homeworks?.find((h) => String(h.id) === String(task.homework_id)) ||
-      historyHomeworks?.find((h) => String(h.id) === String(task.homework_id))
-
     return (
       <div className="fe-autocomplete-container">
         {/* Navigation Breadcrumb */}
@@ -806,29 +794,15 @@ export function AutoCompletePage({
               onClick={() => setSelectedHistoryTask(null)}
             >
               <Icon name="arrow_back" />
-              <span>返回记录列表</span>
+              <span>返回看板列表</span>
             </button>
-
-            {matchingHw && onTriggerAutoComplete && (
-              <button
-                type="button"
-                className="control-primary"
-                onClick={() => {
-                  setSelectedHistoryTask(null)
-                  onTriggerAutoComplete(matchingHw)
-                }}
-              >
-                <Icon name="bolt" />
-                <span>⚡ 重新发起此作业自动完成</span>
-              </button>
-            )}
           </div>
         </div>
       </div>
     )
   }
 
-  // Render main Hub Dashboard View
+  // Render main Kanban Dashboard View (Current & Historical Tasks only)
   const renderHubView = () => {
     const isRunning = Boolean(
       activeTask && !['COMPLETED', 'FAILED'].includes(activeTask.status)
@@ -843,51 +817,42 @@ export function AutoCompletePage({
       return true
     })
 
-    const allHws = hwTab === 'current' ? homeworks || [] : historyHomeworks || []
-    const filteredHws = allHws.filter((h) => {
-      if (!hwSearch.trim()) return true
-      return (h.name || '').toLowerCase().includes(hwSearch.trim().toLowerCase())
-    })
-
     return (
       <div className="fe-autocomplete-container">
-        {/* Top Header */}
-        <div className="fe-autocomplete-hero" style={{ marginBottom: 20 }}>
-          <div className="fe-autocomplete-hero-head" style={{ marginBottom: 0 }}>
+        {/* Top Header Card */}
+        <div className="fe-kanban-hero">
+          <div className="fe-kanban-hero-main">
             <div className="fe-hero-icon-box">
-              <Icon name="auto_awesome" filled />
+              <Icon name="monitoring" filled />
             </div>
-            <div style={{ flex: 1 }}>
-              <h2>自动完成中心</h2>
-              <p>高拟真智能作业答题流水线 · 支持全套历史作答核验与专属声音克隆回放</p>
+            <div className="fe-kanban-hero-text">
+              <div className="fe-kanban-title-row">
+                <h2>自动完成任务看板</h2>
+                <span className="admin-pill-badge is-muted">
+                  <Icon name="analytics" style={{ fontSize: 13 }} />
+                  <span>任务流水与效果核验</span>
+                </span>
+              </div>
+              <p>实时监控当前后台答题进度，回溯历史任务最终成绩与生成录音效果</p>
             </div>
-            <div className="fe-hub-header-actions">
-              <button
-                type="button"
-                className="control-secondary"
-                onClick={loadHistoryTasks}
-                disabled={isLoadingHistory}
-                title="刷新历史任务列表"
-              >
-                <Icon name="refresh" className={isLoadingHistory ? 'fe-spin' : ''} />
-                <span>刷新记录</span>
-              </button>
-              {onOpenSettingsVoice && (
-                <button
-                  type="button"
-                  className="control-secondary"
-                  onClick={onOpenSettingsVoice}
-                >
-                  <Icon name="record_voice_over" />
-                  <span>管理专属声音</span>
-                </button>
-              )}
-            </div>
+          </div>
+
+          <div className="fe-kanban-hero-actions">
+            <button
+              type="button"
+              className="control-secondary fe-btn-sm"
+              onClick={loadHistoryTasks}
+              disabled={isLoadingHistory}
+              title="刷新历史任务列表"
+            >
+              <Icon name="refresh" className={isLoadingHistory ? 'fe-spin' : ''} />
+              <span>刷新数据</span>
+            </button>
           </div>
         </div>
 
-        {/* 1. Live Running Task Card (if any) */}
-        {isRunning && activeTask && (
+        {/* 1. Live Running Task Card (if any) or Idle Indicator */}
+        {isRunning && activeTask ? (
           <div className="fe-running-task-card">
             <div className="fe-running-task-head">
               <div className="fe-running-task-title">
@@ -895,10 +860,15 @@ export function AutoCompletePage({
                   <Icon name="sync" className="fe-spin" style={{ color: '#059669', fontSize: 20 }} />
                 </span>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: 16 }}>
-                    正在执行: {activeTask.homework_name || '作业自动完成'}
-                  </h3>
-                  <small style={{ color: '#047857' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <h3 style={{ margin: 0, fontSize: 16 }}>
+                      正在执行: {activeTask.homework_name || '作业自动完成'}
+                    </h3>
+                    <span className="admin-pill-badge is-active" style={{ fontSize: 11 }}>
+                      <Icon name="bolt" style={{ fontSize: 12 }} /> 流水线极速运行中
+                    </span>
+                  </div>
+                  <small style={{ color: '#047857', display: 'block', marginTop: 3 }}>
                     {activeTask.stage_label || activeTask.stage_text || '后台流水线极速处理中...'}
                   </small>
                 </div>
@@ -909,7 +879,7 @@ export function AutoCompletePage({
                 onClick={() => setSelectedHistoryTask(activeTask)}
               >
                 <Icon name="visibility" />
-                <span>进入做题看板</span>
+                <span>查看做题看板</span>
               </button>
             </div>
 
@@ -932,8 +902,17 @@ export function AutoCompletePage({
               </span>
               <span>
                 {activeTask.current_question_index && activeTask.total_questions
-                  ? `作答进度: ${activeTask.current_question_index} / ${activeTask.total_questions} 题`
+                  ? `作答进度: 第 ${activeTask.current_question_index} / ${activeTask.total_questions} 题`
                   : '正在初始化题型与分值参数'}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="fe-idle-task-banner">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span className="fe-status-dot is-idle" />
+              <span style={{ fontSize: 13, color: 'var(--control-muted)' }}>
+                当前无正在执行的后台任务。如需开启作业，请在「当前作业」或「历史作业」中点击对应试卷的「⚡ 自动完成」。
               </span>
             </div>
           </div>
@@ -944,7 +923,7 @@ export function AutoCompletePage({
           <div className="fe-history-header">
             <div className="fe-history-title-wrap">
               <Icon name="history" style={{ color: '#2563eb' }} />
-              <h3>历史自动完成记录</h3>
+              <h3>历史任务记录</h3>
               <div className="fe-ratio-presets" style={{ margin: 0 }}>
                 <button
                   type="button"
@@ -997,212 +976,198 @@ export function AutoCompletePage({
             >
               <Icon name="inbox" style={{ fontSize: 32, color: '#94a3b8', marginBottom: 8 }} />
               <p style={{ margin: '0 0 6px' }}>暂无符合条件的自动完成记录</p>
-              <small>可在下方作业列表中选择作业，一键开启高拟真智能自动作答！</small>
+              <small>在作业列表中点击「⚡ 自动完成」启动的任务将在此自动归档并支持录音回溯！</small>
             </div>
           ) : (
-            <div className="fe-history-table-wrap">
-              <table className="fe-history-table">
-                <thead>
-                  <tr>
-                    <th>序号</th>
-                    <th>作业名称</th>
-                    <th>提交/完成时间</th>
-                    <th>得分 / 满分</th>
-                    <th>得分率</th>
-                    <th>做题用时</th>
-                    <th>音色模式</th>
-                    <th>状态</th>
-                    <th>操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredTasks.map((t, idx) => {
-                    const isDone = t.status === 'COMPLETED'
-                    const isErr = t.status === 'FAILED'
-                    const score = t.result?.final_score ?? t.result?.score
-                    const maxS = t.result?.max_score ?? t.result?.total_point
-                    const rate =
-                      t.result?.score_rate ??
-                      (score !== undefined && maxS
-                        ? ((Number(score) / Number(maxS)) * 100).toFixed(1)
-                        : undefined)
-                    const timeStr =
-                      t.result?.completed_at ||
-                      (t.created_at ? new Date(t.created_at * 1000).toLocaleString() : '-')
+            <>
+              {/* Desktop Table View */}
+              <div className="fe-history-desktop-table">
+                <div className="fe-history-table-wrap">
+                  <table className="fe-history-table">
+                    <thead>
+                      <tr>
+                        <th>序号</th>
+                        <th>作业名称</th>
+                        <th>提交/完成时间</th>
+                        <th>得分 / 满分</th>
+                        <th>得分率</th>
+                        <th>做题用时</th>
+                        <th>音色模式</th>
+                        <th>状态</th>
+                        <th>操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredTasks.map((t, idx) => {
+                        const isDone = t.status === 'COMPLETED'
+                        const isErr = t.status === 'FAILED'
+                        const score = t.result?.final_score ?? t.result?.score
+                        const maxS = t.result?.max_score ?? t.result?.total_point
+                        const rate =
+                          t.result?.score_rate ??
+                          (score !== undefined && maxS
+                            ? ((Number(score) / Number(maxS)) * 100).toFixed(1)
+                            : undefined)
+                        const timeStr =
+                          t.result?.completed_at ||
+                          (t.created_at ? new Date(t.created_at * 1000).toLocaleString() : '-')
 
-                    return (
-                      <tr key={t.task_id || idx}>
-                        <td style={{ color: 'var(--control-muted)', fontSize: 12 }}>#{idx + 1}</td>
-                        <td>
-                          <strong style={{ color: 'var(--control-ink)' }}>
-                            {t.homework_name || '作业自动完成'}
+                        return (
+                          <tr key={t.task_id || idx}>
+                            <td style={{ color: 'var(--control-muted)', fontSize: 12 }}>#{idx + 1}</td>
+                            <td>
+                              <strong style={{ color: 'var(--control-ink)' }}>
+                                {t.homework_name || '作业自动完成'}
+                              </strong>
+                            </td>
+                            <td style={{ color: 'var(--control-muted)', fontSize: 12 }}>{timeStr}</td>
+                            <td>
+                              {score !== undefined ? (
+                                <strong style={{ color: '#16a34a' }}>
+                                  {Number(score).toFixed(2)} / {Number(maxS || 0).toFixed(1)} 分
+                                </strong>
+                              ) : (
+                                '--'
+                              )}
+                            </td>
+                            <td>
+                              {rate !== undefined ? (
+                                <span style={{ fontWeight: 600, color: '#2563eb' }}>{rate}%</span>
+                              ) : (
+                                '--'
+                              )}
+                            </td>
+                            <td style={{ fontSize: 12 }}>
+                              {t.result?.use_time ? formatSeconds(t.result.use_time) : '--'}
+                            </td>
+                            <td>
+                              <span className="fe-td-type">
+                                {t.voice_mode === 'clone'
+                                  ? '声音克隆'
+                                  : t.voice_mode === 'edge'
+                                  ? 'Edge-TTS'
+                                  : '原声'}
+                              </span>
+                            </td>
+                            <td>
+                              <span
+                                className={`admin-pill-badge ${
+                                  isDone ? 'is-active' : isErr ? 'is-danger' : 'is-muted'
+                                }`}
+                                style={{ fontSize: 11 }}
+                              >
+                                <Icon
+                                  name={isDone ? 'check' : isErr ? 'close' : 'sync'}
+                                  className={!isDone && !isErr ? 'fe-spin' : ''}
+                                  style={{ fontSize: 12 }}
+                                />
+                                <span>{isDone ? '已完成' : isErr ? '失败' : '执行中'}</span>
+                              </span>
+                            </td>
+                            <td>
+                              <button
+                                type="button"
+                                className="control-primary fe-btn-sm"
+                                style={{ padding: '4px 10px', fontSize: 12, height: 28, gap: 4 }}
+                                onClick={() => setSelectedHistoryTask(t)}
+                              >
+                                <Icon name="headphones" style={{ fontSize: 13 }} />
+                                <span>查看效果</span>
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Mobile Card List View */}
+              <div className="fe-history-mobile-cards">
+                {filteredTasks.map((t, idx) => {
+                  const isDone = t.status === 'COMPLETED'
+                  const isErr = t.status === 'FAILED'
+                  const score = t.result?.final_score ?? t.result?.score
+                  const maxS = t.result?.max_score ?? t.result?.total_point
+                  const rate =
+                    t.result?.score_rate ??
+                    (score !== undefined && maxS
+                      ? ((Number(score) / Number(maxS)) * 100).toFixed(1)
+                      : undefined)
+                  const timeStr =
+                    t.result?.completed_at ||
+                    (t.created_at ? new Date(t.created_at * 1000).toLocaleString() : '-')
+
+                  return (
+                    <div className="fe-history-task-card" key={t.task_id || idx}>
+                      <div className="fe-history-card-top">
+                        <strong className="fe-history-card-title">
+                          {t.homework_name || '作业自动完成'}
+                        </strong>
+                        <span
+                          className={`admin-pill-badge ${
+                            isDone ? 'is-active' : isErr ? 'is-danger' : 'is-muted'
+                          }`}
+                          style={{ fontSize: 11 }}
+                        >
+                          <Icon
+                            name={isDone ? 'check' : isErr ? 'close' : 'sync'}
+                            className={!isDone && !isErr ? 'fe-spin' : ''}
+                            style={{ fontSize: 12 }}
+                          />
+                          <span>{isDone ? '已完成' : isErr ? '失败' : '执行中'}</span>
+                        </span>
+                      </div>
+
+                      <div className="fe-history-card-stats">
+                        <div className="fe-history-stat-col">
+                          <small>最终得分</small>
+                          <strong style={{ color: isDone ? '#16a34a' : undefined }}>
+                            {score !== undefined
+                              ? `${Number(score).toFixed(2)} / ${Number(maxS || 0).toFixed(1)}分`
+                              : '--'}
                           </strong>
-                        </td>
-                        <td style={{ color: 'var(--control-muted)', fontSize: 12 }}>{timeStr}</td>
-                        <td>
-                          {score !== undefined ? (
-                            <strong style={{ color: '#16a34a' }}>
-                              {Number(score).toFixed(2)} / {Number(maxS || 0).toFixed(1)} 分
-                            </strong>
-                          ) : (
-                            '--'
-                          )}
-                        </td>
-                        <td>
-                          {rate !== undefined ? (
-                            <span style={{ fontWeight: 600, color: '#2563eb' }}>{rate}%</span>
-                          ) : (
-                            '--'
-                          )}
-                        </td>
-                        <td style={{ fontSize: 12 }}>
-                          {t.result?.use_time ? formatSeconds(t.result.use_time) : '--'}
-                        </td>
-                        <td>
-                          <span className="fe-td-type">
+                        </div>
+                        <div className="fe-history-stat-col">
+                          <small>得分率</small>
+                          <strong style={{ color: '#2563eb' }}>
+                            {rate !== undefined ? `${rate}%` : '--'}
+                          </strong>
+                        </div>
+                        <div className="fe-history-stat-col">
+                          <small>实际用时</small>
+                          <span>{t.result?.use_time ? formatSeconds(t.result.use_time) : '--'}</span>
+                        </div>
+                      </div>
+
+                      <div className="fe-history-card-foot">
+                        <div className="fe-history-card-meta">
+                          <span>{timeStr}</span>
+                          <span>·</span>
+                          <span>
                             {t.voice_mode === 'clone'
                               ? '声音克隆'
                               : t.voice_mode === 'edge'
                               ? 'Edge-TTS'
                               : '原声'}
                           </span>
-                        </td>
-                        <td>
-                          <span
-                            className={`admin-pill-badge ${
-                              isDone ? 'is-active' : isErr ? 'is-danger' : 'is-muted'
-                            }`}
-                            style={{ fontSize: 11 }}
-                          >
-                            <Icon
-                              name={isDone ? 'check' : isErr ? 'close' : 'sync'}
-                              className={!isDone && !isErr ? 'fe-spin' : ''}
-                              style={{ fontSize: 12 }}
-                            />
-                            <span>{isDone ? '已完成' : isErr ? '失败' : '执行中'}</span>
-                          </span>
-                        </td>
-                        <td>
-                          <button
-                            type="button"
-                            className="control-primary fe-btn-sm"
-                            style={{ padding: '4px 10px', fontSize: 12, height: 28, gap: 4 }}
-                            onClick={() => setSelectedHistoryTask(t)}
-                          >
-                            <Icon name="headphones" style={{ fontSize: 13 }} />
-                            <span>查看效果</span>
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* 3. Quick Launcher for Homeworks */}
-        <div className="fe-launcher-section">
-          <div className="fe-history-header">
-            <div className="fe-history-title-wrap">
-              <Icon name="assignment" style={{ color: '#2563eb' }} />
-              <h3>发起作业自动完成</h3>
-              <div className="fe-ratio-presets" style={{ margin: 0 }}>
-                <button
-                  type="button"
-                  className={`fe-ratio-preset-btn ${hwTab === 'current' ? 'is-active' : ''}`}
-                  onClick={() => setHwTab('current')}
-                >
-                  当前待做 ({homeworks?.length || 0})
-                </button>
-                <button
-                  type="button"
-                  className={`fe-ratio-preset-btn ${hwTab === 'history' ? 'is-active' : ''}`}
-                  onClick={() => setHwTab('history')}
-                >
-                  往期归档 ({historyHomeworks?.length || 0})
-                </button>
-              </div>
-            </div>
-
-            <div style={{ minWidth: 200 }}>
-              <input
-                type="text"
-                className="fe-phrase-input"
-                style={{ padding: '6px 12px', fontSize: 13, height: 32 }}
-                placeholder="筛选作业名称..."
-                value={hwSearch}
-                onChange={(e) => setHwSearch(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {filteredHws.length === 0 ? (
-            <div
-              style={{
-                textAlign: 'center',
-                padding: '30px 16px',
-                color: 'var(--control-muted)',
-                fontSize: 13,
-              }}
-            >
-              没有找到匹配的作业
-            </div>
-          ) : (
-            <div className="fe-launcher-grid">
-              {filteredHws.map((hw) => {
-                const isFinished = hw.status === 2 || hw.score !== undefined
-                return (
-                  <div key={hw.id} className="fe-launcher-card">
-                    <div>
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          marginBottom: 6,
-                        }}
-                      >
-                        <span className="admin-pill-badge is-muted" style={{ fontSize: 11 }}>
-                          {hw.subject_name || '英语'}
-                        </span>
-                        {isFinished && (
-                          <span className="admin-pill-badge is-active" style={{ fontSize: 11 }}>
-                            已提交 · {hw.score ?? hw.point ?? 0}分
-                          </span>
-                        )}
+                        </div>
+                        <button
+                          type="button"
+                          className="control-primary fe-btn-sm"
+                          style={{ padding: '4px 10px', fontSize: 12, height: 28, gap: 4 }}
+                          onClick={() => setSelectedHistoryTask(t)}
+                        >
+                          <Icon name="headphones" style={{ fontSize: 13 }} />
+                          <span>查看效果</span>
+                        </button>
                       </div>
-                      <strong
-                        style={{
-                          fontSize: 14,
-                          color: 'var(--control-ink)',
-                          display: 'block',
-                          marginBottom: 4,
-                        }}
-                      >
-                        {hw.name}
-                      </strong>
-                      <small style={{ color: 'var(--control-muted)', fontSize: 12 }}>
-                        {hw.deadline ? `截止: ${hw.deadline}` : '长期有效'}
-                      </small>
                     </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
-                      <button
-                        type="button"
-                        className="control-primary fe-btn-sm"
-                        style={{ padding: '6px 12px', fontSize: 12 }}
-                        onClick={() => onTriggerAutoComplete?.(hw)}
-                      >
-                        <Icon name="bolt" style={{ fontSize: 14 }} />
-                        <span>{isFinished ? '⚡ 重新作答' : '⚡ 发起自动完成'}</span>
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+                  )
+                })}
+              </div>
+            </>
           )}
         </div>
       </div>

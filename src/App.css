@@ -5201,33 +5201,174 @@ html:has(.control-shell) {
   outline: none;
 }
 
-.fe-launcher-section {
+/* Kanban Hero Header */
+.fe-kanban-hero {
   background: var(--control-panel);
   border: 1px solid var(--control-line);
+  border-radius: 14px;
+  padding: 18px 22px;
+  box-shadow: var(--control-shadow);
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.fe-kanban-hero-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.fe-kanban-hero-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.fe-kanban-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.fe-kanban-hero-text h2 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--control-ink);
+  font-family: 'Noto Serif SC', serif;
+}
+
+.fe-kanban-hero-text p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--control-muted);
+  line-height: 1.5;
+}
+
+.fe-kanban-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Idle Task Banner */
+.fe-idle-task-banner {
+  background: #f8fafc;
+  border: 1px dashed var(--control-line);
   border-radius: 12px;
-  padding: 20px;
-}
-
-.fe-launcher-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  padding: 14px 18px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  margin-top: 14px;
 }
 
-.fe-launcher-card {
-  background: var(--control-paper);
+.fe-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.fe-status-dot.is-idle {
+  background: #94a3b8;
+}
+
+.fe-status-dot.is-running {
+  background: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+}
+
+/* Mobile & Desktop Responsive Kanban Cards */
+.fe-history-mobile-cards {
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fe-history-desktop-table {
+  display: block;
+}
+
+@media (max-width: 767px) {
+  .fe-history-mobile-cards {
+    display: flex;
+  }
+  .fe-history-desktop-table {
+    display: none;
+  }
+}
+
+.fe-history-task-card {
+  background: #ffffff;
   border: 1px solid var(--control-line);
   border-radius: 10px;
   padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
   gap: 12px;
-  transition: all 0.15s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
-.fe-launcher-card:hover {
-  border-color: #93c5fd;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.08);
+.fe-history-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fe-history-card-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--control-ink);
+  line-height: 1.4;
+  flex: 1;
+}
+
+.fe-history-card-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 10px 12px;
+  text-align: center;
+}
+
+.fe-history-stat-col small {
+  display: block;
+  font-size: 11px;
+  color: var(--control-muted);
+  margin-bottom: 2px;
+}
+
+.fe-history-stat-col strong,
+.fe-history-stat-col span {
+  font-size: 13.5px;
+  color: var(--control-ink);
+}
+
+.fe-history-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.fe-history-card-meta {
+  font-size: 11.5px;
+  color: var(--control-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }

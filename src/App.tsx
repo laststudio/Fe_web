@@ -3157,9 +3157,6 @@ function App() {
                   navigate('/settings')
                 }}
                 onToast={showToast}
-                homeworks={homeworks}
-                historyHomeworks={historyHomeworks}
-                onTriggerAutoComplete={handleTriggerAutoComplete}
               />
             </ErrorBoundary>
           ) : page === '/settings' ? (
