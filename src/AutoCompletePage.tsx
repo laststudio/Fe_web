@@ -516,6 +516,10 @@ export function AutoCompletePage({
 
   // Trigger Risk Modal
   const handleOpenRiskModal = () => {
+    if (voiceMode === 'clone' && (!selectedVoiceId || voices.length === 0)) {
+      onToast?.('您尚未录制专属声音，请先前往录制声音或切换至 Edge-TTS 音色')
+      return
+    }
     setIsRiskModalOpen(true)
     setRiskStep(1)
     setCountdown(5)
@@ -565,7 +569,7 @@ export function AutoCompletePage({
         allow_over_max: mode === 'manual' ? isManualTotalOverMax || manualOverMaxQuestions.length > 0 : false,
         use_time: suggestedTimeSeconds,
         voice_mode: voiceMode,
-        voice_id: voiceMode === 'clone' ? selectedVoiceId : undefined,
+        voice_id: voiceMode === 'clone' ? (selectedVoiceId || undefined) : undefined,
         per_question_scores: perQuestionScoresPayload,
         permit_token: permitToken,
         disclaimer_text: typedPhrase.trim(),
