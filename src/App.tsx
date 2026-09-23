@@ -2488,14 +2488,18 @@ function App() {
             if (!prev) {
               try {
                 localStorage.setItem(STORAGE_KEY_ACTIVE_TASK, JSON.stringify(res.task))
-              } catch {}
+              } catch (e) {
+                console.warn('Failed to cache active task', e)
+              }
               return res.task
             }
             if (res.task && res.task.task_id === prev.task_id) {
               const merged = { ...prev, ...res.task }
               try {
                 localStorage.setItem(STORAGE_KEY_ACTIVE_TASK, JSON.stringify(merged))
-              } catch {}
+              } catch (e) {
+                console.warn('Failed to update cached active task', e)
+              }
               return merged
             }
             return prev
@@ -2534,6 +2538,7 @@ function App() {
     }, 1800)
 
     return () => clearInterval(pollTimer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.accessToken, activeTask?.task_id, activeTask?.status])
 
   // Dynamic sidebar navigation groups with live background task status
