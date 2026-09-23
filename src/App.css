@@ -26,6 +26,10 @@
   box-sizing: border-box;
 }
 
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
 button, input, select, textarea {
   font: inherit;
 }
@@ -94,16 +98,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .navigation-stage {
   min-height: 100vh;
-  transition: opacity 0.14s ease;
 }
 
 .navigation-leaving .navigation-stage {
-  opacity: 0.1;
   pointer-events: none;
 }
 
 .navigation-entering .navigation-stage {
-  animation: navigation-page-enter 0.18s ease-out both;
+  animation: none;
 }
 
 .navigation-status {
@@ -1070,15 +1072,16 @@ html:has(.control-shell) {
 }
 
 .control-sidebar.is-collapsed nav button {
-  padding: 0;
-  display: flex;
+  padding: 9px 10px;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
   align-items: center;
-  justify-content: center;
-  min-height: 48px;
+  min-height: 56px;
 }
 
 .control-sidebar.is-collapsed nav button > .material-symbols-outlined {
   opacity: 1 !important;
+  width: 28px;
   font-size: 22px;
   display: flex;
   align-items: center;
@@ -2228,7 +2231,6 @@ html:has(.control-shell) {
   display: grid;
   place-items: center;
   padding: 20px;
-  animation: modal-fade-in 0.18s ease-out;
 }
 
 .risk-modal-card {
@@ -2238,7 +2240,6 @@ html:has(.control-shell) {
   box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.28);
   overflow: hidden;
   border: 1px solid #cbd5e1;
-  animation: modal-scale-in 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .risk-modal-head {
@@ -2799,7 +2800,6 @@ html:has(.control-shell) {
     grid-template-columns: 28px minmax(0, 1fr);
     padding: 9px 10px;
     min-height: 56px;
-    justify-content: flex-start;
   }
 
   .control-sidebar.is-collapsed .admin-sidebar-head {
@@ -4466,7 +4466,6 @@ html:has(.control-shell) {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  animation: modal-fade-in 0.18s ease-out;
 }
 
 .fe-risk-fullscreen-card,
@@ -4477,7 +4476,6 @@ html:has(.control-shell) {
   max-width: 620px;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
   overflow: hidden;
-  animation: modal-scale-in 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   display: flex;
   flex-direction: column;
 }
@@ -5083,4 +5081,3 @@ html:has(.control-shell) {
   font-weight: 600;
   color: var(--control-muted);
 }
-

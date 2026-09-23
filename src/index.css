@@ -3,6 +3,8 @@
 }
 
 html {
+  width: 100%;
+  overflow-x: clip;
   color: #172033;
   background: #f4f7fb;
   scrollbar-gutter: stable;
@@ -14,9 +16,11 @@ html {
 }
 
 body {
+  width: 100%;
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  overflow-x: clip;
 }
 
 a {
@@ -30,4 +34,23 @@ button {
 
 #root {
   min-height: 100vh;
+}
+
+.control-layout,
+.control-workspace,
+.control-page-heading,
+.control-page-heading > div {
+  min-width: 0;
+}
+
+.control-workspace :is(h1, h2, h3, p, label, code, td, th),
+.control-page-heading :is(h1, h2, p) {
+  overflow-wrap: anywhere;
+}
+
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
 }
