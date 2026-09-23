@@ -12,7 +12,7 @@ import {
 import { AudioRecorder } from '../utils/audioRecorder'
 
 const SAMPLE_TEXT =
-  'Hello! My name is Mike. I am a student. I like reading books and playing basketball with my friends. Nice to meet you.'
+  '生活就像海洋，只有意志坚强的人，才能到达彼岸。\nThis is an apple. I like apples. Apples are good for our health.'
 
 export function VoiceManager({
   accessToken,

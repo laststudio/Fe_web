@@ -3450,6 +3450,7 @@ html:has(.control-shell) {
   font-style: italic;
   font-weight: 500;
   font-family: 'DM Mono', monospace;
+  white-space: pre-line;
 }
 
 .fe-studio-recorder-row {
