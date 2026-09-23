@@ -2612,6 +2612,10 @@ function App() {
     setUserMenuOpen(false)
     setViewingPaper(null)
     setMobileNavOpen(false)
+    if (nextPage === '/auto-complete') {
+      setAutoCompletePermitToken('')
+      setAutoCompleteTargetHw(null)
+    }
     if (nextPage === window.location.pathname) {
       return
     }
@@ -3085,6 +3089,7 @@ function App() {
               }}
             >
               <AutoCompletePage
+                key={pathname}
                 homework={
                   autoCompleteTargetHw ||
                   homeworks.find((h) => pathname.includes(h.id)) ||
@@ -3156,6 +3161,7 @@ function App() {
                 onOpenSettingsVoice={() => {
                   navigate('/settings')
                 }}
+                isHubRoute={pathname === '/auto-complete'}
                 onToast={showToast}
               />
             </ErrorBoundary>

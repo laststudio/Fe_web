@@ -27,6 +27,7 @@ export type AutoCompletePageProps = {
   onCompleted?: (result: AutoCompleteTaskResponse['result'], hwId: string) => void
   activeTask?: AutoCompleteTaskResponse | null
   onTaskChange?: (task: AutoCompleteTaskResponse | null) => void
+  isHubRoute?: boolean
 }
 
 type QuestionScoreItem = {
@@ -53,6 +54,7 @@ export function AutoCompletePage({
   onCompleted,
   activeTask,
   onTaskChange,
+  isHubRoute,
 }: AutoCompletePageProps) {
   // Current active homework fallback
   const currentHw = useMemo<HomeworkItem>(() => {
@@ -71,11 +73,26 @@ export function AutoCompletePage({
     }
   }, [homework, activeTask])
 
-  // History & Hub states
   const [historyTasks, setHistoryTasks] = useState<AutoCompleteTaskResponse[]>([])
   const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(() => Boolean(accessToken))
   const [selectedHistoryTask, setSelectedHistoryTask] = useState<AutoCompleteTaskResponse | null>(null)
   const [taskFilter, setTaskFilter] = useState<'all' | 'completed' | 'failed'>('all')
+
+  // View mode: 'kanban' | 'execution' | 'config'
+  const [viewMode, setViewMode] = useState<'kanban' | 'execution' | 'config'>(() => {
+    if (isHubRoute) return 'kanban'
+    if (typeof window !== 'undefined' && window.location.pathname === '/auto-complete') {
+      return 'kanban'
+    }
+    if (permitToken && (!activeTask || ['COMPLETED', 'FAILED'].includes(activeTask.status))) {
+      return 'config'
+    }
+    if (activeTask && !['COMPLETED', 'FAILED'].includes(activeTask.status)) {
+      return 'execution'
+    }
+    return 'kanban'
+  })
+
 
   const loadHistoryTasks = useCallback(() => {
     if (!accessToken) return
@@ -583,10 +600,13 @@ export function AutoCompletePage({
           <button
             className="control-secondary fe-back-btn"
             type="button"
-            onClick={() => setSelectedHistoryTask(null)}
+            onClick={() => {
+              setSelectedHistoryTask(null)
+              setViewMode('kanban')
+            }}
           >
             <Icon name="arrow_back" />
-            <span>返回任务列表</span>
+            <span>返回任务看板</span>
           </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span
@@ -873,14 +893,27 @@ export function AutoCompletePage({
                   </small>
                 </div>
               </div>
-              <button
-                type="button"
-                className="control-primary fe-btn-sm"
-                onClick={() => setSelectedHistoryTask(activeTask)}
-              >
-                <Icon name="visibility" />
-                <span>查看做题看板</span>
-              </button>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="control-primary fe-btn-sm"
+                  onClick={() => {
+                    setLocalTaskId(activeTask.task_id)
+                    setViewMode('execution')
+                  }}
+                >
+                  <Icon name="bolt" />
+                  <span>进入实时执行看板</span>
+                </button>
+                <button
+                  type="button"
+                  className="control-secondary fe-btn-sm"
+                  onClick={() => setSelectedHistoryTask(activeTask)}
+                >
+                  <Icon name="headphones" />
+                  <span>试听效果</span>
+                </button>
+              </div>
             </div>
 
             <div className="fe-exec-progress-track" style={{ height: 8, margin: '10px 0 6px' }}>
@@ -979,208 +1012,158 @@ export function AutoCompletePage({
               <small>在作业列表中点击「⚡ 自动完成」启动的任务将在此自动归档并支持录音回溯！</small>
             </div>
           ) : (
-            <>
-              {/* Desktop Table View */}
-              <div className="fe-history-desktop-table">
-                <div className="fe-history-table-wrap">
-                  <table className="fe-history-table">
-                    <thead>
-                      <tr>
-                        <th>序号</th>
-                        <th>作业名称</th>
-                        <th>提交/完成时间</th>
-                        <th>得分 / 满分</th>
-                        <th>得分率</th>
-                        <th>做题用时</th>
-                        <th>音色模式</th>
-                        <th>状态</th>
-                        <th>操作</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredTasks.map((t, idx) => {
-                        const isDone = t.status === 'COMPLETED'
-                        const isErr = t.status === 'FAILED'
-                        const score = t.result?.final_score ?? t.result?.score
-                        const maxS = t.result?.max_score ?? t.result?.total_point
-                        const rate =
-                          t.result?.score_rate ??
-                          (score !== undefined && maxS
-                            ? ((Number(score) / Number(maxS)) * 100).toFixed(1)
-                            : undefined)
-                        const timeStr =
-                          t.result?.completed_at ||
-                          (t.created_at ? new Date(t.created_at * 1000).toLocaleString() : '-')
+            <div className="fe-kanban-cards-grid">
+              {filteredTasks.map((t, idx) => {
+                const isDone = t.status === 'COMPLETED'
+                const isErr = t.status === 'FAILED'
+                const isRunningTask = !isDone && !isErr
+                const score = t.result?.final_score ?? t.result?.score
+                const maxS = t.result?.max_score ?? t.result?.total_point
+                const rate =
+                  t.result?.score_rate ??
+                  (score !== undefined && maxS
+                    ? ((Number(score) / Number(maxS)) * 100).toFixed(1)
+                    : undefined)
+                const timeStr =
+                  t.result?.completed_at ||
+                  (t.created_at ? new Date(t.created_at * 1000).toLocaleString() : '-')
+                const qCount = t.result?.question_details?.length || t.total_questions || t.question_results?.length
 
-                        return (
-                          <tr key={t.task_id || idx}>
-                            <td style={{ color: 'var(--control-muted)', fontSize: 12 }}>#{idx + 1}</td>
-                            <td>
-                              <strong style={{ color: 'var(--control-ink)' }}>
-                                {t.homework_name || '作业自动完成'}
-                              </strong>
-                            </td>
-                            <td style={{ color: 'var(--control-muted)', fontSize: 12 }}>{timeStr}</td>
-                            <td>
-                              {score !== undefined ? (
-                                <strong style={{ color: '#16a34a' }}>
-                                  {Number(score).toFixed(2)} / {Number(maxS || 0).toFixed(1)} 分
-                                </strong>
-                              ) : (
-                                '--'
-                              )}
-                            </td>
-                            <td>
-                              {rate !== undefined ? (
-                                <span style={{ fontWeight: 600, color: '#2563eb' }}>{rate}%</span>
-                              ) : (
-                                '--'
-                              )}
-                            </td>
-                            <td style={{ fontSize: 12 }}>
-                              {t.result?.use_time ? formatSeconds(t.result.use_time) : '--'}
-                            </td>
-                            <td>
-                              <span className="fe-td-type">
-                                {t.voice_mode === 'clone'
-                                  ? '声音克隆'
-                                  : t.voice_mode === 'edge'
-                                  ? 'Edge-TTS'
-                                  : '原声'}
-                              </span>
-                            </td>
-                            <td>
-                              <span
-                                className={`admin-pill-badge ${
-                                  isDone ? 'is-active' : isErr ? 'is-danger' : 'is-muted'
-                                }`}
-                                style={{ fontSize: 11 }}
-                              >
-                                <Icon
-                                  name={isDone ? 'check' : isErr ? 'close' : 'sync'}
-                                  className={!isDone && !isErr ? 'fe-spin' : ''}
-                                  style={{ fontSize: 12 }}
-                                />
-                                <span>{isDone ? '已完成' : isErr ? '失败' : '执行中'}</span>
-                              </span>
-                            </td>
-                            <td>
-                              <button
-                                type="button"
-                                className="control-primary fe-btn-sm"
-                                style={{ padding: '4px 10px', fontSize: 12, height: 28, gap: 4 }}
-                                onClick={() => setSelectedHistoryTask(t)}
-                              >
-                                <Icon name="headphones" style={{ fontSize: 13 }} />
-                                <span>查看效果</span>
-                              </button>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Mobile Card List View */}
-              <div className="fe-history-mobile-cards">
-                {filteredTasks.map((t, idx) => {
-                  const isDone = t.status === 'COMPLETED'
-                  const isErr = t.status === 'FAILED'
-                  const score = t.result?.final_score ?? t.result?.score
-                  const maxS = t.result?.max_score ?? t.result?.total_point
-                  const rate =
-                    t.result?.score_rate ??
-                    (score !== undefined && maxS
-                      ? ((Number(score) / Number(maxS)) * 100).toFixed(1)
-                      : undefined)
-                  const timeStr =
-                    t.result?.completed_at ||
-                    (t.created_at ? new Date(t.created_at * 1000).toLocaleString() : '-')
-
-                  return (
-                    <div className="fe-history-task-card" key={t.task_id || idx}>
-                      <div className="fe-history-card-top">
-                        <strong className="fe-history-card-title">
+                return (
+                  <div
+                    className={`fe-kanban-task-card ${
+                      isRunningTask ? 'is-running' : isDone ? 'is-completed' : 'is-failed'
+                    }`}
+                    key={t.task_id || idx}
+                  >
+                    <div className="fe-kanban-card-header">
+                      <div className="fe-kanban-card-title-group">
+                        <strong className="fe-kanban-card-title" title={t.homework_name || '作业自动完成'}>
                           {t.homework_name || '作业自动完成'}
                         </strong>
-                        <span
-                          className={`admin-pill-badge ${
-                            isDone ? 'is-active' : isErr ? 'is-danger' : 'is-muted'
-                          }`}
-                          style={{ fontSize: 11 }}
-                        >
-                          <Icon
-                            name={isDone ? 'check' : isErr ? 'close' : 'sync'}
-                            className={!isDone && !isErr ? 'fe-spin' : ''}
-                            style={{ fontSize: 12 }}
-                          />
-                          <span>{isDone ? '已完成' : isErr ? '失败' : '执行中'}</span>
+                      </div>
+                      <span
+                        className={`admin-pill-badge ${
+                          isDone ? 'is-active' : isErr ? 'is-danger' : 'is-muted'
+                        }`}
+                        style={{ fontSize: 11 }}
+                      >
+                        <Icon
+                          name={isDone ? 'check' : isErr ? 'close' : 'sync'}
+                          className={isRunningTask ? 'fe-spin' : ''}
+                          style={{ fontSize: 12 }}
+                        />
+                        <span>{isDone ? '已完成' : isErr ? '失败/中断' : '执行中'}</span>
+                      </span>
+                    </div>
+
+                    <div className="fe-kanban-card-metrics">
+                      <div className="fe-kanban-metric-item">
+                        <small>最终得分 / 满分</small>
+                        <strong className="fe-kanban-metric-score" style={{ color: isDone ? '#16a34a' : undefined }}>
+                          {score !== undefined ? `${Number(score).toFixed(2)}` : '--'}
+                          {maxS !== undefined && <span className="fe-kanban-metric-max"> / {Number(maxS).toFixed(1)}分</span>}
+                        </strong>
+                      </div>
+                      <div className="fe-kanban-metric-item">
+                        <small>最终得分率</small>
+                        <strong className="fe-kanban-metric-rate">
+                          {rate !== undefined ? `${rate}%` : '--'}
+                        </strong>
+                      </div>
+                      <div className="fe-kanban-metric-item">
+                        <small>实际用时</small>
+                        <span className="fe-kanban-metric-time">
+                          {t.result?.use_time ? formatSeconds(t.result.use_time) : '--'}
                         </span>
                       </div>
+                    </div>
 
-                      <div className="fe-history-card-stats">
-                        <div className="fe-history-stat-col">
-                          <small>最终得分</small>
-                          <strong style={{ color: isDone ? '#16a34a' : undefined }}>
-                            {score !== undefined
-                              ? `${Number(score).toFixed(2)} / ${Number(maxS || 0).toFixed(1)}分`
-                              : '--'}
-                          </strong>
-                        </div>
-                        <div className="fe-history-stat-col">
-                          <small>得分率</small>
-                          <strong style={{ color: '#2563eb' }}>
-                            {rate !== undefined ? `${rate}%` : '--'}
-                          </strong>
-                        </div>
-                        <div className="fe-history-stat-col">
-                          <small>实际用时</small>
-                          <span>{t.result?.use_time ? formatSeconds(t.result.use_time) : '--'}</span>
-                        </div>
+                    <div className="fe-kanban-card-settings">
+                      <div className="fe-kanban-setting-row">
+                        <span className="fe-kanban-setting-label">
+                          <Icon name="mic" style={{ fontSize: 13 }} /> 音色配置:
+                        </span>
+                        <span className="fe-kanban-setting-val">
+                          {t.voice_mode === 'clone'
+                            ? '专属声音克隆'
+                            : t.voice_mode === 'edge'
+                            ? 'Edge-TTS 微软'
+                            : '原声回放'}
+                        </span>
                       </div>
-
-                      <div className="fe-history-card-foot">
-                        <div className="fe-history-card-meta">
-                          <span>{timeStr}</span>
-                          <span>·</span>
-                          <span>
-                            {t.voice_mode === 'clone'
-                              ? '声音克隆'
-                              : t.voice_mode === 'edge'
-                              ? 'Edge-TTS'
-                              : '原声'}
+                      <div className="fe-kanban-setting-row">
+                        <span className="fe-kanban-setting-label">
+                          <Icon name="tune" style={{ fontSize: 13 }} /> 作答模式:
+                        </span>
+                        <span className="fe-kanban-setting-val">
+                          {t.mode === 'manual' ? '拟真人工作答' : '全自动目标分'}
+                        </span>
+                      </div>
+                      <div className="fe-kanban-setting-row">
+                        <span className="fe-kanban-setting-label">
+                          <Icon name="schedule" style={{ fontSize: 13 }} /> 记录时间:
+                        </span>
+                        <span className="fe-kanban-setting-val">{timeStr}</span>
+                      </div>
+                      {qCount ? (
+                        <div className="fe-kanban-setting-row">
+                          <span className="fe-kanban-setting-label">
+                            <Icon name="format_list_numbered" style={{ fontSize: 13 }} /> 题目总数:
                           </span>
+                          <span className="fe-kanban-setting-val">共 {qCount} 道题</span>
                         </div>
+                      ) : null}
+                    </div>
+
+                    {isErr && (
+                      <div className="fe-kanban-card-error">
+                        <Icon name="info" style={{ fontSize: 14 }} />
+                        <span>{t.error || '云端通信或出口节点异常中断'}</span>
+                      </div>
+                    )}
+
+                    <div className="fe-kanban-card-footer">
+                      {isRunningTask ? (
                         <button
                           type="button"
-                          className="control-primary fe-btn-sm"
-                          style={{ padding: '4px 10px', fontSize: 12, height: 28, gap: 4 }}
+                          className="control-primary fe-btn-sm fe-btn-block"
+                          onClick={() => {
+                            setLocalTaskId(t.task_id)
+                            setViewMode('execution')
+                          }}
+                        >
+                          <Icon name="bolt" />
+                          <span>查看执行看板 ({t.progress || 0}%)</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="control-primary fe-btn-sm fe-btn-block"
                           onClick={() => setSelectedHistoryTask(t)}
                         >
-                          <Icon name="headphones" style={{ fontSize: 13 }} />
-                          <span>查看效果</span>
+                          <Icon name="headphones" />
+                          <span>查看作答与试听效果</span>
                         </button>
-                      </div>
+                      )}
                     </div>
-                  )
-                })}
-              </div>
-            </>
+                  </div>
+                )
+              })}
+            </div>
           )}
         </div>
       </div>
     )
   }
 
-  // If user selected a specific historical task to inspect effect
+  // 1. If user selected a specific historical task to inspect effect
   if (selectedHistoryTask) {
     return renderTaskEffectView(selectedHistoryTask)
   }
 
-  // Check valid permit token - if not configuring a specific task, render Hub
-  if (!permitToken && (!currentTaskId || currentTask?.status === 'COMPLETED' || currentTask?.status === 'FAILED')) {
+  // 2. If viewMode is kanban, or if arrived via /auto-complete or without permitToken
+  if (viewMode === 'kanban' || (!permitToken && viewMode !== 'execution')) {
     return renderHubView()
   }
 
@@ -1259,6 +1242,7 @@ export function AutoCompletePage({
       setIsRiskModalOpen(false)
       setLocalTaskId(res.task_id)
       setIsMinimized(false)
+      setViewMode('execution')
       // Immediate visual feedback so user sees the pipeline active
       const initialTask: AutoCompleteTaskResponse = {
         task_id: res.task_id,
@@ -1294,9 +1278,21 @@ export function AutoCompletePage({
     <div className="fe-autocomplete-container">
       {/* Top Breadcrumb & Return Nav */}
       <div className="fe-reader-top-nav" style={{ marginBottom: 16 }}>
-        <button className="control-secondary fe-back-btn" type="button" onClick={onBack}>
+        <button
+          className="control-primary fe-back-btn"
+          type="button"
+          onClick={() => setViewMode('kanban')}
+        >
+          <Icon name="dashboard" />
+          <span>返回任务看板</span>
+        </button>
+        <button
+          className="control-secondary fe-back-btn"
+          type="button"
+          onClick={onBack}
+        >
           <Icon name="arrow_back" />
-          <span>放弃并返回</span>
+          <span>返回作业列表</span>
         </button>
         <span className="admin-pill-badge is-muted">
           <Icon name="lock" style={{ fontSize: 14 }} />
@@ -2086,21 +2082,33 @@ export function AutoCompletePage({
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <button
                       type="button"
-                      className="control-secondary fe-btn-sm"
-                      onClick={onBack}
-                      title="返回主界面并在侧边栏后台监控"
+                      className="control-primary fe-btn-sm"
+                      onClick={() => setViewMode('kanban')}
+                      title="返回历史与当前任务看板"
                     >
-                      <Icon name="arrow_back" />
-                      <span>返回主界面</span>
+                      <Icon name="dashboard" />
+                      <span>返回任务看板</span>
                     </button>
                     <button
                       type="button"
                       className="control-secondary fe-btn-sm"
-                      onClick={() => setIsMinimized(true)}
-                      title="最小化至右下角后台运行"
+                      onClick={onBack}
+                      title="返回作业列表"
+                    >
+                      <Icon name="arrow_back" />
+                      <span>返回作业列表</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="control-secondary fe-btn-sm"
+                      onClick={() => {
+                        setIsMinimized(true)
+                        setViewMode('kanban')
+                      }}
+                      title="最小化并返回任务看板"
                     >
                       <Icon name="close_fullscreen" />
-                      <span>最小化悬浮</span>
+                      <span>最小化</span>
                     </button>
                   </div>
                 </div>
@@ -2128,6 +2136,20 @@ export function AutoCompletePage({
                         >
                           <Icon name="replay" />
                           <span>重试执行</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="control-secondary"
+                          onClick={() => {
+                            setLocalTaskId(null)
+                            setLocalTaskStatus(null)
+                            onTaskChange?.(null)
+                            void loadHistoryTasks()
+                            setViewMode('kanban')
+                          }}
+                        >
+                          <Icon name="dashboard" />
+                          <span>返回任务看板</span>
                         </button>
                         <button
                           type="button"
@@ -2238,17 +2260,18 @@ export function AutoCompletePage({
                       <div className="fe-settlement-actions" style={{ display: 'flex', gap: 12, justifyContent: 'center', width: '100%', marginTop: 8 }}>
                         <button
                           type="button"
-                          className="control-secondary"
+                          className="control-primary"
                           onClick={() => {
                             setLocalTaskId(null)
                             setLocalTaskStatus(null)
                             onTaskChange?.(null)
                             void loadHistoryTasks()
                             setSelectedHistoryTask(null)
+                            setViewMode('kanban')
                           }}
                         >
-                          <Icon name="history" />
-                          <span>返回任务中心</span>
+                          <Icon name="dashboard" />
+                          <span>返回任务看板</span>
                         </button>
                         <button
                           type="button"

@@ -5287,88 +5287,167 @@ html:has(.control-shell) {
   box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
 }
 
-/* Mobile & Desktop Responsive Kanban Cards */
-.fe-history-mobile-cards {
-  display: none;
-  flex-direction: column;
-  gap: 12px;
+/* Kanban Card Grid Layout (Unified Responsive Cards for Desktop & Mobile) */
+.fe-kanban-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
 }
 
-.fe-history-desktop-table {
-  display: block;
-}
-
-@media (max-width: 767px) {
-  .fe-history-mobile-cards {
-    display: flex;
-  }
-  .fe-history-desktop-table {
-    display: none;
+@media (max-width: 640px) {
+  .fe-kanban-cards-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
   }
 }
 
-.fe-history-task-card {
+.fe-kanban-task-card {
   background: #ffffff;
   border: 1px solid var(--control-line);
-  border-radius: 10px;
-  padding: 14px 16px;
+  border-radius: 12px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }
 
-.fe-history-card-top {
+.fe-kanban-task-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.fe-kanban-task-card.is-running {
+  border-color: #a7f3d0;
+  background: linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%);
+}
+
+.fe-kanban-task-card.is-failed {
+  border-color: #fecaca;
+  background: linear-gradient(180deg, #ffffff 0%, #fef2f2 100%);
+}
+
+.fe-kanban-card-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
 }
 
-.fe-history-card-title {
-  font-size: 14.5px;
+.fe-kanban-card-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.fe-kanban-card-title {
+  font-size: 15px;
   font-weight: 600;
   color: var(--control-ink);
   line-height: 1.4;
-  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.fe-history-card-stats {
+.fe-kanban-card-metrics {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   background: #f8fafc;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 10px 12px;
   text-align: center;
+  border: 1px solid #f1f5f9;
 }
 
-.fe-history-stat-col small {
+.fe-kanban-metric-item small {
   display: block;
   font-size: 11px;
   color: var(--control-muted);
-  margin-bottom: 2px;
+  margin-bottom: 3px;
 }
 
-.fe-history-stat-col strong,
-.fe-history-stat-col span {
-  font-size: 13.5px;
+.fe-kanban-metric-score {
+  font-size: 14.5px;
+  font-weight: 700;
   color: var(--control-ink);
 }
 
-.fe-history-card-foot {
+.fe-kanban-metric-max {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--control-muted);
+}
+
+.fe-kanban-metric-rate {
+  font-size: 14px;
+  font-weight: 700;
+  color: #2563eb;
+}
+
+.fe-kanban-metric-time {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--control-ink);
+}
+
+.fe-kanban-card-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0;
+  border-top: 1px dashed #f1f5f9;
+  border-bottom: 1px dashed #f1f5f9;
+}
+
+.fe-kanban-setting-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  font-size: 12px;
   gap: 8px;
-  padding-top: 4px;
 }
 
-.fe-history-card-meta {
-  font-size: 11.5px;
+.fe-kanban-setting-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   color: var(--control-muted);
+  flex-shrink: 0;
+}
+
+.fe-kanban-setting-val {
+  color: var(--control-ink);
+  font-weight: 500;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fe-kanban-card-error {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.fe-kanban-card-footer {
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.fe-btn-block {
+  width: 100%;
+  justify-content: center;
 }
