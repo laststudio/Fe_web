@@ -584,6 +584,16 @@ export function AutoCompletePage({
         disclaimer_text: typedPhrase.trim(),
       }
 
+      if (
+        currentTask &&
+        String(currentTask.homework_id) === String(homework.id) &&
+        !['COMPLETED', 'FAILED'].includes(currentTask.status)
+      ) {
+        onToast?.('当前作业已有正在运行的任务，无需重复发起')
+        setIsRiskModalOpen(false)
+        return
+      }
+
       const res = await startAutoComplete(accessToken, payload)
       setIsRiskModalOpen(false)
       setLocalTaskId(res.task_id)
@@ -1441,19 +1451,36 @@ export function AutoCompletePage({
                         <Icon name="error" />
                       </div>
                       <h2>任务执行遇到问题</h2>
-                      <p>{currentTask.error || '云端同步或平台通信发生错误，请稍后重试。'}</p>
-                      <button
-                        type="button"
-                        className="control-secondary"
-                        onClick={() => {
-                          setLocalTaskId(null)
-                          setLocalTaskStatus(null)
-                          onTaskChange?.(null)
-                        }}
-                        style={{ marginTop: 16 }}
-                      >
-                        关闭看板
-                      </button>
+                      <p style={{ maxWidth: 520, margin: '8px auto 0', color: '#b91c1c', wordBreak: 'break-word', whiteSpace: 'pre-line' }}>
+                        {currentTask.error || currentTask.stage_label || '云端同步或平台通信发生错误，请稍后重试。'}
+                      </p>
+                      <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 20 }}>
+                        <button
+                          type="button"
+                          className="control-primary"
+                          onClick={() => {
+                            setLocalTaskId(null)
+                            setLocalTaskStatus(null)
+                            onTaskChange?.(null)
+                            onRequestPermit?.()
+                          }}
+                        >
+                          <Icon name="replay" />
+                          <span>重试执行</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="control-secondary"
+                          onClick={() => {
+                            setLocalTaskId(null)
+                            setLocalTaskStatus(null)
+                            onTaskChange?.(null)
+                            onBack()
+                          }}
+                        >
+                          返回作业列表
+                        </button>
+                      </div>
                     </div>
                   ) : currentTask?.status === 'COMPLETED' ? (
                     /* Settlement card (做题效果全景展示) */

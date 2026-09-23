@@ -826,7 +826,8 @@ function HomeworkCard({
       </div>
 
       <div className="fe-homework-card__right">
-        {onAutoComplete && (!item.status || (item.status !== 2 && item.status !== '2')) && (() => {
+        {onAutoComplete && (() => {
+          const isDone = item.status === 2 || item.status === '2'
           const compat = checkHomeworkCompatibility(item)
           return (
             <button
@@ -842,10 +843,10 @@ function HomeworkCard({
                 e.stopPropagation()
                 onAutoComplete(item)
               }}
-              title={compat.supported ? '一键安全自动完成此作业' : (compat.reason || '该作业包含暂不支持的题型')}
+              title={compat.supported ? (isDone ? '重新自动作答并更新此历史作业成绩' : '一键安全自动完成此作业') : (compat.reason || '该作业包含暂不支持的题型')}
             >
-              <Icon name={compat.supported ? 'bolt' : 'block'} />
-              <span>{compat.supported ? '⚡ 自动完成' : '题型暂不支持'}</span>
+              <Icon name={compat.supported ? (isDone ? 'replay' : 'bolt') : 'block'} />
+              <span>{compat.supported ? (isDone ? '⚡ 重新作答' : '⚡ 自动完成') : '题型暂不支持'}</span>
             </button>
           )
         })()}
@@ -2407,6 +2408,17 @@ function App() {
   const [autoCompleteTargetHw, setAutoCompleteTargetHw] = useState<HomeworkItem | null>(null)
 
   function handleTriggerAutoComplete(hw: HomeworkItem) {
+    // If this exact homework is already running in background, jump directly to dashboard
+    if (
+      activeTask &&
+      String(activeTask.homework_id) === String(hw.id) &&
+      !['COMPLETED', 'FAILED'].includes(activeTask.status)
+    ) {
+      showToast(`「${hw.name}」已在后台自动完成中（进度 ${activeTask.progress || 0}%），正在前往看板...`)
+      navigate(`/homework/${hw.id}/auto-complete`)
+      return
+    }
+
     const cachedPaper = paperCache[hw.id] || (viewingPaper?.homework.id === hw.id ? viewingPaper.paper : null)
     const compat = checkHomeworkCompatibility(hw, cachedPaper)
     if (!compat.supported) {
