@@ -500,23 +500,26 @@ export function AutoCompletePage({
   if (!permitToken && !currentTaskId && !currentTask) {
     return (
       <div className="fe-autocomplete-container">
-        <div className="fe-empty-state" style={{ margin: '60px auto' }}>
-          <div className="fe-empty-state__icon" style={{ background: '#fef2f2', color: '#dc2626' }}>
-            <Icon name="gpp_bad" />
+        <div className="fe-empty-state" style={{ margin: '60px auto', maxWidth: 520 }}>
+          <div className="fe-empty-state__icon" style={{ background: '#eff6ff', color: '#2563eb' }}>
+            <Icon name="auto_awesome" />
           </div>
-          <h2>安全授权凭据缺失或已过期</h2>
-          <p>进入自动完成页面前必须完成人机安全验证并获取准入令牌 (Permit Token)。</p>
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 20 }}>
+          <h2>暂无正在运行的自动完成任务</h2>
+          <p>
+            自动完成支持当前待做作业与历史归档作业的高拟真智能答题、音色克隆与分值调度。
+            请从作业列表选择对应试卷，点击「⚡ 自动完成」或「⚡ 重新作答」开启。
+          </p>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 24 }}>
+            <button type="button" className="control-primary" onClick={onBack}>
+              <Icon name="assignment" />
+              <span>前往作业列表</span>
+            </button>
             {onRequestPermit && (
-              <button type="button" className="control-primary" onClick={onRequestPermit}>
+              <button type="button" className="control-secondary" onClick={onRequestPermit}>
                 <Icon name="verified_user" />
-                <span>立即进行安全人机验证</span>
+                <span>立即安全验证进入</span>
               </button>
             )}
-            <button type="button" className="control-secondary" onClick={onBack}>
-              <Icon name="arrow_back" />
-              <span>返回作业列表</span>
-            </button>
           </div>
         </div>
       </div>

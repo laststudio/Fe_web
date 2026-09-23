@@ -2555,41 +2555,38 @@ function App() {
 
   // Dynamic sidebar navigation groups with live background task status
   const computedNavGroups = useMemo<{ label: string; items: NavItem[] }[]>(() => {
+    const isAutoRoute = isAutoCompletePath(pathname)
+    let caption = '高拟真自动化答题与执行看板'
+    let badge: string | undefined
+    let badgeType: 'running' | 'success' | 'failed' | undefined
+    let isRunning = false
+
+    if (activeTask) {
+      if (activeTask.status === 'COMPLETED') {
+        caption = activeTask.homework_name ? `${activeTask.homework_name} · 已完成` : '任务已顺利完成'
+        badge = '已完成'
+        badgeType = 'success'
+      } else if (activeTask.status === 'FAILED') {
+        caption = activeTask.error ? `失败: ${activeTask.error}` : '任务执行失败中断'
+        badge = '失败'
+        badgeType = 'failed'
+      } else {
+        caption = activeTask.stage_label || activeTask.stage_text || '后台极速执行中...'
+        badge = `${activeTask.progress || 0}%`
+        badgeType = 'running'
+        isRunning = true
+      }
+    }
+
+    const taskPage = activeTask?.homework_id
+      ? `/homework/${activeTask.homework_id}/auto-complete`
+      : (isAutoRoute ? pathname : '/auto-complete')
+
     const homeworkItems: NavItem[] = [
       { icon: 'assignment', label: '当前作业', caption: '作业索引与解析阅读器', page: '/' },
       { icon: 'history', label: '历史作业', caption: '已归档往期作业记录', page: '/history' },
       { icon: 'sports_esports', label: '词汇PK', caption: '在线词汇竞技与专练', page: '/pk' },
-    ]
-
-    const isAutoRoute = isAutoCompletePath(pathname)
-    if (activeTask || isAutoRoute) {
-      let caption = '后台执行看板与进度监控'
-      let badge: string | undefined
-      let badgeType: 'running' | 'success' | 'failed' | undefined
-      let isRunning = false
-
-      if (activeTask) {
-        if (activeTask.status === 'COMPLETED') {
-          caption = activeTask.homework_name ? `${activeTask.homework_name} · 已完成` : '任务已顺利完成'
-          badge = '已完成'
-          badgeType = 'success'
-        } else if (activeTask.status === 'FAILED') {
-          caption = activeTask.error ? `失败: ${activeTask.error}` : '任务执行失败中断'
-          badge = '失败'
-          badgeType = 'failed'
-        } else {
-          caption = activeTask.stage_label || activeTask.stage_text || '后台极速执行中...'
-          badge = `${activeTask.progress || 0}%`
-          badgeType = 'running'
-          isRunning = true
-        }
-      }
-
-      const taskPage = activeTask?.homework_id
-        ? `/homework/${activeTask.homework_id}/auto-complete`
-        : (isAutoRoute ? pathname : '/auto-complete')
-
-      homeworkItems.push({
+      {
         icon: 'auto_awesome',
         label: '自动完成',
         caption,
@@ -2597,8 +2594,8 @@ function App() {
         badge,
         badgeType,
         isRunning,
-      })
-    }
+      },
+    ]
 
     return [
       {
