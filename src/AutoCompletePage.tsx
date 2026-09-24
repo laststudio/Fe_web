@@ -757,8 +757,9 @@ export function AutoCompletePage({
       } else {
         onToast?.(res.message || '终止任务失败')
       }
-    } catch (err: any) {
-      onToast?.(err.message || '网络请求失败，未能终止任务')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '网络请求失败，未能终止任务'
+      onToast?.(message)
     } finally {
       setIsCancelling(false)
     }
