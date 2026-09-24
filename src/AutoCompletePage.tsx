@@ -319,10 +319,49 @@ export function AutoCompletePage({
     }
   }, [currentHw, activePaper])
 
-  // Suggested time
-  const suggestedTimeSeconds = useMemo(() => {
-    return Math.max(90, totalQuestions * 25)
-  }, [totalQuestions])
+  // 1. Time Planning States & Calculation (reference: ets_auto_complete/src/ets_demo/workflow.py)
+  const [timeOption, setTimeOption] = useState<'recommended' | 'custom'>('recommended')
+
+  // Calculate recommended time dynamically:
+  const recommendedTimeSeconds = useMemo(() => {
+    let sum = 0
+    const rawQuestions = ((activePaper as Record<string, unknown> | null)?.questions || questions) as Array<{
+      category?: string
+      structure_type?: string
+    }>
+    if (rawQuestions && rawQuestions.length > 0) {
+      for (const q of rawQuestions) {
+        if (q.category === 'choose' || q.structure_type === 'word_question') {
+          sum += 8
+        } else if (q.structure_type === 'collector.picture' || q.structure_type === 'collector.repeat_essay') {
+          sum += 12
+        } else {
+          sum += 15
+        }
+      }
+    } else {
+      sum = totalQuestions * 12
+    }
+    const kind = (currentHw as Record<string, unknown>)?.kind as string | undefined
+    if (kind === 'mock') return Math.max(sum, 180)
+    if (kind === 'pk' || kind === 'vocab') return Math.max(sum, 30)
+    if (kind === 'composition') return Math.max(sum, 300)
+    return Math.max(sum, 60)
+  }, [activePaper, questions, totalQuestions, currentHw])
+
+  const [customMinutes, setCustomMinutes] = useState<number | null>(null)
+  const [customSeconds, setCustomSeconds] = useState<number | null>(null)
+
+  const effectiveMinutes = customMinutes !== null ? customMinutes : Math.floor(recommendedTimeSeconds / 60)
+  const effectiveSeconds = customSeconds !== null ? customSeconds : (recommendedTimeSeconds % 60)
+
+  const customUseTimeSeconds = useMemo(() => {
+    const m = Math.max(0, effectiveMinutes)
+    const s = Math.max(0, Math.min(59, effectiveSeconds))
+    return Math.max(10, Math.min(3600, m * 60 + s))
+  }, [effectiveMinutes, effectiveSeconds])
+
+  const selectedUseTimeSeconds = timeOption === 'recommended' ? recommendedTimeSeconds : customUseTimeSeconds
 
   const formatSeconds = (sec: number) => {
     const mins = Math.floor(sec / 60)
@@ -401,6 +440,119 @@ export function AutoCompletePage({
     })
     setCustomManualScores(newScores)
     onToast?.(`已一键将所有题目按 ${(ratio * 100).toFixed(0)}% 比例填入真实分数`)
+  }
+
+  // Per-question custom audios (Base64 data URLs)
+  const [manualQuestionAudios, setManualQuestionAudios] = useState<Record<number, string>>({})
+  const [recordingOrder, setRecordingOrder] = useState<number | null>(null)
+  const [recordingSeconds, setRecordingSeconds] = useState<number>(0)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const recordTimerRef = useRef<number | null>(null)
+
+  const startRecording = async (order: number) => {
+    try {
+      if (!navigator?.mediaDevices?.getUserMedia) {
+        onToast?.('当前浏览器环境不支持麦克风录音，请使用现代浏览器或直接上传音频文件')
+        return
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      audioChunksRef.current = []
+      const mimeTypes = ['audio/webm', 'audio/mp4', 'audio/ogg', 'audio/wav']
+      const supportedType = mimeTypes.find((t) => MediaRecorder.isTypeSupported(t)) || ''
+      const options = supportedType ? { mimeType: supportedType } : undefined
+      const recorder = new MediaRecorder(stream, options)
+      mediaRecorderRef.current = recorder
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data)
+        }
+      }
+
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop())
+        if (audioChunksRef.current.length > 0) {
+          const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' })
+          const reader = new FileReader()
+          reader.onloadend = () => {
+            const base64data = reader.result as string
+            setManualQuestionAudios((prev) => ({
+              ...prev,
+              [order]: base64data,
+            }))
+            onToast?.(`已成功保存第 Q${order} 题专属录音`)
+          }
+          reader.readAsDataURL(blob)
+        }
+        setRecordingOrder(null)
+        setRecordingSeconds(0)
+        if (recordTimerRef.current) {
+          clearInterval(recordTimerRef.current)
+          recordTimerRef.current = null
+        }
+      }
+
+      recorder.start(100)
+      setRecordingOrder(order)
+      setRecordingSeconds(0)
+      recordTimerRef.current = window.setInterval(() => {
+        setRecordingSeconds((prev) => prev + 1)
+      }, 1000)
+    } catch (err: unknown) {
+      console.error('Microphone error:', err)
+      onToast?.('录音失败，请确认已授予麦克风录音权限')
+    }
+  }
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop()
+    }
+  }
+
+  const cancelRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      audioChunksRef.current = []
+      mediaRecorderRef.current.stop()
+    }
+    setRecordingOrder(null)
+    setRecordingSeconds(0)
+    if (recordTimerRef.current) {
+      clearInterval(recordTimerRef.current)
+      recordTimerRef.current = null
+    }
+  }
+
+  const handleFileUpload = (order: number, file: File) => {
+    if (!file) return
+    if (!file.type.startsWith('audio/') && !/\.(mp3|wav|m4a|aac|webm|ogg|flac)$/i.test(file.name)) {
+      onToast?.('请选择正确的音频文件格式 (MP3, WAV, M4A, WebM等)')
+      return
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      onToast?.('音频文件过大，请选择 15MB 以内的录音文件')
+      return
+    }
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const base64data = reader.result as string
+      setManualQuestionAudios((prev) => ({
+        ...prev,
+        [order]: base64data,
+      }))
+      onToast?.(`已成功绑定第 Q${order} 题自定义音频: ${file.name}`)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleClearAudio = (order: number) => {
+    setManualQuestionAudios((prev) => {
+      const copy = { ...prev }
+      delete copy[order]
+      return copy
+    })
+    onToast?.(`已清除第 Q${order} 题自定义音频，恢复为默认语音合成`)
   }
 
   // Collapsible state for auto mode score breakdown
@@ -515,9 +667,21 @@ export function AutoCompletePage({
   const [localTaskStatus, setLocalTaskStatus] = useState<AutoCompleteTaskResponse | null>(null)
   const [isMinimized, setIsMinimized] = useState(false)
 
-  // Current effective task & ID from props or local
-  const currentTask = activeTask || localTaskStatus
-  const currentTaskId = activeTask?.task_id || localTaskId || currentTask?.task_id || null
+  // Current effective task & ID scoped strictly to current homework or hub
+  const isTaskForCurrentHw = Boolean(
+    isHubRoute ||
+      (activeTask && String(activeTask.homework_id) === String(currentHw.id)) ||
+      (localTaskStatus && String(localTaskStatus.homework_id) === String(currentHw.id))
+  )
+  const currentTask = isTaskForCurrentHw ? activeTask || localTaskStatus : localTaskStatus
+  const currentTaskId = (isTaskForCurrentHw ? activeTask?.task_id || localTaskId : localTaskId) || null
+
+  const handleDismissTaskModal = () => {
+    setLocalTaskId(null)
+    setLocalTaskStatus(null)
+    onTaskChange?.(null)
+    setIsMinimized(false)
+  }
 
   // Countdown timer effect
   useEffect(() => {
@@ -572,6 +736,16 @@ export function AutoCompletePage({
     return () => {
       if (audioPreviewRef.current) {
         audioPreviewRef.current.pause()
+      }
+      if (recordTimerRef.current) {
+        clearInterval(recordTimerRef.current)
+      }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try {
+          mediaRecorderRef.current.stop()
+        } catch {
+          // ignore
+        }
       }
     }
   }, [])
@@ -1220,10 +1394,11 @@ export function AutoCompletePage({
         mode,
         target_total: mode === 'auto' ? autoTargetTotal : Number(manualTotalSum.toFixed(2)),
         allow_over_max: mode === 'manual' ? isManualTotalOverMax || manualOverMaxQuestions.length > 0 : false,
-        use_time: suggestedTimeSeconds,
+        use_time: selectedUseTimeSeconds,
         voice_mode: voiceMode,
         voice_id: voiceMode === 'clone' ? (selectedVoiceId || undefined) : undefined,
         per_question_scores: perQuestionScoresPayload,
+        per_question_audio: mode === 'manual' && Object.keys(manualQuestionAudios).length > 0 ? manualQuestionAudios : undefined,
         permit_token: permitToken || '',
         disclaimer_text: typedPhrase.trim(),
       }
@@ -1350,7 +1525,7 @@ export function AutoCompletePage({
           </div>
           <div className="fe-stat-tile">
             <span className="fe-stat-label">建议答题用时</span>
-            <strong className="fe-stat-value">{formatSeconds(suggestedTimeSeconds)}</strong>
+            <strong className="fe-stat-value">{formatSeconds(recommendedTimeSeconds)}</strong>
           </div>
           <div className="fe-stat-tile">
             <span className="fe-stat-label">所属学科</span>
@@ -1572,6 +1747,9 @@ export function AutoCompletePage({
                 {questions.map((q) => {
                   const currentVal = manualScores[q.order] ?? 0
                   const isOver = currentVal > q.maxScore
+                  const hasCustomAudio = Boolean(manualQuestionAudios[q.order])
+                  const isRecordingThis = recordingOrder === q.order
+
                   return (
                     <div key={q.order} className={`fe-manual-item ${isOver ? 'is-danger-over' : ''}`}>
                       <div className="fe-manual-item-meta">
@@ -1601,6 +1779,104 @@ export function AutoCompletePage({
                               <span>作答参考/标准内容: <strong>{q.answers.join(' / ')}</strong></span>
                             </div>
                           )}
+
+                          {/* Per-Question Custom Audio Control Bar */}
+                          <div className="fe-per-question-audio-bar">
+                            <div className="fe-audio-bar-meta">
+                              <span className="fe-audio-meta-label">
+                                <Icon name="mic" style={{ fontSize: 14 }} />
+                                题目录音:
+                              </span>
+                              {hasCustomAudio ? (
+                                <span className="admin-pill-badge is-success" style={{ fontSize: 11, gap: 3 }}>
+                                  <Icon name="check" style={{ fontSize: 12 }} />
+                                  已配置专属录音
+                                </span>
+                              ) : (
+                                <span className="admin-pill-badge is-muted" style={{ fontSize: 11 }}>
+                                  默认合成 ({voiceMode === 'clone' ? '克隆' : voiceMode === 'edge' ? 'Edge-TTS' : '无声音'})
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="fe-audio-bar-actions">
+                              {isRecordingThis ? (
+                                <div className="fe-recording-active-wrap">
+                                  <span className="fe-record-indicator-pulse" />
+                                  <span className="fe-record-timer">录音中 {recordingSeconds}s...</span>
+                                  <button
+                                    type="button"
+                                    className="fe-record-btn is-stop"
+                                    onClick={stopRecording}
+                                    title="停止录音并保存"
+                                  >
+                                    <Icon name="stop" />
+                                    <span>完成</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="fe-record-btn is-cancel"
+                                    onClick={cancelRecording}
+                                    title="取消本次录音"
+                                  >
+                                    <Icon name="close" />
+                                    <span>取消</span>
+                                  </button>
+                                </div>
+                              ) : (
+                                <>
+                                  {hasCustomAudio && (
+                                    <audio
+                                      controls
+                                      src={manualQuestionAudios[q.order]}
+                                      className="fe-audio-inline-player"
+                                      preload="metadata"
+                                    />
+                                  )}
+
+                                  <button
+                                    type="button"
+                                    className="fe-audio-action-btn"
+                                    disabled={recordingOrder !== null}
+                                    onClick={() => startRecording(q.order)}
+                                    title="使用电脑麦克风录制本人声音"
+                                  >
+                                    <Icon name="mic" />
+                                    <span>{hasCustomAudio ? '重新录制' : '录制音频'}</span>
+                                  </button>
+
+                                  <label className="fe-audio-action-btn fe-audio-upload-label" title="上传本地音频文件 (MP3/WAV/M4A/WebM)">
+                                    <Icon name="upload_file" />
+                                    <span>{hasCustomAudio ? '更换文件' : '上传音频'}</span>
+                                    <input
+                                      type="file"
+                                      accept="audio/*,.mp3,.wav,.m4a,.aac,.webm,.ogg,.flac"
+                                      style={{ display: 'none' }}
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0]
+                                        if (file) {
+                                          handleFileUpload(q.order, file)
+                                        }
+                                        e.target.value = ''
+                                      }}
+                                    />
+                                  </label>
+
+                                  {hasCustomAudio && (
+                                    <button
+                                      type="button"
+                                      className="fe-audio-action-btn is-clear"
+                                      onClick={() => handleClearAudio(q.order)}
+                                      title="清除自定义音频，恢复为默认语音合成"
+                                    >
+                                      <Icon name="delete_outline" />
+                                      <span>重置</span>
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </div>
 
@@ -1625,6 +1901,123 @@ export function AutoCompletePage({
             </div>
           )}
         </div>
+      </div>
+
+      {/* 2.5 Time Planning Section */}
+      <div className="admin-policy-card fe-time-section-card">
+        <div className="admin-policy-card-head">
+          <div className="fe-section-icon">
+            <Icon name="schedule" />
+          </div>
+          <div>
+            <h3>作答耗时规划 (防刷题与拟真设置)</h3>
+            <p>合理设置提交用时可有效避免被平台判定为瞬间秒刷，拟真学生真实作答过程</p>
+          </div>
+        </div>
+
+        <div className="fe-time-options-grid">
+          {/* Option A: Recommended */}
+          <div
+            className={`fe-voice-option-card ${timeOption === 'recommended' ? 'is-active' : ''}`}
+            onClick={() => setTimeOption('recommended')}
+          >
+            <div className="fe-voice-card-radio">
+              <span className={`fe-radio-circle ${timeOption === 'recommended' ? 'is-checked' : ''}`} />
+            </div>
+            <div className="fe-voice-card-content">
+              <div className="fe-voice-card-title">
+                <strong>智能推荐耗时: {formatSeconds(recommendedTimeSeconds)}</strong>
+                <span className="admin-pill-badge is-success">算法推荐</span>
+              </div>
+              <p>
+                根据本试卷 {totalQuestions} 道题（按客观题 8 秒/题、口语朗读 12-15 秒/题及考卷类型最低限时）动态推算。
+              </p>
+            </div>
+          </div>
+
+          {/* Option B: Custom */}
+          <div
+            className={`fe-voice-option-card ${timeOption === 'custom' ? 'is-active' : ''}`}
+            onClick={() => setTimeOption('custom')}
+          >
+            <div className="fe-voice-card-radio">
+              <span className={`fe-radio-circle ${timeOption === 'custom' ? 'is-checked' : ''}`} />
+            </div>
+            <div className="fe-voice-card-content">
+              <div className="fe-voice-card-title">
+                <strong>自定义作答耗时: {formatSeconds(customUseTimeSeconds)}</strong>
+                <span className="admin-pill-badge is-muted">自由指定</span>
+              </div>
+              <p>手动输入期望提交的总用时，或使用下方快捷预设档位。</p>
+            </div>
+          </div>
+        </div>
+
+        {timeOption === 'custom' && (
+          <div className="fe-custom-time-panel">
+            <div className="fe-time-presets-bar">
+              <span style={{ fontSize: 13, color: '#64748b' }}>快捷预设档位：</span>
+              {[
+                { label: '1 分钟', sec: 60 },
+                { label: '3 分钟', sec: 180 },
+                { label: '5 分钟', sec: 300 },
+                { label: '8 分钟', sec: 480 },
+                { label: '10 分钟', sec: 600 },
+                { label: `推荐耗时 (${formatSeconds(recommendedTimeSeconds)})`, sec: recommendedTimeSeconds },
+              ].map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  className={`fe-ratio-preset-btn ${customUseTimeSeconds === preset.sec ? 'is-active' : ''}`}
+                  onClick={() => {
+                    setCustomMinutes(Math.floor(preset.sec / 60))
+                    setCustomSeconds(preset.sec % 60)
+                  }}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="fe-custom-time-inputs">
+              <div className="fe-time-input-group">
+                <input
+                  type="number"
+                  min={0}
+                  max={60}
+                  value={effectiveMinutes}
+                  onChange={(e) => setCustomMinutes(Math.max(0, parseInt(e.target.value) || 0))}
+                  className="fe-time-num-input"
+                />
+                <span className="fe-time-unit">分</span>
+              </div>
+              <div className="fe-time-input-group">
+                <input
+                  type="number"
+                  min={0}
+                  max={59}
+                  value={effectiveSeconds}
+                  onChange={(e) => setCustomSeconds(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+                  className="fe-time-num-input"
+                />
+                <span className="fe-time-unit">秒</span>
+              </div>
+              <div className="fe-time-total-display">
+                <span>总计用时: <strong>{customUseTimeSeconds} 秒</strong> ({formatSeconds(customUseTimeSeconds)})</span>
+              </div>
+            </div>
+
+            {customUseTimeSeconds < 30 && (
+              <div className="fe-danger-banner" style={{ marginTop: 12 }}>
+                <Icon name="warning" filled />
+                <div>
+                  <strong>【高风险告警】作答耗时少于 30 秒！</strong>
+                  <p>瞬间秒刷作答极容易被官方平台后台行为审计识别，强烈建议设置不少于 60 秒。</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 3. Voice Selection Section */}
@@ -1742,7 +2135,7 @@ export function AutoCompletePage({
         <div className="fe-footer-summary">
           <span>预计总分：<strong>{mode === 'auto' ? autoTargetTotal.toFixed(1) : manualTotalSum.toFixed(1)}</strong> 分</span>
           <span className="fe-sep">·</span>
-          <span>用时：<strong>{formatSeconds(suggestedTimeSeconds)}</strong></span>
+          <span>用时：<strong>{formatSeconds(selectedUseTimeSeconds)}</strong></span>
           <span className="fe-sep">·</span>
           <span>模式：<strong>{mode === 'auto' ? '一键等比' : '手动控分'}</strong></span>
         </div>
@@ -1806,7 +2199,7 @@ export function AutoCompletePage({
                     </p>
                     <p>
                       您当前配置的目标分数为 <strong>{autoTargetTotal.toFixed(1)} 分</strong>（已受 95% 保护线风控拦截），
-                      答题预计用时 <strong>{formatSeconds(suggestedTimeSeconds)}</strong>。
+                      答题预计用时 <strong>{formatSeconds(selectedUseTimeSeconds)}</strong>。
                     </p>
                   </div>
 
@@ -2110,6 +2503,15 @@ export function AutoCompletePage({
                       <Icon name="close_fullscreen" />
                       <span>最小化</span>
                     </button>
+                    <button
+                      type="button"
+                      className="control-secondary fe-btn-sm"
+                      onClick={handleDismissTaskModal}
+                      title="关闭看板弹窗"
+                    >
+                      <Icon name="close" />
+                      <span>关闭</span>
+                    </button>
                   </div>
                 </div>
 
@@ -2128,9 +2530,7 @@ export function AutoCompletePage({
                           type="button"
                           className="control-primary"
                           onClick={() => {
-                            setLocalTaskId(null)
-                            setLocalTaskStatus(null)
-                            onTaskChange?.(null)
+                            handleDismissTaskModal()
                             onRequestPermit?.()
                           }}
                         >
@@ -2141,9 +2541,7 @@ export function AutoCompletePage({
                           type="button"
                           className="control-secondary"
                           onClick={() => {
-                            setLocalTaskId(null)
-                            setLocalTaskStatus(null)
-                            onTaskChange?.(null)
+                            handleDismissTaskModal()
                             void loadHistoryTasks()
                             setViewMode('kanban')
                           }}
@@ -2155,9 +2553,7 @@ export function AutoCompletePage({
                           type="button"
                           className="control-secondary"
                           onClick={() => {
-                            setLocalTaskId(null)
-                            setLocalTaskStatus(null)
-                            onTaskChange?.(null)
+                            handleDismissTaskModal()
                             onBack()
                           }}
                         >
@@ -2200,7 +2596,7 @@ export function AutoCompletePage({
                         </div>
                         <div className="fe-settlement-tile">
                           <small>实际做题用时</small>
-                          <strong>{formatSeconds(currentTask.result?.use_time || suggestedTimeSeconds)}</strong>
+                          <strong>{formatSeconds(currentTask.result?.use_time || selectedUseTimeSeconds)}</strong>
                         </div>
                       </div>
 
@@ -2260,11 +2656,20 @@ export function AutoCompletePage({
                       <div className="fe-settlement-actions" style={{ display: 'flex', gap: 12, justifyContent: 'center', width: '100%', marginTop: 8 }}>
                         <button
                           type="button"
-                          className="control-primary"
+                          className="control-secondary"
                           onClick={() => {
-                            setLocalTaskId(null)
-                            setLocalTaskStatus(null)
-                            onTaskChange?.(null)
+                            handleDismissTaskModal()
+                            setViewMode('config')
+                          }}
+                        >
+                          <Icon name="tune" />
+                          <span>关闭并重新配置</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="control-secondary"
+                          onClick={() => {
+                            handleDismissTaskModal()
                             void loadHistoryTasks()
                             setSelectedHistoryTask(null)
                             setViewMode('kanban')
@@ -2277,6 +2682,7 @@ export function AutoCompletePage({
                           type="button"
                           className="control-primary"
                           onClick={() => {
+                            handleDismissTaskModal()
                             onToast?.('正在同步云端最新完成状态...')
                             onBack()
                           }}

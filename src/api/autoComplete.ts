@@ -33,6 +33,7 @@ export type StartAutoCompletePayload = {
   voice_mode: AutoCompleteVoiceMode
   voice_id?: string
   per_question_scores?: Record<number, number | { total: number }>
+  per_question_audio?: Record<string | number, string>
   permit_token: string
   disclaimer_text: string
 }

@@ -49,7 +49,12 @@ function readStoredActiveTask(): AutoCompleteTaskResponse | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_ACTIVE_TASK)
     if (!raw) return null
-    return JSON.parse(raw) as AutoCompleteTaskResponse
+    const parsed = JSON.parse(raw) as AutoCompleteTaskResponse
+    if (parsed && ['COMPLETED', 'FAILED'].includes(parsed.status)) {
+      localStorage.removeItem(STORAGE_KEY_ACTIVE_TASK)
+      return null
+    }
+    return parsed
   } catch {
     return null
   }
@@ -1623,7 +1628,7 @@ function App() {
   const updateActiveTask = (task: AutoCompleteTaskResponse | null) => {
     setActiveTask(task)
     try {
-      if (task) {
+      if (task && !['COMPLETED', 'FAILED'].includes(task.status)) {
         localStorage.setItem(STORAGE_KEY_ACTIVE_TASK, JSON.stringify(task))
       } else {
         localStorage.removeItem(STORAGE_KEY_ACTIVE_TASK)
@@ -2419,6 +2424,14 @@ function App() {
       return
     }
 
+    // If activeTask belongs to another homework or is already finished, reset it
+    if (
+      activeTask &&
+      (['COMPLETED', 'FAILED'].includes(activeTask.status) || String(activeTask.homework_id) !== String(hw.id))
+    ) {
+      updateActiveTask(null)
+    }
+
     const cachedPaper = paperCache[hw.id] || (viewingPaper?.homework.id === hw.id ? viewingPaper.paper : null)
     const compat = checkHomeworkCompatibility(hw, cachedPaper)
     if (!compat.supported) {
@@ -2432,6 +2445,14 @@ function App() {
     const hw = autoCompleteModalHw
     setAutoCompleteModalHw(null)
     if (!hw || !session) return
+
+    // Ensure finished or different active task is cleared before entering auto complete
+    if (
+      activeTask &&
+      (['COMPLETED', 'FAILED'].includes(activeTask.status) || String(activeTask.homework_id) !== String(hw.id))
+    ) {
+      updateActiveTask(null)
+    }
 
     showToast('安全人机验证通过，正在申请自动完成准入令牌...')
     try {
@@ -2495,27 +2516,20 @@ function App() {
     getLatestAutoCompleteTask(session.accessToken)
       .then((res) => {
         if (!active) return
-        if (res.task) {
-          setActiveTask((prev) => {
-            if (!prev) {
-              try {
-                localStorage.setItem(STORAGE_KEY_ACTIVE_TASK, JSON.stringify(res.task))
-              } catch (e) {
-                console.warn('Failed to cache active task', e)
-              }
-              return res.task
-            }
-            if (res.task && res.task.task_id === prev.task_id) {
-              const merged = { ...prev, ...res.task }
-              try {
-                localStorage.setItem(STORAGE_KEY_ACTIVE_TASK, JSON.stringify(merged))
-              } catch (e) {
-                console.warn('Failed to update cached active task', e)
-              }
-              return merged
-            }
-            return prev
-          })
+        if (res.task && !['COMPLETED', 'FAILED'].includes(res.task.status)) {
+          setActiveTask(res.task)
+          try {
+            localStorage.setItem(STORAGE_KEY_ACTIVE_TASK, JSON.stringify(res.task))
+          } catch (e) {
+            console.warn('Failed to cache active task', e)
+          }
+        } else if (res.task && ['COMPLETED', 'FAILED'].includes(res.task.status)) {
+          setActiveTask(null)
+          try {
+            localStorage.removeItem(STORAGE_KEY_ACTIVE_TASK)
+          } catch (e) {
+            console.warn('Failed to clear active task', e)
+          }
         }
       })
       .catch((err) => {
@@ -3088,82 +3102,95 @@ function App() {
                 navigate('/')
               }}
             >
-              <AutoCompletePage
-                key={pathname}
-                homework={
-                  autoCompleteTargetHw ||
-                  homeworks.find((h) => pathname.includes(h.id)) ||
-                  historyHomeworks.find((h) => pathname.includes(h.id)) ||
-                  (activeTask?.homework_id
-                    ? {
-                        id: activeTask.homework_id,
-                        name: activeTask.homework_name || '作业自动完成',
-                        contents: [],
-                      }
-                    : {
-                        id: pathname.replace('/homework/', '').replace('/auto-complete', '').replace(/\//g, ''),
-                        name: '作业自动完成',
-                        contents: [],
-                      })
-                }
-                paper={
-                  (autoCompleteTargetHw && paperCache[autoCompleteTargetHw.id]) ||
-                  (activeTask?.homework_id && paperCache[activeTask.homework_id]) ||
-                  (viewingPaper && viewingPaper.homework.id === (autoCompleteTargetHw?.id || activeTask?.homework_id)
-                    ? viewingPaper.paper
-                    : null)
-                }
-                permitToken={autoCompletePermitToken}
-                accessToken={session.accessToken}
-                activeTask={activeTask}
-                onTaskChange={updateActiveTask}
-                onBack={() => {
-                  setAutoCompletePermitToken('')
-                  setHasLoadedHistory(false)
-                  setHasLoadedCurrent(false)
-                  void doFetchHomeworks(activeTab)
-                  navigate(activeTab === 'history' ? '/history' : '/')
-                }}
-                onCompleted={(res, hwId) => {
-                  const s = Number(res?.final_score ?? res?.score ?? 0)
-                  const ut = Number(res?.use_time ?? 0)
-                  const updateItem = (h: HomeworkItem) => {
-                    if (h.id === hwId) {
-                      return {
-                        ...h,
-                        status: 2,
-                        point: s,
-                        score: s,
-                        use_time: ut,
-                        completed_at: typeof res?.completed_at === 'string' ? res.completed_at : undefined,
-                      }
+              {(() => {
+                const targetHwId =
+                  autoCompleteTargetHw?.id ||
+                  pathname.replace('/homework/', '').replace('/auto-complete', '').replace(/\//g, '')
+                const effectiveTask =
+                  pathname === '/auto-complete'
+                    ? activeTask
+                    : activeTask && String(activeTask.homework_id) === String(targetHwId)
+                    ? activeTask
+                    : null
+                return (
+                  <AutoCompletePage
+                    key={pathname}
+                    homework={
+                      autoCompleteTargetHw ||
+                      homeworks.find((h) => pathname.includes(h.id)) ||
+                      historyHomeworks.find((h) => pathname.includes(h.id)) ||
+                      (effectiveTask?.homework_id
+                        ? {
+                            id: effectiveTask.homework_id,
+                            name: effectiveTask.homework_name || '作业自动完成',
+                            contents: [],
+                          }
+                        : {
+                            id: targetHwId,
+                            name: '作业自动完成',
+                            contents: [],
+                          })
                     }
-                    return h
-                  }
-                  setHomeworks((prev) => prev.map(updateItem))
-                  setHistoryHomeworks((prev) => prev.map(updateItem))
-                }}
-                onRequestPermit={() => {
-                  const targetHw =
-                    autoCompleteTargetHw ||
-                    homeworks.find((h) => pathname.includes(h.id)) ||
-                    historyHomeworks.find((h) => pathname.includes(h.id)) ||
-                    (activeTask?.homework_id
-                      ? homeworks.find((h) => h.id === activeTask.homework_id) ||
-                        historyHomeworks.find((h) => h.id === activeTask.homework_id)
-                      : null)
-                  if (targetHw) {
-                    handleTriggerAutoComplete(targetHw)
-                  } else {
-                    navigate('/')
-                  }
-                }}
-                onOpenSettingsVoice={() => {
-                  navigate('/settings')
-                }}
-                isHubRoute={pathname === '/auto-complete'}
-                onToast={showToast}
-              />
+                    paper={
+                      (autoCompleteTargetHw && paperCache[autoCompleteTargetHw.id]) ||
+                      (effectiveTask?.homework_id && paperCache[effectiveTask.homework_id]) ||
+                      (viewingPaper && viewingPaper.homework.id === (autoCompleteTargetHw?.id || effectiveTask?.homework_id)
+                        ? viewingPaper.paper
+                        : null)
+                    }
+                    permitToken={autoCompletePermitToken}
+                    accessToken={session.accessToken}
+                    activeTask={effectiveTask}
+                    onTaskChange={updateActiveTask}
+                    onBack={() => {
+                      setAutoCompletePermitToken('')
+                      setHasLoadedHistory(false)
+                      setHasLoadedCurrent(false)
+                      void doFetchHomeworks(activeTab)
+                      navigate(activeTab === 'history' ? '/history' : '/')
+                    }}
+                    onCompleted={(res, hwId) => {
+                      const s = Number(res?.final_score ?? res?.score ?? 0)
+                      const ut = Number(res?.use_time ?? 0)
+                      const updateItem = (h: HomeworkItem) => {
+                        if (h.id === hwId) {
+                          return {
+                            ...h,
+                            status: 2,
+                            point: s,
+                            score: s,
+                            use_time: ut,
+                            completed_at: typeof res?.completed_at === 'string' ? res.completed_at : undefined,
+                          }
+                        }
+                        return h
+                      }
+                      setHomeworks((prev) => prev.map(updateItem))
+                      setHistoryHomeworks((prev) => prev.map(updateItem))
+                    }}
+                    onRequestPermit={() => {
+                      const targetHw =
+                        autoCompleteTargetHw ||
+                        homeworks.find((h) => pathname.includes(h.id)) ||
+                        historyHomeworks.find((h) => pathname.includes(h.id)) ||
+                        (effectiveTask?.homework_id
+                          ? homeworks.find((h) => h.id === effectiveTask.homework_id) ||
+                            historyHomeworks.find((h) => h.id === effectiveTask.homework_id)
+                          : null)
+                      if (targetHw) {
+                        handleTriggerAutoComplete(targetHw)
+                      } else {
+                        navigate('/')
+                      }
+                    }}
+                    onOpenSettingsVoice={() => {
+                      navigate('/settings')
+                    }}
+                    isHubRoute={pathname === '/auto-complete'}
+                    onToast={showToast}
+                  />
+                )
+              })()}
             </ErrorBoundary>
           ) : page === '/settings' ? (
             <SettingsPage
