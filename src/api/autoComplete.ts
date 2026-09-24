@@ -142,6 +142,19 @@ export function getAutoCompleteTasks(
   )
 }
 
+export function cancelAutoCompleteTask(
+  accessToken: string,
+  taskId: string
+): Promise<{ success: boolean; task?: AutoCompleteTaskResponse; message?: string }> {
+  return apiRequest<{ success: boolean; task?: AutoCompleteTaskResponse; message?: string }>(
+    `/homework/auto-complete/tasks/${encodeURIComponent(taskId)}/cancel`,
+    {
+      method: 'POST',
+      accessToken,
+    }
+  )
+}
+
 import type { HomeworkItem, Paper } from './homework'
 
 export const SUPPORTED_QUESTION_TYPES = [

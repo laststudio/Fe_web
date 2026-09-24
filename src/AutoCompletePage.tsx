@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from './components/Icon'
 import {
+  cancelAutoCompleteTask,
   checkHomeworkCompatibility,
   getAutoCompleteTasks,
   getAutoCompleteTaskStatus,
@@ -735,6 +736,34 @@ export function AutoCompletePage({
     setIsMinimized(false)
   }
 
+  const [isCancelling, setIsCancelling] = useState(false)
+
+  const handleCancelTask = async (taskIdToCancel?: string) => {
+    const tid = taskIdToCancel || currentTaskId
+    if (!tid || !accessToken || isCancelling) return
+    if (!window.confirm('确定要终止当前的自动完成任务吗？')) return
+    setIsCancelling(true)
+    try {
+      const res = await cancelAutoCompleteTask(accessToken, tid)
+      if (res.success) {
+        onToast?.('任务已成功终止')
+        if (res.task) {
+          setLocalTaskStatus(res.task)
+          onTaskChangeRef.current?.(res.task)
+        } else {
+          handleDismissTaskModal()
+        }
+        void loadHistoryTasks(false)
+      } else {
+        onToast?.(res.message || '终止任务失败')
+      }
+    } catch (err: any) {
+      onToast?.(err.message || '网络请求失败，未能终止任务')
+    } finally {
+      setIsCancelling(false)
+    }
+  }
+
   // Countdown timer effect
   useEffect(() => {
     let timer: number | null = null
@@ -1157,6 +1186,17 @@ export function AutoCompletePage({
                 >
                   <Icon name="headphones" />
                   <span>试听效果</span>
+                </button>
+                <button
+                  type="button"
+                  className="control-secondary fe-btn-sm"
+                  onClick={() => handleCancelTask(activeTask.task_id)}
+                  disabled={isCancelling}
+                  style={{ color: '#ef4444', borderColor: '#fca5a5' }}
+                  title="终止当前任务"
+                >
+                  <Icon name={isCancelling ? 'sync' : 'cancel'} className={isCancelling ? 'fe-spin' : ''} />
+                  <span>{isCancelling ? '终止中...' : '终止任务'}</span>
                 </button>
               </div>
             </div>
@@ -2569,6 +2609,30 @@ export function AutoCompletePage({
             </strong>
             <small>{currentTask?.stage_label || currentTask?.stage_text || '后台流水线处理中...'}</small>
           </div>
+          {currentTask && !['COMPLETED', 'FAILED'].includes(currentTask.status) && (
+            <button
+              type="button"
+              className="fe-capsule-cancel-btn"
+              title="终止任务"
+              onClick={(e) => {
+                e.stopPropagation()
+                void handleCancelTask()
+              }}
+              disabled={isCancelling}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#ef4444',
+                cursor: 'pointer',
+                padding: '4px 6px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                fontSize: 16,
+              }}
+            >
+              <Icon name={isCancelling ? 'sync' : 'cancel'} className={isCancelling ? 'fe-spin' : ''} />
+            </button>
+          )}
           <button
             type="button"
             className="fe-capsule-expand-btn"
@@ -2594,6 +2658,19 @@ export function AutoCompletePage({
                 <p>正在调度云端双代理与语音引擎，模拟逐题完成与上报</p>
               </div>
               <div className="fe-execution-head-controls">
+                {currentTask && !['COMPLETED', 'FAILED'].includes(currentTask.status) && (
+                  <button
+                    type="button"
+                    className="fe-head-control-btn fe-head-cancel-btn"
+                    onClick={() => handleCancelTask()}
+                    disabled={isCancelling}
+                    title="立即终止当前云端任务"
+                    style={{ color: '#ef4444', borderColor: '#fca5a5' }}
+                  >
+                    <Icon name={isCancelling ? 'sync' : 'cancel'} className={isCancelling ? 'fe-spin' : ''} />
+                    <span>{isCancelling ? '终止中...' : '终止任务'}</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   className="fe-head-control-btn"
@@ -2918,6 +2995,21 @@ export function AutoCompletePage({
                           <span>提示：流水线在云端全自动持续运行，关闭或离开本窗口不会影响答题进度</span>
                         </div>
                         <div className="fe-exec-footer-buttons">
+                          <button
+                            type="button"
+                            className="control-secondary fe-btn-sm"
+                            onClick={() => handleCancelTask()}
+                            disabled={isCancelling}
+                            style={{
+                              color: '#dc2626',
+                              borderColor: '#fca5a5',
+                              backgroundColor: '#fef2f2',
+                            }}
+                            title="立即终止当前正在执行的任务"
+                          >
+                            <Icon name={isCancelling ? 'sync' : 'cancel'} className={isCancelling ? 'fe-spin' : ''} />
+                            <span>{isCancelling ? '正在终止...' : '终止当前任务'}</span>
+                          </button>
                           <button
                             type="button"
                             className="control-secondary fe-btn-sm"
