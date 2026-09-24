@@ -4291,10 +4291,18 @@ html:has(.control-shell) {
 }
 
 .fe-voice-options-grid {
-  padding: 16px 20px 24px;
+  padding: 16px 20px 16px;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 16px;
+}
+
+.fe-voice-clone-panel {
+  margin: 0 20px 20px;
+  padding: 16px 18px;
+  background: var(--control-panel-subtle, #f8fafc);
+  border: 1px solid var(--control-line, #e2e8f0);
+  border-radius: 12px;
 }
 
 .fe-voice-option-card {
@@ -4394,20 +4402,25 @@ html:has(.control-shell) {
 
 .fe-voice-select-row {
   display: flex;
-  gap: 8px;
+  gap: 10px;
+  align-items: center;
 }
 
 .fe-voice-dropdown {
   flex: 1;
-  padding: 6px 10px;
+  padding: 7px 12px;
   border: 1px solid var(--control-line);
-  border-radius: 6px;
-  font-size: 12.5px;
+  border-radius: 8px;
+  font-size: 13px;
   background: #ffffff;
 }
 
 .fe-voice-preview-btn {
-  padding: 6px 10px !important;
+  padding: 7px 14px !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
 }
 
 .fe-voice-none-box {
@@ -5646,13 +5659,14 @@ html:has(.control-shell) {
 }
 
 .fe-time-options-grid {
+  padding: 16px 20px 16px;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 14px;
 }
 
 .fe-custom-time-panel {
-  margin-top: 14px;
+  margin: 0 20px 20px;
   padding: 14px 16px;
   background: var(--control-panel-subtle, #f8fafc);
   border: 1px solid var(--control-line, #e2e8f0);

@@ -45,8 +45,8 @@ const AUDITION_MODELS: Array<{
     name: 'Ming-Omni',
     featureKey: 'tts_model_ming_omni_tts',
     badge: '多模态',
-    desc: '0.5B 中英多模态架构，还原真人呼吸与自然口语顿挫',
-    latency: '~8s',
+    desc: '0.5B 中英多模态架构，还原真人呼吸与自然口语顿挫（排队较长）',
+    latency: '60~120s',
   },
   {
     id: 'moss-tts-nano',
