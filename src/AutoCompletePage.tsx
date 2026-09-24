@@ -2676,29 +2676,18 @@ export function AutoCompletePage({
                   type="button"
                   className="fe-head-control-btn"
                   onClick={() => {
-                    setIsMinimized(true)
-                    setViewMode('kanban')
-                  }}
-                  title="最小化至右下角并前往任务看板"
-                >
-                  <Icon name="close_fullscreen" />
-                  <span>最小化</span>
-                </button>
-                <button
-                  type="button"
-                  className="fe-head-control-btn fe-head-close-btn"
-                  onClick={() => {
-                    if (currentTask && !['COMPLETED', 'FAILED'].includes(currentTask.status)) {
-                      setIsMinimized(true)
+                    if (currentTask && ['COMPLETED', 'FAILED'].includes(currentTask.status)) {
+                      handleDismissTaskModal()
                       setViewMode('kanban')
                     } else {
-                      handleDismissTaskModal()
+                      setIsMinimized(true)
                       setViewMode('kanban')
                     }
                   }}
-                  title="关闭看板"
+                  title={currentTask && ['COMPLETED', 'FAILED'].includes(currentTask.status) ? '关闭看板' : '最小化至右下角并前往任务看板'}
                 >
-                  <Icon name="close" />
+                  <Icon name={currentTask && ['COMPLETED', 'FAILED'].includes(currentTask.status) ? 'close' : 'close_fullscreen'} />
+                  <span>{currentTask && ['COMPLETED', 'FAILED'].includes(currentTask.status) ? '关闭' : '最小化'}</span>
                 </button>
               </div>
             </div>
@@ -2993,46 +2982,7 @@ export function AutoCompletePage({
                       <div className="fe-execution-in-progress-footer">
                         <div className="fe-exec-footer-tip">
                           <Icon name="info" style={{ fontSize: 16, color: '#3b82f6' }} />
-                          <span>提示：流水线在云端全自动持续运行，关闭或离开本窗口不会影响答题进度</span>
-                        </div>
-                        <div className="fe-exec-footer-buttons">
-                          <button
-                            type="button"
-                            className="control-secondary fe-btn-sm"
-                            onClick={() => handleCancelTask()}
-                            disabled={isCancelling}
-                            style={{
-                              color: '#dc2626',
-                              borderColor: '#fca5a5',
-                              backgroundColor: '#fef2f2',
-                            }}
-                            title="立即终止当前正在执行的任务"
-                          >
-                            <Icon name={isCancelling ? 'sync' : 'cancel'} className={isCancelling ? 'fe-spin' : ''} />
-                            <span>{isCancelling ? '正在终止...' : '终止当前任务'}</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="control-secondary fe-btn-sm"
-                            onClick={() => {
-                              setIsMinimized(true)
-                              setViewMode('kanban')
-                            }}
-                          >
-                            <Icon name="dashboard" />
-                            <span>前往任务看板 (后台继续)</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="control-secondary fe-btn-sm"
-                            onClick={() => {
-                              setIsMinimized(true)
-                              onBack()
-                            }}
-                          >
-                            <Icon name="arrow_back" />
-                            <span>返回作业列表 (后台继续)</span>
-                          </button>
+                          <span>提示：流水线在云端全自动持续运行，最小化后不会影响答题进度</span>
                         </div>
                       </div>
                     </div>
