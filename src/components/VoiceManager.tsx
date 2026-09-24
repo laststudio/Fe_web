@@ -24,7 +24,7 @@ export type FeatureCheck = {
 
 export type CloneModelId = 'pocket-tts' | 'ming-omni-tts' | 'moss-tts-nano'
 
-export const AUDITION_MODELS: Array<{
+const AUDITION_MODELS: Array<{
   id: CloneModelId
   name: string
   featureKey: string
