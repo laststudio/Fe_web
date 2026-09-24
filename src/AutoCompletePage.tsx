@@ -81,15 +81,17 @@ export function AutoCompletePage({
 
   // View mode: 'kanban' | 'execution' | 'config'
   const [viewMode, setViewMode] = useState<'kanban' | 'execution' | 'config'>(() => {
-    if (isHubRoute) return 'kanban'
-    if (typeof window !== 'undefined' && window.location.pathname === '/auto-complete') {
-      return 'kanban'
-    }
-    if (permitToken && (!activeTask || ['COMPLETED', 'FAILED'].includes(activeTask.status))) {
-      return 'config'
-    }
+    // 1. If an active task is running, ALWAYS enter execution board directly!
     if (activeTask && !['COMPLETED', 'FAILED'].includes(activeTask.status)) {
       return 'execution'
+    }
+    // 2. Hub route (/auto-complete) defaults to kanban overview
+    if (isHubRoute || (typeof window !== 'undefined' && window.location.pathname === '/auto-complete')) {
+      return 'kanban'
+    }
+    // 3. When entering with permit token to configure a task
+    if (permitToken) {
+      return 'config'
     }
     return 'kanban'
   })
@@ -1484,12 +1486,406 @@ export function AutoCompletePage({
     )
   }
 
+  // Dedicated Task Execution View (Full Dashboard Page)
+  const renderExecutionView = () => {
+    if (!currentTaskId) return null
+    return (
+      <div className="fe-autocomplete-container">
+        {/* Top Breadcrumb & Return Nav */}
+        <div className="fe-reader-top-nav" style={{ marginBottom: 16 }}>
+          <button
+            className="control-secondary fe-back-btn"
+            type="button"
+            onClick={onBack}
+            title="返回作业列表"
+          >
+            <Icon name="arrow_back" />
+            <span>返回作业列表</span>
+          </button>
+          <button
+            className="control-secondary fe-back-btn"
+            type="button"
+            onClick={() => {
+              setViewMode('kanban')
+              void loadHistoryTasks(false)
+            }}
+            title="前往自动完成任务总览看板"
+          >
+            <Icon name="dashboard" />
+            <span>任务总览看板</span>
+          </button>
+          <span className={`admin-pill-badge ${currentTask?.status === 'COMPLETED' ? 'is-success' : currentTask?.status === 'FAILED' ? 'is-danger' : 'is-active'}`}>
+            <Icon name={currentTask?.status === 'COMPLETED' ? 'check_circle' : currentTask?.status === 'FAILED' ? 'error' : 'bolt'} style={{ fontSize: 13 }} />
+            <span>
+              {currentTask?.status === 'COMPLETED'
+                ? '任务已顺利完成'
+                : currentTask?.status === 'FAILED'
+                ? '任务执行中断'
+                : '流水线实时执行中'}
+            </span>
+          </span>
+        </div>
+
+        {/* Full Dashboard Card */}
+        <div className="fe-execution-card fe-execution-card--page">
+          <div className="fe-execution-head">
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <h2>自动完成任务执行看板</h2>
+                {currentTask && !['COMPLETED', 'FAILED'].includes(currentTask.status) && (
+                  <span className="admin-pill-badge is-active" style={{ fontSize: 11 }}>
+                    <Icon name="sync" className="fe-spin" style={{ fontSize: 12 }} /> 运行中 ({currentTask.progress || 0}%)
+                  </span>
+                )}
+              </div>
+              <p>
+                正在执行: <strong>{currentTask?.homework_name || currentHw?.name || '作业自动完成'}</strong>
+              </p>
+            </div>
+            <div className="fe-execution-head-controls">
+              {currentTask && !['COMPLETED', 'FAILED'].includes(currentTask.status) && (
+                <button
+                  type="button"
+                  className="fe-head-control-btn fe-head-cancel-btn"
+                  onClick={() => handleCancelTask()}
+                  disabled={isCancelling}
+                  title="立即终止当前云端任务"
+                  style={{ color: '#ef4444', borderColor: '#fca5a5' }}
+                >
+                  <Icon name={isCancelling ? 'sync' : 'cancel'} className={isCancelling ? 'fe-spin' : ''} />
+                  <span>{isCancelling ? '终止中...' : '终止任务'}</span>
+                </button>
+              )}
+              <button
+                type="button"
+                className="fe-head-control-btn"
+                onClick={() => {
+                  if (currentTask && ['COMPLETED', 'FAILED'].includes(currentTask.status)) {
+                    handleDismissTaskModal()
+                  }
+                  setViewMode('kanban')
+                  void loadHistoryTasks(false)
+                }}
+                title="前往任务总览看板查看全部记录"
+              >
+                <Icon name="dashboard" />
+                <span>任务总览看板</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="fe-execution-body">
+            {currentTask?.status === 'FAILED' ? (
+              <div className="fe-empty-state">
+                <div className="fe-empty-state__icon" style={{ background: '#fef2f2', color: '#dc2626' }}>
+                  <Icon name="error" />
+                </div>
+                <h2>任务执行遇到问题</h2>
+                <p style={{ maxWidth: 520, margin: '8px auto 0', color: '#b91c1c', wordBreak: 'break-word', whiteSpace: 'pre-line' }}>
+                  {currentTask.error || currentTask.stage_label || '云端同步或平台通信发生错误，请稍后重试。'}
+                </p>
+                <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 20 }}>
+                  <button
+                    type="button"
+                    className="control-primary"
+                    onClick={() => {
+                      handleDismissTaskModal()
+                      onRequestPermit?.()
+                    }}
+                  >
+                    <Icon name="replay" />
+                    <span>重新尝试执行</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="control-secondary"
+                    onClick={() => {
+                      handleDismissTaskModal()
+                      void loadHistoryTasks(false)
+                      setViewMode('kanban')
+                    }}
+                  >
+                    <Icon name="dashboard" />
+                    <span>前往任务看板</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="control-secondary"
+                    onClick={() => {
+                      handleDismissTaskModal()
+                      onBack()
+                    }}
+                  >
+                    <Icon name="arrow_back" />
+                    <span>返回作业列表</span>
+                  </button>
+                </div>
+              </div>
+            ) : currentTask?.status === 'COMPLETED' ? (
+              /* Settlement card (做题效果全景展示) */
+              <div className="fe-settlement-card">
+                <div className="fe-settlement-icon-wrap">
+                  <Icon name="verified" filled />
+                </div>
+                <h3>恭喜，作业已成功自动完成并提交！</h3>
+                <p className="fe-settlement-desc">
+                  所有题目作答录音与真实换算评分已通过国内代理成功上报至 ETS100 云端官方平台。
+                </p>
+
+                {/* Summary Score Stats */}
+                <div className="fe-settlement-stats">
+                  <div className="fe-settlement-tile">
+                    <small>官方最终得分</small>
+                    <strong style={{ color: '#16a34a' }}>
+                      {Number((currentTask.result?.score ?? currentTask.result?.final_score ?? (mode === 'auto' ? autoTargetTotal : manualTotalSum)).toFixed(2))} 分
+                    </strong>
+                  </div>
+                  <div className="fe-settlement-tile">
+                    <small>试卷总满分</small>
+                    <strong>{paperTotalScore.toFixed(1)} 分</strong>
+                  </div>
+                  <div className="fe-settlement-tile">
+                    <small>最终得分率</small>
+                    <strong style={{ color: '#2563eb' }}>
+                      {currentTask.result?.score_rate ?? (
+                        paperTotalScore > 0
+                          ? ((Number(currentTask.result?.score ?? currentTask.result?.final_score ?? (mode === 'auto' ? autoTargetTotal : manualTotalSum)) / paperTotalScore) * 100).toFixed(1)
+                          : '95.0'
+                      )}%
+                    </strong>
+                  </div>
+                  <div className="fe-settlement-tile">
+                    <small>实际做题用时</small>
+                    <strong>{formatSeconds(currentTask.result?.use_time || selectedUseTimeSeconds)}</strong>
+                  </div>
+                </div>
+
+                {/* Question by question completion breakdown table */}
+                <div className="fe-settlement-table-wrap">
+                  <table className="fe-settlement-table">
+                    <thead>
+                      <tr>
+                        <th>题号</th>
+                        <th>题型</th>
+                        <th>题目内容节选</th>
+                        <th>真实满分</th>
+                        <th>最终实际得分</th>
+                        <th>克隆音频回放</th>
+                        <th>官方状态</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(currentTask.result?.question_details || currentTask.question_results || allocatedQuestionScores).map((rawItem: unknown, idx: number) => {
+                        const item = rawItem as Record<string, unknown>
+                        const order = Number(item.order || idx + 1)
+                        const typeName = String(item.type_name || item.typeName || '题目')
+                        const text = String(item.text || item.questionText || `第 ${order} 题`)
+                        const maxS = (item.max_score ?? item.maxScore ?? (paperTotalScore / Math.max(1, totalQuestions))) as number
+                        const score = (item.awarded_score ?? item.allocatedScore ?? (manualScores[order] || 0)) as number
+                        const audioUrl = item.audio_url as string | undefined
+                        return (
+                          <tr key={order}>
+                            <td><strong>Q{order}</strong></td>
+                            <td><span className="fe-td-type">{typeName}</span></td>
+                            <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={text}>
+                              {text}
+                            </td>
+                            <td>{Number(maxS).toFixed(2)} 分</td>
+                            <td><strong style={{ color: '#16a34a' }}>{Number(score).toFixed(2)} 分</strong></td>
+                            <td>
+                              {audioUrl ? (
+                                <div className="fe-audio-cell">
+                                  <audio controls src={audioUrl} preload="none" className="fe-audio-player" />
+                                </div>
+                              ) : (
+                                <span style={{ color: '#94a3b8', fontSize: 11 }}>无音频 (免录音题)</span>
+                              )}
+                            </td>
+                            <td>
+                              <span className="admin-pill-badge is-active" style={{ fontSize: 11 }}>
+                                <Icon name="check" style={{ fontSize: 12 }} /> 官方已核验
+                              </span>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="fe-settlement-actions" style={{ display: 'flex', gap: 12, justifyContent: 'center', width: '100%', marginTop: 8, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="control-primary"
+                    onClick={() => {
+                      handleDismissTaskModal()
+                      onToast?.('正在返回作业列表...')
+                      onBack()
+                    }}
+                  >
+                    <Icon name="assignment" />
+                    <span>返回作业列表</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="control-secondary"
+                    onClick={() => {
+                      handleDismissTaskModal()
+                      void loadHistoryTasks(false)
+                      setSelectedHistoryTask(null)
+                      setViewMode('kanban')
+                    }}
+                  >
+                    <Icon name="dashboard" />
+                    <span>前往任务看板</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="control-secondary"
+                    onClick={() => {
+                      handleDismissTaskModal()
+                      setViewMode('config')
+                    }}
+                  >
+                    <Icon name="tune" />
+                    <span>重新配置此作业</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* In Progress Dashboard */
+              <div className="fe-execution-active-box">
+                {/* 8-Stage Pipeline Strip */}
+                <div className="fe-pipeline-steps">
+                  {[
+                    { num: 1, label: '会话就绪', p: 5 },
+                    { num: 2, label: '试卷提取', p: 15 },
+                    { num: 3, label: '题型规划', p: 25 },
+                    { num: 4, label: '逐题做题', p: 40 },
+                    { num: 5, label: '语音合成', p: 60 },
+                    { num: 6, label: '评分上报', p: 75 },
+                    { num: 7, label: '用时终审', p: 85 },
+                    { num: 8, label: '云端核对', p: 95 },
+                  ].map((s) => {
+                    const curP = currentTask?.progress || 10
+                    const isDone = curP > s.p + 8
+                    const isActive = curP >= s.p && curP <= s.p + 8
+                    return (
+                      <div
+                        key={s.num}
+                        className={`fe-pipeline-step ${isDone ? 'is-done' : ''} ${isActive ? 'is-active' : ''}`}
+                      >
+                        <Icon name={isDone ? 'check' : isActive ? 'sync' : 'circle'} className={isActive ? 'fe-spin' : ''} style={{ fontSize: 12 }} />
+                        <span>{s.num}. {s.label}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Big Progress Bar */}
+                <div className="fe-exec-progress-track">
+                  <div
+                    className="fe-exec-progress-bar"
+                    style={{ width: `${Math.max(6, currentTask?.progress || 10)}%` }}
+                  />
+                </div>
+
+                <div className="fe-exec-progress-meta">
+                  <span className="fe-exec-stage-text">
+                    <Icon name="sync" className="fe-spin" />
+                    {currentTask?.stage_label || currentTask?.stage_text || '正在连接国内代理节点并初始化做题环境...'}
+                  </span>
+                  <strong className="fe-exec-percentage">
+                    {currentTask?.progress || 10}%
+                  </strong>
+                </div>
+
+                {/* Question Stem preview with fade in */}
+                <div className="fe-exec-stem-preview">
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <small>
+                      当前作答题干 (第 {currentTask?.current_question_index || 1} / {currentTask?.total_questions || totalQuestions} 题)：
+                    </small>
+                    <span className="admin-pill-badge is-muted" style={{ fontSize: 11 }}>
+                      {voiceMode === 'clone' ? '专属音色克隆中' : voiceMode === 'edge' ? 'Edge-TTS 合成中' : '静音模式'}
+                    </span>
+                  </div>
+                  <p className="fe-stem-text">
+                    {currentTask?.current_question_text || '正在逐题提取作答素材与发音词汇表...'}
+                  </p>
+                </div>
+
+                {/* Live Questions Checklist */}
+                {currentTask?.question_results && currentTask.question_results.length > 0 && (
+                  <div className="fe-exec-questions-checklist">
+                    <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--control-muted)', marginBottom: 2 }}>
+                      已完成题目流水明细 ({currentTask.question_results.length}/{currentTask.total_questions || totalQuestions})：
+                    </div>
+                    {currentTask.question_results.map((q) => (
+                      <div key={q.order} className="fe-exec-q-item is-done">
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Icon name="check_circle" style={{ fontSize: 14, color: '#16a34a' }} />
+                          <strong>Q{q.order}</strong>
+                          <span style={{ color: 'var(--control-muted)', fontSize: 11 }}>[{q.type_name}]</span>
+                          <span style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {q.text}
+                          </span>
+                        </span>
+                        <strong style={{ color: '#15803d', fontFamily: 'DM Mono, monospace' }}>
+                          +{q.awarded_score.toFixed(2)} 分
+                        </strong>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="fe-exec-details-grid">
+                  <div className="fe-exec-tile">
+                    <small>代理通道</small>
+                    <span>国内双节点轮询容灾</span>
+                  </div>
+                  <div className="fe-exec-tile">
+                    <small>音色模式</small>
+                    <span>
+                      {voiceMode === 'clone'
+                        ? '专属声音克隆 (tts.ai)'
+                        : voiceMode === 'edge'
+                        ? 'Edge-TTS 机读原声'
+                        : '不上传声音'}
+                    </span>
+                  </div>
+                  <div className="fe-exec-tile">
+                    <small>目标总分与比例</small>
+                    <span>{mode === 'auto' ? `${autoTargetTotal.toFixed(2)}分 (95%比例)` : `${manualTotalSum.toFixed(2)}分`}</span>
+                  </div>
+                </div>
+
+                {/* In-Progress Footer Navigation Actions */}
+                <div className="fe-execution-in-progress-footer">
+                  <div className="fe-exec-footer-tip">
+                    <Icon name="info" style={{ fontSize: 16, color: '#3b82f6' }} />
+                    <span>提示：流水线在云端全自动持续运行，切换至看板或关闭页面不会影响答题进度</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   // 1. If user selected a specific historical task to inspect effect
   if (selectedHistoryTask) {
     return renderTaskEffectView(selectedHistoryTask)
   }
 
-  // 2. If viewMode is kanban, or if arrived via /auto-complete or without permitToken
+  // 2. If viewMode is execution AND there is an active/target task:
+  if (viewMode === 'execution' && currentTaskId) {
+    return renderExecutionView()
+  }
+
+  // 3. If viewMode is kanban, or if arrived via /auto-complete or without permitToken
   if (viewMode === 'kanban' || (!permitToken && viewMode !== 'execution')) {
     return renderHubView()
   }
@@ -1630,6 +2026,45 @@ export function AutoCompletePage({
           <span>安全准入中 · 令牌已核验</span>
         </span>
       </div>
+
+      {/* Running Notice Banner if this exact homework is already executing */}
+      {currentTask && !['COMPLETED', 'FAILED'].includes(currentTask.status) && (
+        <div
+          className="admin-status-strip is-success"
+          style={{
+            margin: '0 0 20px',
+            padding: '16px 20px',
+            borderRadius: 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            background: '#ecfdf5',
+            border: '1.5px solid #a7f3d0',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Icon name="sync" className="fe-spin" style={{ fontSize: 24, color: '#059669', flexShrink: 0 }} />
+            <div>
+              <strong style={{ color: '#065f46', fontSize: 14.5, display: 'block', marginBottom: 2 }}>
+                该作业当前正在后台自动答题中（进度 {currentTask.progress || 0}%）
+              </strong>
+              <span style={{ color: '#047857', fontSize: 13 }}>
+                {currentTask.stage_label || currentTask.stage_text || '后台流水线处理中，无需重复配置部署'}
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="control-primary fe-btn-sm"
+            onClick={() => setViewMode('execution')}
+            style={{ background: '#059669', borderColor: '#059669', whiteSpace: 'nowrap' }}
+          >
+            <Icon name="bolt" />
+            <span>进入实时执行看板</span>
+          </button>
+        </div>
+      )}
 
       {/* Unsupported Question Types Warning Banner */}
       {!compatibility.supported && (
@@ -2244,63 +2679,79 @@ export function AutoCompletePage({
                     </div>
                   )}
 
-                  <div className="fe-voice-model-picker" style={{ marginTop: 12, borderTop: '1px dashed var(--control-line, #e2e8f0)', paddingTop: 10 }}>
-                    <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--control-muted)', marginBottom: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span>免费克隆模型选择：</span>
-                      <span style={{ fontSize: 11, color: '#16a34a' }}>全部 100% 免费</span>
+                  <div className="fe-voice-model-picker">
+                    <div className="fe-voice-model-header">
+                      <div className="fe-voice-model-title-wrap">
+                        <Icon name="psychology" style={{ fontSize: 16, color: 'var(--control-blue)' }} />
+                        <span>AI 克隆驱动模型：</span>
+                      </div>
+                      <span className="fe-voice-model-tag-free">全部 100% 免费</span>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+
+                    <div className="fe-voice-model-tabs">
                       {[
                         {
                           id: 'pocket-tts',
                           name: 'Pocket TTS',
                           badge: '极速·默认',
-                          desc: '100M 参数，英文优化，发音纯正流畅 (~2s)',
                         },
                         {
                           id: 'ming-omni-tts',
                           name: 'Ming-Omni',
-                          badge: '中英多模态',
-                          desc: '0.5B 参数，贴合中国口音与自然停顿 (~8s)',
+                          badge: '多模态',
                         },
                         {
                           id: 'moss-tts-nano',
                           name: 'MOSS Nano',
                           badge: '复旦架构',
-                          desc: '100M 复旦轻量版，多语种支持 (~2s)',
                         },
                       ].map((m) => {
                         const isSel = cloneModel === m.id
                         return (
-                          <div
+                          <button
                             key={m.id}
+                            type="button"
+                            className={`fe-voice-model-tab-btn ${isSel ? 'is-active' : ''}`}
                             onClick={(e) => {
                               e.stopPropagation()
                               setCloneModel(m.id as 'pocket-tts' | 'ming-omni-tts' | 'moss-tts-nano')
                             }}
-                            style={{
-                              padding: '8px 10px',
-                              borderRadius: 8,
-                              border: `1.5px solid ${isSel ? 'var(--control-accent, #2563eb)' : 'var(--control-line, #e2e8f0)'}`,
-                              background: isSel ? 'rgba(37, 99, 235, 0.05)' : '#ffffff',
-                              cursor: 'pointer',
-                              transition: 'all 0.15s ease',
-                            }}
                           >
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                              <strong style={{ fontSize: 12, color: isSel ? 'var(--control-accent, #2563eb)' : 'var(--control-ink)' }}>
-                                {m.name}
-                              </strong>
-                              <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 4, background: isSel ? '#dbeafe' : '#f1f5f9', color: isSel ? '#1d4ed8' : '#64748b' }}>
-                                {m.badge}
-                              </span>
-                            </div>
-                            <p style={{ margin: 0, fontSize: 11, color: 'var(--control-muted)', lineHeight: 1.3 }}>
-                              {m.desc}
-                            </p>
-                          </div>
+                            <span className="fe-voice-model-tab-name">{m.name}</span>
+                            <span className="fe-voice-model-tab-badge">{m.badge}</span>
+                          </button>
                         )
                       })}
+                    </div>
+
+                    <div className="fe-voice-model-detail-card">
+                      {cloneModel === 'pocket-tts' && (
+                        <div>
+                          <div className="fe-voice-model-detail-title">
+                            <strong>Pocket TTS (Kyutai 100M 极速模型)</strong>
+                            <span>耗时 ~2s · 推荐</span>
+                          </div>
+                          <p>纯正美式/英式语音流，发音连贯清晰，极低延迟高并发，最适合常规作答朗读。</p>
+                        </div>
+                      )}
+                      {cloneModel === 'ming-omni-tts' && (
+                        <div>
+                          <div className="fe-voice-model-detail-title">
+                            <strong>Ming-Omni (0.5B 中英多模态架构)</strong>
+                            <span>耗时 ~8s · 真实语调</span>
+                          </div>
+                          <p>生动还原真人呼吸与自然口语顿挫，贴合中国学生发音习惯，拟真度极高。</p>
+                        </div>
+                      )}
+                      {cloneModel === 'moss-tts-nano' && (
+                        <div>
+                          <div className="fe-voice-model-detail-title">
+                            <strong>MOSS TTS Nano (复旦 100M 轻量版)</strong>
+                            <span>耗时 ~2s · 自然平稳</span>
+                          </div>
+                          <p>复旦团队多语种低延迟开源架构，声线细腻平稳，适合多语境口语表达。</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2645,61 +3096,49 @@ export function AutoCompletePage({
         </div>
       )}
 
-      {/* 6. EXECUTION BOARD (FULLSCREEN MODAL OR MINIMIZED FLOATING BAR) */}
-      {/* Floating Capsule (when minimized or when viewing Kanban/Config while task is active) */}
-      {currentTaskId && (isMinimized || viewMode === 'config') && (
+      {/* Floating Capsule (when task is actively running in background while viewing config) */}
+      {currentTaskId && currentTask && !['COMPLETED', 'FAILED'].includes(currentTask.status) && (
         <div
           className="fe-minimized-floating-capsule"
           onClick={() => {
             setIsMinimized(false)
             setViewMode('execution')
           }}
-          title="点击展开任务执行看板"
+          title="点击展开实时任务执行看板"
         >
           <div className="fe-capsule-spinner">
-            <Icon
-              name={currentTask?.status === 'COMPLETED' ? 'check_circle' : 'sync'}
-              className={currentTask?.status === 'COMPLETED' ? '' : 'fe-spin'}
-            />
+            <Icon name="sync" className="fe-spin" />
           </div>
           <div className="fe-capsule-info">
-            <strong>
-              {currentTask?.status === 'COMPLETED'
-                ? '已完成自动做题'
-                : currentTask?.status === 'FAILED'
-                ? '任务执行中断'
-                : `正在自动完成 (${currentTask?.progress || 10}%)`}
-            </strong>
+            <strong>正在自动完成 ({currentTask?.progress || 10}%)</strong>
             <small>{currentTask?.stage_label || currentTask?.stage_text || '后台流水线处理中...'}</small>
           </div>
-          {currentTask && !['COMPLETED', 'FAILED'].includes(currentTask.status) && (
-            <button
-              type="button"
-              className="fe-capsule-cancel-btn"
-              title="终止任务"
-              onClick={(e) => {
-                e.stopPropagation()
-                void handleCancelTask()
-              }}
-              disabled={isCancelling}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: '#ef4444',
-                cursor: 'pointer',
-                padding: '4px 6px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                fontSize: 16,
-              }}
-            >
-              <Icon name={isCancelling ? 'sync' : 'cancel'} className={isCancelling ? 'fe-spin' : ''} />
-            </button>
-          )}
+          <button
+            type="button"
+            className="fe-capsule-cancel-btn"
+            title="终止任务"
+            onClick={(e) => {
+              e.stopPropagation()
+              void handleCancelTask()
+            }}
+            disabled={isCancelling}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#ef4444',
+              cursor: 'pointer',
+              padding: '4px 6px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              fontSize: 16,
+            }}
+          >
+            <Icon name={isCancelling ? 'sync' : 'cancel'} className={isCancelling ? 'fe-spin' : ''} />
+          </button>
           <button
             type="button"
             className="fe-capsule-expand-btn"
-            title="展开执行看板"
+            title="展开实时执行看板"
             onClick={(e) => {
               e.stopPropagation()
               setIsMinimized(false)
@@ -2710,349 +3149,6 @@ export function AutoCompletePage({
           </button>
         </div>
       )}
-
-      {/* Full Dashboard Modal (only when viewMode is execution and not minimized) */}
-      {currentTaskId && viewMode === 'execution' && !isMinimized && (
-        <div className="fe-risk-fullscreen-overlay">
-          <div className="fe-execution-card">
-            <div className="fe-execution-head">
-              <div>
-                <h2>自动完成任务执行看板</h2>
-                <p>正在调度云端双代理与语音引擎，模拟逐题完成与上报</p>
-              </div>
-              <div className="fe-execution-head-controls">
-                {currentTask && !['COMPLETED', 'FAILED'].includes(currentTask.status) && (
-                  <button
-                    type="button"
-                    className="fe-head-control-btn fe-head-cancel-btn"
-                    onClick={() => handleCancelTask()}
-                    disabled={isCancelling}
-                    title="立即终止当前云端任务"
-                    style={{ color: '#ef4444', borderColor: '#fca5a5' }}
-                  >
-                    <Icon name={isCancelling ? 'sync' : 'cancel'} className={isCancelling ? 'fe-spin' : ''} />
-                    <span>{isCancelling ? '终止中...' : '终止任务'}</span>
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="fe-head-control-btn"
-                  onClick={() => {
-                    if (currentTask && ['COMPLETED', 'FAILED'].includes(currentTask.status)) {
-                      handleDismissTaskModal()
-                      setViewMode('kanban')
-                    } else {
-                      setIsMinimized(true)
-                      setViewMode('kanban')
-                    }
-                  }}
-                  title={currentTask && ['COMPLETED', 'FAILED'].includes(currentTask.status) ? '关闭看板' : '最小化至右下角并前往任务看板'}
-                >
-                  <Icon name={currentTask && ['COMPLETED', 'FAILED'].includes(currentTask.status) ? 'close' : 'close_fullscreen'} />
-                  <span>{currentTask && ['COMPLETED', 'FAILED'].includes(currentTask.status) ? '关闭' : '最小化'}</span>
-                </button>
-              </div>
-            </div>
-
-                <div className="fe-execution-body">
-                  {currentTask?.status === 'FAILED' ? (
-                    <div className="fe-empty-state">
-                      <div className="fe-empty-state__icon" style={{ background: '#fef2f2', color: '#dc2626' }}>
-                        <Icon name="error" />
-                      </div>
-                      <h2>任务执行遇到问题</h2>
-                      <p style={{ maxWidth: 520, margin: '8px auto 0', color: '#b91c1c', wordBreak: 'break-word', whiteSpace: 'pre-line' }}>
-                        {currentTask.error || currentTask.stage_label || '云端同步或平台通信发生错误，请稍后重试。'}
-                      </p>
-                      <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 20 }}>
-                        <button
-                          type="button"
-                          className="control-primary"
-                          onClick={() => {
-                            handleDismissTaskModal()
-                            onRequestPermit?.()
-                          }}
-                        >
-                          <Icon name="replay" />
-                          <span>重新尝试执行</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="control-secondary"
-                          onClick={() => {
-                            handleDismissTaskModal()
-                            void loadHistoryTasks(false)
-                            setViewMode('kanban')
-                          }}
-                        >
-                          <Icon name="dashboard" />
-                          <span>前往任务看板</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="control-secondary"
-                          onClick={() => {
-                            handleDismissTaskModal()
-                            onBack()
-                          }}
-                        >
-                          <Icon name="arrow_back" />
-                          <span>返回作业列表</span>
-                        </button>
-                      </div>
-                    </div>
-                  ) : currentTask?.status === 'COMPLETED' ? (
-                    /* Settlement card (做题效果全景展示) */
-                    <div className="fe-settlement-card">
-                      <div className="fe-settlement-icon-wrap">
-                        <Icon name="verified" filled />
-                      </div>
-                      <h3>恭喜，作业已成功自动完成并提交！</h3>
-                      <p className="fe-settlement-desc">
-                        所有题目作答录音与真实换算评分已通过国内代理成功上报至 ETS100 云端官方平台。
-                      </p>
-
-                      {/* Summary Score Stats */}
-                      <div className="fe-settlement-stats">
-                        <div className="fe-settlement-tile">
-                          <small>官方最终得分</small>
-                          <strong style={{ color: '#16a34a' }}>
-                            {Number((currentTask.result?.score ?? currentTask.result?.final_score ?? (mode === 'auto' ? autoTargetTotal : manualTotalSum)).toFixed(2))} 分
-                          </strong>
-                        </div>
-                        <div className="fe-settlement-tile">
-                          <small>试卷总满分</small>
-                          <strong>{paperTotalScore.toFixed(1)} 分</strong>
-                        </div>
-                        <div className="fe-settlement-tile">
-                          <small>最终得分率</small>
-                          <strong style={{ color: '#2563eb' }}>
-                            {currentTask.result?.score_rate ?? (
-                              paperTotalScore > 0
-                                ? ((Number(currentTask.result?.score ?? currentTask.result?.final_score ?? (mode === 'auto' ? autoTargetTotal : manualTotalSum)) / paperTotalScore) * 100).toFixed(1)
-                                : '95.0'
-                            )}%
-                          </strong>
-                        </div>
-                        <div className="fe-settlement-tile">
-                          <small>实际做题用时</small>
-                          <strong>{formatSeconds(currentTask.result?.use_time || selectedUseTimeSeconds)}</strong>
-                        </div>
-                      </div>
-
-                      {/* Question by question completion breakdown table */}
-                      <div className="fe-settlement-table-wrap">
-                        <table className="fe-settlement-table">
-                          <thead>
-                            <tr>
-                              <th>题号</th>
-                              <th>题型</th>
-                              <th>题目内容节选</th>
-                              <th>真实满分</th>
-                              <th>最终实际得分</th>
-                              <th>克隆音频回放</th>
-                              <th>官方状态</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(currentTask.result?.question_details || currentTask.question_results || allocatedQuestionScores).map((rawItem: unknown, idx: number) => {
-                              const item = rawItem as Record<string, unknown>
-                              const order = Number(item.order || idx + 1)
-                              const typeName = String(item.type_name || item.typeName || '题目')
-                              const text = String(item.text || item.questionText || `第 ${order} 题`)
-                              const maxS = (item.max_score ?? item.maxScore ?? (paperTotalScore / Math.max(1, totalQuestions))) as number
-                              const score = (item.awarded_score ?? item.allocatedScore ?? (manualScores[order] || 0)) as number
-                              const audioUrl = item.audio_url as string | undefined
-                              return (
-                                <tr key={order}>
-                                  <td><strong>Q{order}</strong></td>
-                                  <td><span className="fe-td-type">{typeName}</span></td>
-                                  <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={text}>
-                                    {text}
-                                  </td>
-                                  <td>{Number(maxS).toFixed(2)} 分</td>
-                                  <td><strong style={{ color: '#16a34a' }}>{Number(score).toFixed(2)} 分</strong></td>
-                                  <td>
-                                    {audioUrl ? (
-                                      <div className="fe-audio-cell">
-                                        <audio controls src={audioUrl} preload="none" className="fe-audio-player" />
-                                      </div>
-                                    ) : (
-                                      <span style={{ color: '#94a3b8', fontSize: 11 }}>无音频 (免录音题)</span>
-                                    )}
-                                  </td>
-                                  <td>
-                                    <span className="admin-pill-badge is-active" style={{ fontSize: 11 }}>
-                                      <Icon name="check" style={{ fontSize: 12 }} /> 官方已核验
-                                    </span>
-                                  </td>
-                                </tr>
-                              )
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      <div className="fe-settlement-actions" style={{ display: 'flex', gap: 12, justifyContent: 'center', width: '100%', marginTop: 8, flexWrap: 'wrap' }}>
-                        <button
-                          type="button"
-                          className="control-primary"
-                          onClick={() => {
-                            handleDismissTaskModal()
-                            onToast?.('正在返回作业列表...')
-                            onBack()
-                          }}
-                        >
-                          <Icon name="assignment" />
-                          <span>返回作业列表</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="control-secondary"
-                          onClick={() => {
-                            handleDismissTaskModal()
-                            void loadHistoryTasks(false)
-                            setSelectedHistoryTask(null)
-                            setViewMode('kanban')
-                          }}
-                        >
-                          <Icon name="dashboard" />
-                          <span>前往任务看板</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="control-secondary"
-                          onClick={() => {
-                            handleDismissTaskModal()
-                            setViewMode('config')
-                          }}
-                        >
-                          <Icon name="tune" />
-                          <span>重新配置此作业</span>
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    /* In Progress Dashboard */
-                    <div className="fe-execution-active-box">
-                      {/* 8-Stage Pipeline Strip */}
-                      <div className="fe-pipeline-steps">
-                        {[
-                          { num: 1, label: '会话就绪', p: 5 },
-                          { num: 2, label: '试卷提取', p: 15 },
-                          { num: 3, label: '题型规划', p: 25 },
-                          { num: 4, label: '逐题做题', p: 40 },
-                          { num: 5, label: '语音合成', p: 60 },
-                          { num: 6, label: '评分上报', p: 75 },
-                          { num: 7, label: '用时终审', p: 85 },
-                          { num: 8, label: '云端核对', p: 95 },
-                        ].map((s) => {
-                          const curP = currentTask?.progress || 10
-                          const isDone = curP > s.p + 8
-                          const isActive = curP >= s.p && curP <= s.p + 8
-                          return (
-                            <div
-                              key={s.num}
-                              className={`fe-pipeline-step ${isDone ? 'is-done' : ''} ${isActive ? 'is-active' : ''}`}
-                            >
-                              <Icon name={isDone ? 'check' : isActive ? 'sync' : 'circle'} className={isActive ? 'fe-spin' : ''} style={{ fontSize: 12 }} />
-                              <span>{s.num}. {s.label}</span>
-                            </div>
-                          )
-                        })}
-                      </div>
-
-                      {/* Big Progress Bar */}
-                      <div className="fe-exec-progress-track">
-                        <div
-                          className="fe-exec-progress-bar"
-                          style={{ width: `${Math.max(6, currentTask?.progress || 10)}%` }}
-                        />
-                      </div>
-
-                      <div className="fe-exec-progress-meta">
-                        <span className="fe-exec-stage-text">
-                          <Icon name="sync" className="fe-spin" />
-                          {currentTask?.stage_label || currentTask?.stage_text || '正在连接国内代理节点并初始化做题环境...'}
-                        </span>
-                        <strong className="fe-exec-percentage">
-                          {currentTask?.progress || 10}%
-                        </strong>
-                      </div>
-
-                      {/* Question Stem preview with fade in */}
-                      <div className="fe-exec-stem-preview">
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <small>
-                            当前作答题干 (第 {currentTask?.current_question_index || 1} / {currentTask?.total_questions || totalQuestions} 题)：
-                          </small>
-                          <span className="admin-pill-badge is-muted" style={{ fontSize: 11 }}>
-                            {voiceMode === 'clone' ? '专属音色克隆中' : voiceMode === 'edge' ? 'Edge-TTS 合成中' : '静音模式'}
-                          </span>
-                        </div>
-                        <p className="fe-stem-text">
-                          {currentTask?.current_question_text || '正在逐题提取作答素材与发音词汇表...'}
-                        </p>
-                      </div>
-
-                      {/* Live Questions Checklist */}
-                      {currentTask?.question_results && currentTask.question_results.length > 0 && (
-                        <div className="fe-exec-questions-checklist">
-                          <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--control-muted)', marginBottom: 2 }}>
-                            已完成题目流水明细 ({currentTask.question_results.length}/{currentTask.total_questions || totalQuestions})：
-                          </div>
-                          {currentTask.question_results.map((q) => (
-                            <div key={q.order} className="fe-exec-q-item is-done">
-                              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <Icon name="check_circle" style={{ fontSize: 14, color: '#16a34a' }} />
-                                <strong>Q{q.order}</strong>
-                                <span style={{ color: 'var(--control-muted)', fontSize: 11 }}>[{q.type_name}]</span>
-                                <span style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {q.text}
-                                </span>
-                              </span>
-                              <strong style={{ color: '#15803d', fontFamily: 'DM Mono, monospace' }}>
-                                +{q.awarded_score.toFixed(2)} 分
-                              </strong>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="fe-exec-details-grid">
-                        <div className="fe-exec-tile">
-                          <small>代理通道</small>
-                          <span>国内双节点轮询容灾</span>
-                        </div>
-                        <div className="fe-exec-tile">
-                          <small>音色模式</small>
-                          <span>
-                            {voiceMode === 'clone'
-                              ? '专属声音克隆 (tts.ai)'
-                              : voiceMode === 'edge'
-                              ? 'Edge-TTS 机读原声'
-                              : '不上传声音'}
-                          </span>
-                        </div>
-                        <div className="fe-exec-tile">
-                          <small>目标总分与比例</small>
-                          <span>{mode === 'auto' ? `${autoTargetTotal.toFixed(2)}分 (95%比例)` : `${manualTotalSum.toFixed(2)}分`}</span>
-                        </div>
-                      </div>
-
-                      {/* In-Progress Footer Navigation Actions */}
-                      <div className="fe-execution-in-progress-footer">
-                        <div className="fe-exec-footer-tip">
-                          <Icon name="info" style={{ fontSize: 16, color: '#3b82f6' }} />
-                          <span>提示：流水线在云端全自动持续运行，最小化后不会影响答题进度</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
     </div>
   )
 }
