@@ -2,15 +2,18 @@ import { oauthConfig, oauthTransactionMaxAgeMs, oauthTransactionStorageKey } fro
 import { createCodeChallenge, createRandomValue } from './pkce'
 import type { OAuthTokenResponse, OAuthTransaction } from './types'
 import { beginNavigationActivity, transitionTo } from '../navigation/controller'
-import { getOrCreateDeviceId } from '../api/auth'
+import { ApiError, getOrCreateDeviceId } from '../api/auth'
 
 export function normalizeReturnTo(value: string | null | undefined) {
-  if (value === '/' || value === '/history' || value === '/settings') return value
+  if (!value) return '/'
+  if (value === '/' || value === '/history' || value === '/pk' || value === '/settings') return value
+  if (value.startsWith('/auto-complete')) return value
   return '/'
 }
 
-function isValidReturnTo(value: unknown): value is '/' | '/history' | '/settings' {
-  return value === '/' || value === '/history' || value === '/settings'
+function isValidReturnTo(value: unknown): value is string {
+  if (typeof value !== 'string') return false
+  return value === '/' || value === '/history' || value === '/pk' || value === '/settings' || value.startsWith('/auto-complete')
 }
 
 function readTransaction(): OAuthTransaction | null {
@@ -110,3 +113,38 @@ export async function exchangeAuthorizationCode(code: string, verifier: string):
   if (!response.ok) throw new Error('登录凭据无效或已过期，请重新登录')
   return response.json() as Promise<OAuthTokenResponse>
 }
+
+export async function refreshOAuthToken(refreshToken: string): Promise<OAuthTokenResponse> {
+  const body = new URLSearchParams({
+    grant_type: 'refresh_token',
+    refresh_token: refreshToken,
+    client_id: oauthConfig.clientId,
+  })
+  let response: Response
+  try {
+    response = await fetch(oauthConfig.tokenUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-Device-Id': getOrCreateDeviceId(),
+        'X-Platform': 'web',
+        'X-Software-Key': 'fe-web',
+      },
+      body,
+    })
+  } catch {
+    throw new ApiError('无法连接认证服务，请检查网络后重试', 0, { isNetworkError: true })
+  }
+  if (!response.ok) {
+    let message = `令牌刷新失败（${response.status}）`
+    try {
+      const data = (await response.json()) as { detail?: string }
+      if (data.detail) message = data.detail
+    } catch {
+      // ignore
+    }
+    throw new ApiError(message, response.status)
+  }
+  return response.json() as Promise<OAuthTokenResponse>
+}
+

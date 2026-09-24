@@ -23,7 +23,7 @@ import {
 import AuthGate from './auth/AuthGate'
 import Callback from './auth/Callback'
 import { oauthConfig } from './auth/config'
-import { startAuthorization } from './auth/oauth'
+import { refreshOAuthToken, startAuthorization } from './auth/oauth'
 import type { AuthSession } from './auth/types'
 import { transitionRoute, transitionTo } from './navigation/controller'
 import CapVerification from './CapVerification'
@@ -44,6 +44,44 @@ const logoSrc = '/fe_logo.png'
 const sidebarCollapsedStorageKey = 'fe-web.sidebar-collapsed'
 const skipRiskWarningStorageKey = 'fe-web.skip-risk-warning'
 const STORAGE_KEY_ACTIVE_TASK = 'fe_auto_complete_active_task'
+const SESSION_STORAGE_KEY = 'lastudio.feweb.session'
+const SESSION_EXPIRY_MARGIN_MS = 30_000
+
+function readStoredSession(): AuthSession | null {
+  try {
+    const raw = window.localStorage.getItem(SESSION_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as AuthSession
+    if (
+      !parsed
+      || typeof parsed.accessToken !== 'string'
+      || !Number.isFinite(parsed.expiresAt)
+    ) {
+      window.localStorage.removeItem(SESSION_STORAGE_KEY)
+      return null
+    }
+    if (parsed.expiresAt <= Date.now() + SESSION_EXPIRY_MARGIN_MS && !parsed.refreshToken) {
+      window.localStorage.removeItem(SESSION_STORAGE_KEY)
+      return null
+    }
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function writeStoredSession(session: AuthSession | null) {
+  try {
+    if (session) {
+      window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session))
+    } else {
+      window.localStorage.removeItem(SESSION_STORAGE_KEY)
+    }
+  } catch {
+    // LocalStorage might be disabled in private mode
+  }
+}
+
 
 function readStoredActiveTask(): AutoCompleteTaskResponse | null {
   try {
@@ -537,6 +575,7 @@ function PaperReaderView({
   onReParse,
   onManualRead,
   onAutoComplete,
+  activeTask,
 }: {
   homework: HomeworkItem
   paper: Paper | null
@@ -551,6 +590,7 @@ function PaperReaderView({
   onReParse: () => void
   onManualRead: () => void
   onAutoComplete?: () => void
+  activeTask?: AutoCompleteTaskResponse | null
 }) {
   return (
     <div className="fe-reader-view">
@@ -598,6 +638,31 @@ function PaperReaderView({
             )}
             {onAutoComplete && (() => {
               const compat = checkHomeworkCompatibility(homework, paper)
+              const isThisTaskRunning =
+                activeTask &&
+                String(activeTask.homework_id) === String(homework.id) &&
+                !['COMPLETED', 'FAILED'].includes(activeTask.status)
+
+              if (isThisTaskRunning) {
+                return (
+                  <button
+                    className="control-primary fe-btn-auto-complete is-running"
+                    type="button"
+                    style={{
+                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      borderColor: '#059669',
+                      color: '#ffffff',
+                      boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)',
+                    }}
+                    onClick={onAutoComplete}
+                    title={`该作业正在后台自动答题中（进度 ${activeTask.progress || 0}%），点击查看实时执行看板`}
+                  >
+                    <Icon name="sync" className="fe-spin" />
+                    <span>执行中 ({activeTask.progress || 0}%)</span>
+                  </button>
+                )
+              }
+
               return (
                 <button
                   className={`control-primary fe-btn-auto-complete ${!compat.supported ? 'control-disabled' : ''}`}
@@ -756,6 +821,7 @@ function HomeworkCard({
   onOpen,
   onTriggerParse,
   onAutoComplete,
+  activeTask,
 }: {
   item: HomeworkItem
   index: number
@@ -766,6 +832,7 @@ function HomeworkCard({
   onOpen: (hw: HomeworkItem) => void
   onTriggerParse: (hw: HomeworkItem) => void
   onAutoComplete?: (hw: HomeworkItem) => void
+  activeTask?: AutoCompleteTaskResponse | null
 }) {
   return (
     <div
@@ -834,6 +901,36 @@ function HomeworkCard({
         {onAutoComplete && (() => {
           const isDone = item.status === 2 || item.status === '2'
           const compat = checkHomeworkCompatibility(item)
+          const isThisTaskRunning =
+            activeTask &&
+            String(activeTask.homework_id) === String(item.id) &&
+            !['COMPLETED', 'FAILED'].includes(activeTask.status)
+
+          if (isThisTaskRunning) {
+            return (
+              <button
+                className="control-primary fe-btn-auto-complete is-running"
+                type="button"
+                style={{
+                  padding: '7px 14px',
+                  fontSize: 12.5,
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  borderColor: '#059669',
+                  color: '#ffffff',
+                  boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)',
+                }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onAutoComplete(item)
+                }}
+                title={`该作业正在后台自动答题中（进度 ${activeTask.progress || 0}%），点击查看实时执行看板`}
+              >
+                <Icon name="sync" className="fe-spin" />
+                <span>执行中 ({activeTask.progress || 0}%)</span>
+              </button>
+            )
+          }
+
           return (
             <button
               className={`control-secondary fe-btn-auto-complete ${!compat.supported ? 'control-disabled' : ''}`}
@@ -960,6 +1057,7 @@ function HomeworkListView({
   onOpenHomework,
   onTriggerParse,
   onAutoComplete,
+  activeTask,
 }: {
   activeTab: 'current' | 'history' | 'pk'
   hasLoaded: boolean
@@ -980,6 +1078,7 @@ function HomeworkListView({
   onOpenHomework: (hw: HomeworkItem) => void
   onTriggerParse: (hw: HomeworkItem) => void
   onAutoComplete?: (hw: HomeworkItem) => void
+  activeTask?: AutoCompleteTaskResponse | null
 }) {
   const [query, setQuery] = useState('')
 
@@ -1355,6 +1454,7 @@ function HomeworkListView({
               onOpen={onOpenHomework}
               onTriggerParse={onTriggerParse}
               onAutoComplete={onAutoComplete}
+              activeTask={activeTask}
             />
           ))}
         </div>
@@ -1605,13 +1705,18 @@ function currentPage(pathname: string): Page | null {
 
 function App() {
   const [pathname, setPathname] = useState(() => window.location.pathname)
-  const [session, setSession] = useState<AuthSession | null>(null)
-  const [currentUser, setCurrentUser] = useState<User | null>(null)
+  const [session, setSessionState] = useState<AuthSession | null>(readStoredSession)
+  const [currentUser, setCurrentUser] = useState<User | null>(() => readStoredSession()?.user ?? null)
   const [authMessage, setAuthMessage] = useState('')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(readStoredSidebarCollapsed)
   const [headerCompact, setHeaderCompact] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const authorizationStarted = useRef(false)
+  const sessionRef = useRef(session)
+  sessionRef.current = session
+  const refreshingPromise = useRef<Promise<AuthSession | null> | null>(null)
+  const sessionAccessToken = session?.accessToken
+  const sessionExpiresAt = session?.expiresAt
   const page = currentPage(pathname)
 
   // Fluid header scroll state
@@ -1692,6 +1797,62 @@ function App() {
     }
   }, [userMenuOpen])
 
+  const updateSession = useCallback((next: AuthSession | null) => {
+    setSessionState(next)
+    writeStoredSession(next)
+  }, [])
+
+  const clearSession = useCallback(() => {
+    authorizationStarted.current = false
+    updateSession(null)
+    setCurrentUser(null)
+    setAuthMessage('')
+  }, [updateSession])
+
+  const refreshSession = useCallback(async (): Promise<AuthSession | null> => {
+    const current = sessionRef.current
+    if (!current?.refreshToken) {
+      clearSession()
+      return null
+    }
+    if (refreshingPromise.current) return refreshingPromise.current
+
+    const task = (async () => {
+      try {
+        const token = await refreshOAuthToken(current.refreshToken!)
+        const nextSession: AuthSession = {
+          ...current,
+          accessToken: token.access_token,
+          tokenType: token.token_type,
+          expiresAt: Date.now() + token.expires_in * 1000,
+          scope: token.scope || current.scope,
+          refreshToken: token.refresh_token || current.refreshToken,
+        }
+        updateSession(nextSession)
+        return nextSession
+      } catch (err) {
+        console.error('Failed to refresh session token:', err)
+        if (err instanceof ApiError && (err.status === 400 || err.status === 401)) {
+          clearSession()
+        } else if (current.expiresAt <= Date.now()) {
+          clearSession()
+        }
+        return null
+      } finally {
+        refreshingPromise.current = null
+      }
+    })()
+
+    refreshingPromise.current = task
+    return task
+  }, [clearSession, updateSession])
+
+  const signOut = useCallback(() => {
+    setUserMenuOpen(false)
+    clearSession()
+    transitionTo(oauthConfig.logoutUrl)
+  }, [clearSession])
+
   // Software Config & Features State
   const [softwareConfig, setSoftwareConfig] = useState<SoftwareConfig | null>(null)
   const [softwareFeatures, setSoftwareFeatures] = useState<SoftwareFeatureItem[]>([])
@@ -1742,21 +1903,28 @@ function App() {
 
   // Fetch current user profile whenever session exists
   useEffect(() => {
-    if (!session) return
+    if (!sessionAccessToken || (sessionExpiresAt !== undefined && sessionExpiresAt <= Date.now())) return
     let active = true
-    getCurrentUser(session.accessToken)
+    getCurrentUser(sessionAccessToken)
       .then((user) => {
-        if (active) setCurrentUser(user)
+        if (active) {
+          setCurrentUser(user)
+          setSessionState((prev) => {
+            if (!prev) return prev
+            const next = { ...prev, user }
+            writeStoredSession(next)
+            return next
+          })
+        }
       })
       .catch((err) => {
-        if (active) setCurrentUser(null)
         console.error('Failed to load current user profile:', err)
       })
 
     return () => {
       active = false
     }
-  }, [session])
+  }, [sessionAccessToken, sessionExpiresAt])
 
   type FeatureCheck = {
     enabled: boolean
@@ -1821,40 +1989,55 @@ function App() {
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
-      authorizationStarted.current = false
-      setSession(null)
-      setCurrentUser(null)
-      setAuthMessage('')
-    })
-    return () => setUnauthorizedHandler(null)
-  }, [])
-
-  useEffect(() => {
-    if (!session) return
-    const timer = window.setTimeout(() => {
-      authorizationStarted.current = false
-      setSession(null)
-      setCurrentUser(null)
-      setAuthMessage('')
-    }, Math.max(0, session.expiresAt - Date.now()))
-    return () => window.clearTimeout(timer)
-  }, [session])
-
-  useEffect(() => {
-    if (!session || !page) return
-    let active = true
-    void getCurrentUser(session.accessToken).catch((error: unknown) => {
-      if (active && error instanceof ApiError && error.status === 401) {
-        authorizationStarted.current = false
-        setSession(null)
-        setCurrentUser(null)
-        setAuthMessage('')
+      const current = sessionRef.current
+      if (current?.refreshToken) {
+        void refreshSession()
+      } else {
+        clearSession()
       }
     })
-    return () => {
-      active = false
+    return () => setUnauthorizedHandler(null)
+  }, [clearSession, refreshSession])
+
+  // Proactive background refresh timer: silently renew token 5 min before expiry
+  useEffect(() => {
+    if (!session) return
+    const timeUntilRefresh = session.expiresAt - Date.now() - 5 * 60 * 1000
+    if (timeUntilRefresh <= 0) {
+      const immediateTimer = window.setTimeout(() => {
+        if (session.refreshToken) {
+          void refreshSession()
+        } else {
+          clearSession()
+        }
+      }, 0)
+      return () => window.clearTimeout(immediateTimer)
     }
-  }, [page, session])
+    const timeout = window.setTimeout(() => {
+      if (session.refreshToken) {
+        void refreshSession()
+      } else {
+        clearSession()
+      }
+    }, timeUntilRefresh)
+    return () => window.clearTimeout(timeout)
+  }, [clearSession, refreshSession, session])
+
+  // Sync session state across tabs
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== SESSION_STORAGE_KEY) return
+      const nextSession = readStoredSession()
+      setSessionState(nextSession)
+      if (nextSession?.user) {
+        setCurrentUser(nextSession.user)
+      } else if (!nextSession) {
+        setCurrentUser(null)
+      }
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
 
   useEffect(() => {
     if (!page || session || authMessage || authorizationStarted.current || pathname === '/auth/callback') return
@@ -1867,10 +2050,10 @@ function App() {
 
   // Fetch platform account info on login (does not call ETS100, safe from kickout)
   useEffect(() => {
-    if (!session) return
+    if (!sessionAccessToken || (sessionExpiresAt !== undefined && sessionExpiresAt <= Date.now())) return
     let active = true
 
-    getPlatformAccount(session.accessToken)
+    getPlatformAccount(sessionAccessToken)
       .then((account) => {
         if (!active) return
         setAccountInfo(account)
@@ -1883,7 +2066,7 @@ function App() {
     return () => {
       active = false
     }
-  }, [session])
+  }, [sessionAccessToken, sessionExpiresAt])
 
   useEffect(() => {
     return () => {
@@ -2413,21 +2596,33 @@ function App() {
   const [autoCompleteTargetHw, setAutoCompleteTargetHw] = useState<HomeworkItem | null>(null)
 
   function handleTriggerAutoComplete(hw: HomeworkItem) {
-    // If this exact homework is already running in background, jump directly to dashboard
+    // If this exact homework is already running in background, jump directly to execution dashboard
     if (
       activeTask &&
       String(activeTask.homework_id) === String(hw.id) &&
       !['COMPLETED', 'FAILED'].includes(activeTask.status)
     ) {
-      showToast(`「${hw.name}」已在后台自动完成中（进度 ${activeTask.progress || 0}%），正在前往看板...`)
-      navigate(`/homework/${hw.id}/auto-complete`)
+      showToast(`正在打开「${hw.name}」的实时执行看板（当前进度 ${activeTask.progress || 0}%）...`)
+      setAutoCompleteTargetHw(hw)
+      navigate('/auto-complete')
+      return
+    }
+
+    // If another homework is already running, prevent overriding it and guide user
+    if (
+      activeTask &&
+      !['COMPLETED', 'FAILED'].includes(activeTask.status) &&
+      String(activeTask.homework_id) !== String(hw.id)
+    ) {
+      showToast(`已有任务「${activeTask.homework_name || '其他作业'}」正在后台执行中，请先等待完成或前往看板查看`)
+      navigate('/auto-complete')
       return
     }
 
     // If activeTask belongs to another homework or is already finished, reset it
     if (
       activeTask &&
-      (['COMPLETED', 'FAILED'].includes(activeTask.status) || String(activeTask.homework_id) !== String(hw.id))
+      ['COMPLETED', 'FAILED'].includes(activeTask.status)
     ) {
       updateActiveTask(null)
     }
@@ -2553,7 +2748,7 @@ function App() {
 
   // Restore latest active auto-complete task on session init
   useEffect(() => {
-    if (!session?.accessToken) return
+    if (!session?.accessToken || session.expiresAt <= Date.now()) return
     let active = true
     getLatestAutoCompleteTask(session.accessToken)
       .then((res) => {
@@ -2580,11 +2775,11 @@ function App() {
     return () => {
       active = false
     }
-  }, [session?.accessToken])
+  }, [session?.accessToken, session?.expiresAt])
 
   // Global background polling for active task
   useEffect(() => {
-    if (!session?.accessToken || !activeTask?.task_id) return
+    if (!session?.accessToken || session.expiresAt <= Date.now() || !activeTask?.task_id) return
     if (activeTask.status === 'COMPLETED' || activeTask.status === 'FAILED') return
 
     const taskId = activeTask.task_id
@@ -2678,7 +2873,8 @@ function App() {
     return (
       <Callback
         onAuthenticated={(nextSession, returnTo) => {
-          setSession(nextSession)
+          updateSession(nextSession)
+          if (nextSession.user) setCurrentUser(nextSession.user)
           transitionRoute(() => {
             window.history.replaceState(null, '', returnTo)
             setPathname(returnTo)
@@ -2936,10 +3132,7 @@ function App() {
                     <div className="control-user-dropdown-footer">
                       <button
                         className="control-user-dropdown-logout"
-                        onClick={() => {
-                          setUserMenuOpen(false)
-                          transitionTo(oauthConfig.logoutUrl)
-                        }}
+                        onClick={signOut}
                         type="button"
                         role="menuitem"
                       >
@@ -2956,7 +3149,7 @@ function App() {
 
             <button
               className="control-icon-button control-header-logout-button"
-              onClick={() => transitionTo(oauthConfig.logoutUrl)}
+              onClick={signOut}
               title="退出登录"
               type="button"
             >
@@ -3054,14 +3247,22 @@ function App() {
             <div>
               <h1>
                 {isAutoCompleteRoute
-                  ? `作业自动完成 · ${autoCompleteTargetHw?.name || '试卷答题配置'}`
+                  ? (activeTask && !['COMPLETED', 'FAILED'].includes(activeTask.status)
+                      ? '作业自动完成 · 实时执行看板'
+                      : pathname === '/auto-complete'
+                      ? '作业自动完成 · 任务看板与历史'
+                      : `作业自动完成 · ${autoCompleteTargetHw?.name || '任务部署工作台'}`)
                   : viewingPaper
                   ? `试卷阅读 · ${viewingPaper.homework.name}`
                   : meta.title}
               </h1>
               <span>
                 {isAutoCompleteRoute
-                  ? '高拟真自动化答题、分值调度与风控防呆'
+                  ? (activeTask && !['COMPLETED', 'FAILED'].includes(activeTask.status)
+                      ? `正在实时执行「${activeTask.homework_name || '作业'}」· 当前进度 ${activeTask.progress || 0}%`
+                      : pathname === '/auto-complete'
+                      ? '后台流水线监控、实时答题跟踪与历史效果回溯'
+                      : '配置目标分值、作答时长与拟真音色模型')
                   : viewingPaper
                   ? '查看作业结构、题目解析与标准答案'
                   : meta.caption}
@@ -3219,6 +3420,7 @@ function App() {
               onExportAnswer={() => viewingPaper.paper && handleExportAnswer(viewingPaper.paper)}
               onReParse={() => handleReReadPaper(viewingPaper.homework)}
               onManualRead={() => handleManualReadPaper(viewingPaper.homework)}
+              activeTask={activeTask}
             />
           ) : (
             <HomeworkListView
@@ -3247,6 +3449,7 @@ function App() {
               onOpenHomework={handleOpenHomework}
               onTriggerParse={handleTriggerParse}
               onAutoComplete={handleTriggerAutoComplete}
+              activeTask={activeTask}
             />
           )}
         </section>
