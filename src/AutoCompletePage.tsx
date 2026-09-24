@@ -141,6 +141,7 @@ export function AutoCompletePage({
 
   // Voice selection
   const [voiceMode, setVoiceMode] = useState<AutoCompleteVoiceMode>('clone')
+  const [cloneModel, setCloneModel] = useState<'pocket-tts' | 'ming-omni-tts' | 'moss-tts-nano'>('pocket-tts')
   const [voices, setVoices] = useState<VoiceProfile[]>([])
   const [selectedVoiceId, setSelectedVoiceId] = useState<string>('')
   const [isPlayingPreview, setIsPlayingPreview] = useState(false)
@@ -1549,6 +1550,7 @@ export function AutoCompletePage({
         use_time: selectedUseTimeSeconds,
         voice_mode: voiceMode,
         voice_id: voiceMode === 'clone' ? (selectedVoiceId || undefined) : undefined,
+        clone_model: voiceMode === 'clone' ? cloneModel : undefined,
         per_question_scores: perQuestionScoresPayload,
         per_question_audio: mode === 'manual' && Object.keys(manualQuestionAudios).length > 0 ? manualQuestionAudios : undefined,
         permit_token: permitToken || '',
@@ -2241,6 +2243,66 @@ export function AutoCompletePage({
                       ) : null}
                     </div>
                   )}
+
+                  <div className="fe-voice-model-picker" style={{ marginTop: 12, borderTop: '1px dashed var(--control-line, #e2e8f0)', paddingTop: 10 }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--control-muted)', marginBottom: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>免费克隆模型选择：</span>
+                      <span style={{ fontSize: 11, color: '#16a34a' }}>全部 100% 免费</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                      {[
+                        {
+                          id: 'pocket-tts',
+                          name: 'Pocket TTS',
+                          badge: '极速·默认',
+                          desc: '100M 参数，英文优化，发音纯正流畅 (~2s)',
+                        },
+                        {
+                          id: 'ming-omni-tts',
+                          name: 'Ming-Omni',
+                          badge: '中英多模态',
+                          desc: '0.5B 参数，贴合中国口音与自然停顿 (~8s)',
+                        },
+                        {
+                          id: 'moss-tts-nano',
+                          name: 'MOSS Nano',
+                          badge: '复旦架构',
+                          desc: '100M 复旦轻量版，多语种支持 (~2s)',
+                        },
+                      ].map((m) => {
+                        const isSel = cloneModel === m.id
+                        return (
+                          <div
+                            key={m.id}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setCloneModel(m.id as 'pocket-tts' | 'ming-omni-tts' | 'moss-tts-nano')
+                            }}
+                            style={{
+                              padding: '8px 10px',
+                              borderRadius: 8,
+                              border: `1.5px solid ${isSel ? 'var(--control-accent, #2563eb)' : 'var(--control-line, #e2e8f0)'}`,
+                              background: isSel ? 'rgba(37, 99, 235, 0.05)' : '#ffffff',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                              <strong style={{ fontSize: 12, color: isSel ? 'var(--control-accent, #2563eb)' : 'var(--control-ink)' }}>
+                                {m.name}
+                              </strong>
+                              <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 4, background: isSel ? '#dbeafe' : '#f1f5f9', color: isSel ? '#1d4ed8' : '#64748b' }}>
+                                {m.badge}
+                              </span>
+                            </div>
+                            <p style={{ margin: 0, fontSize: 11, color: 'var(--control-muted)', lineHeight: 1.3 }}>
+                              {m.desc}
+                            </p>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

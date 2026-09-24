@@ -32,6 +32,7 @@ export type StartAutoCompletePayload = {
   use_time: number
   voice_mode: AutoCompleteVoiceMode
   voice_id?: string
+  clone_model?: 'pocket-tts' | 'ming-omni-tts' | 'moss-tts-nano'
   per_question_scores?: Record<number, number | { total: number }>
   per_question_audio?: Record<string | number, string>
   permit_token: string
