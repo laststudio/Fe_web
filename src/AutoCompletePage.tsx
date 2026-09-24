@@ -94,9 +94,11 @@ export function AutoCompletePage({
   })
 
 
-  const loadHistoryTasks = useCallback(() => {
+  const loadHistoryTasks = useCallback((showSpinner = false) => {
     if (!accessToken) return
-    setIsLoadingHistory(true)
+    if (showSpinner) {
+      setIsLoadingHistory(true)
+    }
     getAutoCompleteTasks(accessToken)
       .then((res) => {
         setHistoryTasks(Array.isArray(res.tasks) ? res.tasks : [])
@@ -105,7 +107,9 @@ export function AutoCompletePage({
         console.warn('Failed to load auto complete tasks:', err)
       })
       .finally(() => {
-        setIsLoadingHistory(false)
+        if (showSpinner) {
+          setIsLoadingHistory(false)
+        }
       })
   }, [accessToken])
 
@@ -184,7 +188,8 @@ export function AutoCompletePage({
     return () => {
       active = false
     }
-  }, [paper, fetchedPaper, currentHw.id, accessToken, currentHw.name, currentHw.contents, currentHw.resource_id, currentHw.pk, currentHw.set_type, permitToken])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paper, fetchedPaper, currentHw.id, accessToken, permitToken])
 
   const compatibility = useMemo(() => {
     return checkHomeworkCompatibility(currentHw, activePaper)
@@ -676,10 +681,20 @@ export function AutoCompletePage({
   const currentTask = isTaskForCurrentHw ? activeTask || localTaskStatus : localTaskStatus
   const currentTaskId = (isTaskForCurrentHw ? activeTask?.task_id || localTaskId : localTaskId) || null
 
+  const onCompletedRef = useRef(onCompleted)
+  const onTaskChangeRef = useRef(onTaskChange)
+  useEffect(() => {
+    onCompletedRef.current = onCompleted
+  }, [onCompleted])
+  useEffect(() => {
+    onTaskChangeRef.current = onTaskChange
+  }, [onTaskChange])
+  const notifiedCompletedTaskIdsRef = useRef<Set<string>>(new Set())
+
   const handleDismissTaskModal = () => {
     setLocalTaskId(null)
     setLocalTaskStatus(null)
-    onTaskChange?.(null)
+    onTaskChangeRef.current?.(null)
     setIsMinimized(false)
   }
 
@@ -702,20 +717,30 @@ export function AutoCompletePage({
     }
   }, [isRiskModalOpen, countdown, riskStep])
 
+  const currentTaskStatus = currentTask?.status
+
   // Poll task status effect (if not already polled globally or if local is needed)
   useEffect(() => {
     let pollTimer: number | null = null
     if (currentTaskId && accessToken) {
+      if (currentTaskStatus === 'COMPLETED' || currentTaskStatus === 'FAILED') {
+        return
+      }
+
       const poll = async () => {
         try {
           const res = await getAutoCompleteTaskStatus(accessToken, currentTaskId)
           setLocalTaskStatus(res)
-          onTaskChange?.(res)
+          onTaskChangeRef.current?.(res)
           if (res.status === 'COMPLETED' || res.status === 'FAILED') {
-            if (pollTimer) clearInterval(pollTimer)
-            void loadHistoryTasks()
-            if (res.status === 'COMPLETED') {
-              onCompleted?.(res.result, currentHw.id)
+            if (pollTimer) {
+              clearInterval(pollTimer)
+              pollTimer = null
+            }
+            void loadHistoryTasks(false)
+            if (res.status === 'COMPLETED' && !notifiedCompletedTaskIdsRef.current.has(currentTaskId)) {
+              notifiedCompletedTaskIdsRef.current.add(currentTaskId)
+              onCompletedRef.current?.(res.result, currentHw.id)
             }
           }
         } catch {
@@ -724,12 +749,12 @@ export function AutoCompletePage({
       }
 
       poll()
-      pollTimer = window.setInterval(poll, 1600)
+      pollTimer = window.setInterval(poll, 1800)
     }
     return () => {
       if (pollTimer) clearInterval(pollTimer)
     }
-  }, [currentTaskId, accessToken, currentHw.id, onCompleted, onTaskChange, loadHistoryTasks])
+  }, [currentTaskId, accessToken, currentHw.id, currentTaskStatus, loadHistoryTasks])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -1035,7 +1060,16 @@ export function AutoCompletePage({
             <button
               type="button"
               className="control-secondary fe-btn-sm"
-              onClick={loadHistoryTasks}
+              onClick={onBack}
+              title="返回作业列表"
+            >
+              <Icon name="arrow_back" />
+              <span>返回作业列表</span>
+            </button>
+            <button
+              type="button"
+              className="control-secondary fe-btn-sm"
+              onClick={() => void loadHistoryTasks(false)}
               disabled={isLoadingHistory}
               title="刷新历史任务列表"
             >
@@ -1157,7 +1191,7 @@ export function AutoCompletePage({
             </div>
           </div>
 
-          {isLoadingHistory ? (
+          {isLoadingHistory && historyTasks.length === 0 ? (
             <div
               style={{
                 textAlign: 'center',
@@ -1327,6 +1361,46 @@ export function AutoCompletePage({
             </div>
           )}
         </div>
+        {/* Floating Capsule for minimized active task */}
+        {currentTaskId && isMinimized && (
+          <div
+            className="fe-minimized-floating-capsule"
+            onClick={() => {
+              setIsMinimized(false)
+              setViewMode('execution')
+            }}
+            title="点击展开任务执行看板"
+          >
+            <div className="fe-capsule-spinner">
+              <Icon
+                name={currentTask?.status === 'COMPLETED' ? 'check_circle' : 'sync'}
+                className={currentTask?.status === 'COMPLETED' ? '' : 'fe-spin'}
+              />
+            </div>
+            <div className="fe-capsule-info">
+              <strong>
+                {currentTask?.status === 'COMPLETED'
+                  ? '已完成自动做题'
+                  : currentTask?.status === 'FAILED'
+                  ? '任务执行中断'
+                  : `正在自动完成 (${currentTask?.progress || 10}%)`}
+              </strong>
+              <small>{currentTask?.stage_label || currentTask?.stage_text || '后台流水线处理中...'}</small>
+            </div>
+            <button
+              type="button"
+              className="fe-capsule-expand-btn"
+              title="展开执行看板"
+              onClick={(e) => {
+                e.stopPropagation()
+                setIsMinimized(false)
+                setViewMode('execution')
+              }}
+            >
+              <Icon name="open_in_full" />
+            </button>
+          </div>
+        )}
       </div>
     )
   }
@@ -1454,20 +1528,22 @@ export function AutoCompletePage({
       {/* Top Breadcrumb & Return Nav */}
       <div className="fe-reader-top-nav" style={{ marginBottom: 16 }}>
         <button
-          className="control-primary fe-back-btn"
+          className="control-secondary fe-back-btn"
           type="button"
-          onClick={() => setViewMode('kanban')}
+          onClick={onBack}
+          title="返回作业列表"
         >
-          <Icon name="dashboard" />
-          <span>返回任务看板</span>
+          <Icon name="arrow_back" />
+          <span>返回作业列表</span>
         </button>
         <button
           className="control-secondary fe-back-btn"
           type="button"
-          onClick={onBack}
+          onClick={() => setViewMode('kanban')}
+          title="前往自动完成任务看板"
         >
-          <Icon name="arrow_back" />
-          <span>返回作业列表</span>
+          <Icon name="dashboard" />
+          <span>前往任务看板</span>
         </button>
         <span className="admin-pill-badge is-muted">
           <Icon name="lock" style={{ fontSize: 14 }} />
@@ -2430,90 +2506,87 @@ export function AutoCompletePage({
       )}
 
       {/* 6. EXECUTION BOARD (FULLSCREEN MODAL OR MINIMIZED FLOATING BAR) */}
-      {currentTaskId && (
-        <>
-          {isMinimized ? (
-            /* Floating Capsule in bottom-right corner */
-            <div className="fe-minimized-floating-capsule" onClick={() => setIsMinimized(false)}>
-              <div className="fe-capsule-spinner">
-                <Icon
-                  name={currentTask?.status === 'COMPLETED' ? 'check_circle' : 'sync'}
-                  className={currentTask?.status === 'COMPLETED' ? '' : 'fe-spin'}
-                />
+      {/* Floating Capsule (when minimized or when viewing Kanban/Config while task is active) */}
+      {currentTaskId && (isMinimized || viewMode === 'config') && (
+        <div
+          className="fe-minimized-floating-capsule"
+          onClick={() => {
+            setIsMinimized(false)
+            setViewMode('execution')
+          }}
+          title="点击展开任务执行看板"
+        >
+          <div className="fe-capsule-spinner">
+            <Icon
+              name={currentTask?.status === 'COMPLETED' ? 'check_circle' : 'sync'}
+              className={currentTask?.status === 'COMPLETED' ? '' : 'fe-spin'}
+            />
+          </div>
+          <div className="fe-capsule-info">
+            <strong>
+              {currentTask?.status === 'COMPLETED'
+                ? '已完成自动做题'
+                : currentTask?.status === 'FAILED'
+                ? '任务执行中断'
+                : `正在自动完成 (${currentTask?.progress || 10}%)`}
+            </strong>
+            <small>{currentTask?.stage_label || currentTask?.stage_text || '后台流水线处理中...'}</small>
+          </div>
+          <button
+            type="button"
+            className="fe-capsule-expand-btn"
+            title="展开执行看板"
+            onClick={(e) => {
+              e.stopPropagation()
+              setIsMinimized(false)
+              setViewMode('execution')
+            }}
+          >
+            <Icon name="open_in_full" />
+          </button>
+        </div>
+      )}
+
+      {/* Full Dashboard Modal (only when viewMode is execution and not minimized) */}
+      {currentTaskId && viewMode === 'execution' && !isMinimized && (
+        <div className="fe-risk-fullscreen-overlay">
+          <div className="fe-execution-card">
+            <div className="fe-execution-head">
+              <div>
+                <h2>自动完成任务执行看板</h2>
+                <p>正在调度云端双代理与语音引擎，模拟逐题完成与上报</p>
               </div>
-              <div className="fe-capsule-info">
-                <strong>
-                  {currentTask?.status === 'COMPLETED'
-                    ? '已完成自动做题'
-                    : currentTask?.status === 'FAILED'
-                    ? '任务执行中断'
-                    : `正在自动完成 (${currentTask?.progress || 10}%)`}
-                </strong>
-                <small>{currentTask?.stage_label || currentTask?.stage_text || '后台流水线处理中...'}</small>
+              <div className="fe-execution-head-controls">
+                <button
+                  type="button"
+                  className="fe-head-control-btn"
+                  onClick={() => {
+                    setIsMinimized(true)
+                    setViewMode('kanban')
+                  }}
+                  title="最小化至右下角并前往任务看板"
+                >
+                  <Icon name="close_fullscreen" />
+                  <span>最小化</span>
+                </button>
+                <button
+                  type="button"
+                  className="fe-head-control-btn fe-head-close-btn"
+                  onClick={() => {
+                    if (currentTask && !['COMPLETED', 'FAILED'].includes(currentTask.status)) {
+                      setIsMinimized(true)
+                      setViewMode('kanban')
+                    } else {
+                      handleDismissTaskModal()
+                      setViewMode('kanban')
+                    }
+                  }}
+                  title="关闭看板"
+                >
+                  <Icon name="close" />
+                </button>
               </div>
-              <button
-                type="button"
-                className="fe-capsule-expand-btn"
-                title="展开执行看板"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setIsMinimized(false)
-                }}
-              >
-                <Icon name="open_in_full" />
-              </button>
             </div>
-          ) : (
-            /* Full Dashboard Modal */
-            <div className="fe-risk-fullscreen-overlay">
-              <div className="fe-execution-card">
-                <div className="fe-execution-head">
-                  <div>
-                    <h2>自动完成任务执行看板</h2>
-                    <p>正在调度云端双代理与语音引擎，模拟逐题完成与上报</p>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <button
-                      type="button"
-                      className="control-primary fe-btn-sm"
-                      onClick={() => setViewMode('kanban')}
-                      title="返回历史与当前任务看板"
-                    >
-                      <Icon name="dashboard" />
-                      <span>返回任务看板</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="control-secondary fe-btn-sm"
-                      onClick={onBack}
-                      title="返回作业列表"
-                    >
-                      <Icon name="arrow_back" />
-                      <span>返回作业列表</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="control-secondary fe-btn-sm"
-                      onClick={() => {
-                        setIsMinimized(true)
-                        setViewMode('kanban')
-                      }}
-                      title="最小化并返回任务看板"
-                    >
-                      <Icon name="close_fullscreen" />
-                      <span>最小化</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="control-secondary fe-btn-sm"
-                      onClick={handleDismissTaskModal}
-                      title="关闭看板弹窗"
-                    >
-                      <Icon name="close" />
-                      <span>关闭</span>
-                    </button>
-                  </div>
-                </div>
 
                 <div className="fe-execution-body">
                   {currentTask?.status === 'FAILED' ? (
@@ -2535,19 +2608,19 @@ export function AutoCompletePage({
                           }}
                         >
                           <Icon name="replay" />
-                          <span>重试执行</span>
+                          <span>重新尝试执行</span>
                         </button>
                         <button
                           type="button"
                           className="control-secondary"
                           onClick={() => {
                             handleDismissTaskModal()
-                            void loadHistoryTasks()
+                            void loadHistoryTasks(false)
                             setViewMode('kanban')
                           }}
                         >
                           <Icon name="dashboard" />
-                          <span>返回任务看板</span>
+                          <span>前往任务看板</span>
                         </button>
                         <button
                           type="button"
@@ -2557,7 +2630,8 @@ export function AutoCompletePage({
                             onBack()
                           }}
                         >
-                          返回作业列表
+                          <Icon name="arrow_back" />
+                          <span>返回作业列表</span>
                         </button>
                       </div>
                     </div>
@@ -2653,7 +2727,32 @@ export function AutoCompletePage({
                         </table>
                       </div>
 
-                      <div className="fe-settlement-actions" style={{ display: 'flex', gap: 12, justifyContent: 'center', width: '100%', marginTop: 8 }}>
+                      <div className="fe-settlement-actions" style={{ display: 'flex', gap: 12, justifyContent: 'center', width: '100%', marginTop: 8, flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          className="control-primary"
+                          onClick={() => {
+                            handleDismissTaskModal()
+                            onToast?.('正在返回作业列表...')
+                            onBack()
+                          }}
+                        >
+                          <Icon name="assignment" />
+                          <span>返回作业列表</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="control-secondary"
+                          onClick={() => {
+                            handleDismissTaskModal()
+                            void loadHistoryTasks(false)
+                            setSelectedHistoryTask(null)
+                            setViewMode('kanban')
+                          }}
+                        >
+                          <Icon name="dashboard" />
+                          <span>前往任务看板</span>
+                        </button>
                         <button
                           type="button"
                           className="control-secondary"
@@ -2663,32 +2762,7 @@ export function AutoCompletePage({
                           }}
                         >
                           <Icon name="tune" />
-                          <span>关闭并重新配置</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="control-secondary"
-                          onClick={() => {
-                            handleDismissTaskModal()
-                            void loadHistoryTasks()
-                            setSelectedHistoryTask(null)
-                            setViewMode('kanban')
-                          }}
-                        >
-                          <Icon name="dashboard" />
-                          <span>返回任务看板</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="control-primary"
-                          onClick={() => {
-                            handleDismissTaskModal()
-                            onToast?.('正在同步云端最新完成状态...')
-                            onBack()
-                          }}
-                        >
-                          <Icon name="verified" />
-                          <span>一键在云端核对并返回</span>
+                          <span>重新配置此作业</span>
                         </button>
                       </div>
                     </div>
@@ -2799,14 +2873,44 @@ export function AutoCompletePage({
                           <span>{mode === 'auto' ? `${autoTargetTotal.toFixed(2)}分 (95%比例)` : `${manualTotalSum.toFixed(2)}分`}</span>
                         </div>
                       </div>
+
+                      {/* In-Progress Footer Navigation Actions */}
+                      <div className="fe-execution-in-progress-footer">
+                        <div className="fe-exec-footer-tip">
+                          <Icon name="info" style={{ fontSize: 16, color: '#3b82f6' }} />
+                          <span>提示：流水线在云端全自动持续运行，关闭或离开本窗口不会影响答题进度</span>
+                        </div>
+                        <div className="fe-exec-footer-buttons">
+                          <button
+                            type="button"
+                            className="control-secondary fe-btn-sm"
+                            onClick={() => {
+                              setIsMinimized(true)
+                              setViewMode('kanban')
+                            }}
+                          >
+                            <Icon name="dashboard" />
+                            <span>前往任务看板 (后台继续)</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="control-secondary fe-btn-sm"
+                            onClick={() => {
+                              setIsMinimized(true)
+                              onBack()
+                            }}
+                          >
+                            <Icon name="arrow_back" />
+                            <span>返回作业列表 (后台继续)</span>
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
               </div>
             </div>
           )}
-        </>
-      )}
     </div>
   )
 }

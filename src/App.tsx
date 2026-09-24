@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react'
 import './App.css'
 import { ApiError, getCurrentUser, setUnauthorizedHandler, type User } from './api/auth'
 import {
@@ -2470,6 +2470,48 @@ function App() {
     }
   }
 
+  const navigate = useCallback((nextPage: Page) => {
+    setUserMenuOpen(false)
+    setViewingPaper(null)
+    setMobileNavOpen(false)
+    if (nextPage === '/auto-complete') {
+      setAutoCompletePermitToken('')
+      setAutoCompleteTargetHw(null)
+    }
+    if (nextPage === window.location.pathname) {
+      return
+    }
+    transitionRoute(() => {
+      window.history.pushState(null, '', nextPage)
+      setPathname(nextPage)
+    })
+  }, [])
+
+  const handleAutoCompleteBack = useCallback(() => {
+    setAutoCompletePermitToken('')
+    navigate(activeTab === 'history' ? '/history' : '/')
+  }, [activeTab, navigate])
+
+  const handleAutoCompleteCompleted = useCallback((res: AutoCompleteTaskResponse['result'] | undefined, hwId: string) => {
+    const s = Number(res?.final_score ?? res?.score ?? 0)
+    const ut = Number(res?.use_time ?? 0)
+    const updateItem = (h: HomeworkItem) => {
+      if (h.id === hwId) {
+        return {
+          ...h,
+          status: 2,
+          point: s,
+          score: s,
+          use_time: ut,
+          completed_at: typeof res?.completed_at === 'string' ? res.completed_at : undefined,
+        }
+      }
+      return h
+    }
+    setHomeworks((prev) => prev.map(updateItem))
+    setHistoryHomeworks((prev) => prev.map(updateItem))
+  }, [])
+
   function handleManualReadList() {
     if (isFetchingHomeworksRef.current) return
     if (shouldTriggerCaptchaDefense()) {
@@ -2622,22 +2664,6 @@ function App() {
     ]
   }, [activeTask])
 
-  function navigate(nextPage: Page) {
-    setUserMenuOpen(false)
-    setViewingPaper(null)
-    setMobileNavOpen(false)
-    if (nextPage === '/auto-complete') {
-      setAutoCompletePermitToken('')
-      setAutoCompleteTargetHw(null)
-    }
-    if (nextPage === window.location.pathname) {
-      return
-    }
-    transitionRoute(() => {
-      window.history.pushState(null, '', nextPage)
-      setPathname(nextPage)
-    })
-  }
 
   function beginAuthentication() {
     setAuthMessage('')
@@ -3142,32 +3168,8 @@ function App() {
                     accessToken={session.accessToken}
                     activeTask={effectiveTask}
                     onTaskChange={updateActiveTask}
-                    onBack={() => {
-                      setAutoCompletePermitToken('')
-                      setHasLoadedHistory(false)
-                      setHasLoadedCurrent(false)
-                      void doFetchHomeworks(activeTab)
-                      navigate(activeTab === 'history' ? '/history' : '/')
-                    }}
-                    onCompleted={(res, hwId) => {
-                      const s = Number(res?.final_score ?? res?.score ?? 0)
-                      const ut = Number(res?.use_time ?? 0)
-                      const updateItem = (h: HomeworkItem) => {
-                        if (h.id === hwId) {
-                          return {
-                            ...h,
-                            status: 2,
-                            point: s,
-                            score: s,
-                            use_time: ut,
-                            completed_at: typeof res?.completed_at === 'string' ? res.completed_at : undefined,
-                          }
-                        }
-                        return h
-                      }
-                      setHomeworks((prev) => prev.map(updateItem))
-                      setHistoryHomeworks((prev) => prev.map(updateItem))
-                    }}
+                    onBack={handleAutoCompleteBack}
+                    onCompleted={handleAutoCompleteCompleted}
                     onRequestPermit={() => {
                       const targetHw =
                         autoCompleteTargetHw ||

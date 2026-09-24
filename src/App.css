@@ -4672,6 +4672,72 @@ html:has(.control-shell) {
   color: var(--control-muted);
 }
 
+.fe-execution-head-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fe-head-control-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--control-line);
+  background: #ffffff;
+  color: var(--control-ink);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.fe-head-control-btn:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.fe-head-control-btn .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.fe-head-close-btn {
+  padding: 6px 8px;
+  color: var(--control-muted);
+}
+
+.fe-head-close-btn:hover {
+  color: #ef4444;
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+.fe-execution-in-progress-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--control-line);
+  flex-wrap: wrap;
+}
+
+.fe-exec-footer-tip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--control-muted);
+}
+
+.fe-exec-footer-buttons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
 .fe-execution-body {
   padding: 24px;
 }
