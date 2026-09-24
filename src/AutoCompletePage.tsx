@@ -255,65 +255,102 @@ export function AutoCompletePage({
       paperObj?.totalScore ||
       paperObj?.total_score
     )
+    const hwTitle = currentHw?.name || activePaper?.title || activePaper?.paperName || ''
+    const isBeijing = /北京/i.test(hwTitle)
     const isPkOrVocab =
       currentHw?.pk === 1 ||
       currentHw?.set_type === 6 ||
-      /词汇|单词|默写|word|pk/i.test(currentHw?.name || '') ||
-      /词汇|单词|默写|word|pk/i.test(activePaper?.title || activePaper?.paperName || '')
+      /词汇|单词|默写|word|pk/i.test(hwTitle)
 
-    const hwTitle = currentHw?.name || activePaper?.title || activePaper?.paperName || ''
-    const isBeijing = /北京/i.test(hwTitle)
-    const oralStandardTotal = isBeijing ? 40.0 : 30.0
+    // A mock suite is an official full test (中考英语听说模考/机考套题/模拟考试), which officially standards at 30 (or 40 Beijing).
+    const isMockSuite =
+      !isPkOrVocab &&
+      (/套题|模考|模拟考|机房模考|仿真|中考英语听说|听说模拟|听说测试|期末听说|期中听说/i.test(hwTitle) ||
+        (tQuestions >= 8 && /机考|综合|套题/i.test(hwTitle)))
 
-    let defaultTotal: number
-    if (isPkOrVocab) {
-      defaultTotal = Number.isFinite(rawTotal) && rawTotal > 0 ? rawTotal : 100.0
-    } else {
-      // For oral / mock / room test exams (机房套题/听说训练/中考机考):
-      // Official standard total is 30.0 (or 40.0 for Beijing).
-      // If rawTotal is 100.0 (ETS percent scale), it MUST be normalized to official 30.0!
-      if (Number.isFinite(rawTotal) && rawTotal > 0 && Math.abs(rawTotal - 100.0) >= 0.01) {
-        defaultTotal = rawTotal
-      } else {
-        defaultTotal = oralStandardTotal
+    // Dynamic standard benchmark point per question based on question type
+    const getBenchmarkScore = (q: { typeName: string; sectionCaption?: string }) => {
+      const text = `${q.sectionCaption || ''} ${q.typeName || ''}`.toLowerCase()
+      if (/朗读|read/i.test(text)) {
+        if (isMockSuite) return isBeijing ? 9.0 : 6.0
+        if (tQuestions === 1) return isBeijing ? 6.0 : 5.0
+        if (tQuestions === 2) return 2.5
+        return isBeijing ? 3.0 : 2.0
       }
+      if (/选择|choose/i.test(text)) {
+        return 1.5
+      }
+      if (/填空|记录|fill/i.test(text)) {
+        return 1.5
+      }
+      if (/询问|提问/i.test(text)) {
+        return 1.5
+      }
+      if (/回答|3问5答|role/i.test(text)) {
+        return 2.0
+      }
+      if (/转述|看图|表达|picture|essay/i.test(text)) {
+        return isBeijing ? 10.0 : 6.0
+      }
+      if (/词汇|单词|默写|word/i.test(text)) {
+        return 1.0
+      }
+      return 2.0
     }
 
-    // Check if questions already carry explicit points from paper
-    const hasExplicitPoints = qList.some((q) => q.maxScore > 0)
-    let calculatedPaperTotal = defaultTotal
+    let calculatedPaperTotal: number
 
-    if (hasExplicitPoints) {
+    if (isMockSuite) {
+      // Mock Suite standard: 30.0 (or 40.0 for Beijing)
+      const mockStandardTotal = isBeijing ? 40.0 : 30.0
+      const hasExplicitPoints = qList.some((q) => q.maxScore > 0)
       const explicitSum = Number(qList.reduce((sum, q) => sum + (q.maxScore > 0 ? q.maxScore : 0), 0).toFixed(2))
-      if (explicitSum > 0) {
-        if (!isPkOrVocab && Math.abs(explicitSum - 100.0) < 0.1) {
-          // Oral paper was previously scaled to 100.0 instead of 30.0 (or 40.0)
-          calculatedPaperTotal = defaultTotal
-          const scale = calculatedPaperTotal / explicitSum
-          qList = qList.map((q) => ({
-            ...q,
-            maxScore: Number((q.maxScore * scale).toFixed(2)),
-          }))
-          const currentSum = Number(qList.reduce((sum, q) => sum + q.maxScore, 0).toFixed(2))
-          const diff = Number((calculatedPaperTotal - currentSum).toFixed(2))
-          if (diff !== 0 && qList.length > 0) {
-            qList[qList.length - 1].maxScore = Number((qList[qList.length - 1].maxScore + diff).toFixed(2))
-          }
-        } else {
-          calculatedPaperTotal = explicitSum
-          qList = qList.map((q) => ({
-            ...q,
-            maxScore: q.maxScore > 0 ? q.maxScore : Number((calculatedPaperTotal / tQuestions).toFixed(2)),
-          }))
+
+      if (hasExplicitPoints && explicitSum > 0 && Math.abs(explicitSum - mockStandardTotal) < 0.1) {
+        calculatedPaperTotal = explicitSum
+      } else {
+        calculatedPaperTotal = mockStandardTotal
+        const baseWeights = qList.map((q) => (q.maxScore > 0 ? q.maxScore : getBenchmarkScore(q)))
+        const sumW = baseWeights.reduce((a, b) => a + b, 0)
+        const scale = sumW > 0 ? calculatedPaperTotal / sumW : 1
+        qList = qList.map((q, idx) => ({
+          ...q,
+          maxScore: Number((baseWeights[idx] * scale).toFixed(2)),
+        }))
+        const currentSum = Number(qList.reduce((sum, q) => sum + q.maxScore, 0).toFixed(2))
+        const diff = Number((calculatedPaperTotal - currentSum).toFixed(2))
+        if (diff !== 0 && qList.length > 0) {
+          qList[qList.length - 1].maxScore = Number((qList[qList.length - 1].maxScore + diff).toFixed(2))
         }
       }
+    } else if (isPkOrVocab) {
+      // PK / Vocabulary: 100.0 or count
+      const explicitSum = Number(qList.reduce((sum, q) => sum + (q.maxScore > 0 ? q.maxScore : 0), 0).toFixed(2))
+      if (explicitSum > 0) {
+        calculatedPaperTotal = explicitSum
+      } else if (Number.isFinite(rawTotal) && rawTotal > 0) {
+        calculatedPaperTotal = rawTotal
+        const pt = Number((calculatedPaperTotal / tQuestions).toFixed(2))
+        qList = qList.map((q) => ({ ...q, maxScore: pt }))
+      } else {
+        calculatedPaperTotal = tQuestions
+        qList = qList.map((q) => ({ ...q, maxScore: 1.0 }))
+      }
     } else {
-      const pointPerQ = Number((defaultTotal / tQuestions).toFixed(2))
-      qList = qList.map((q) => ({ ...q, maxScore: pointPerQ }))
-      const currentSum = Number(qList.reduce((sum, q) => sum + q.maxScore, 0).toFixed(2))
-      const diff = Number((defaultTotal - currentSum).toFixed(2))
-      if (diff !== 0 && qList.length > 0) {
-        qList[qList.length - 1].maxScore = Number((qList[qList.length - 1].maxScore + diff).toFixed(2))
+      // Regular oral homework / single-type assignment (e.g. 模仿朗读):
+      const hasExplicit = qList.some((q) => q.maxScore > 0)
+      const explicitSum = Number(qList.reduce((sum, q) => sum + (q.maxScore > 0 ? q.maxScore : 0), 0).toFixed(2))
+
+      // If paper has explicit native scores that are NOT a generic 100-percentage scale:
+      if (hasExplicit && explicitSum > 0 && Math.abs(explicitSum - 100.0) >= 0.1 && Math.abs(explicitSum - 30.0) >= 0.1) {
+        calculatedPaperTotal = explicitSum
+      } else {
+        // Assign benchmark points per question type!
+        qList = qList.map((q) => {
+          const pt = q.maxScore > 0 && q.maxScore < 30 ? q.maxScore : getBenchmarkScore(q)
+          return { ...q, maxScore: Number(pt.toFixed(2)) }
+        })
+        calculatedPaperTotal = Number(qList.reduce((sum, q) => sum + q.maxScore, 0).toFixed(2))
       }
     }
 
