@@ -50,7 +50,8 @@ export function getVoiceAudioUrl(voiceId: string, accessToken?: string): string 
 export function getVoiceClonePreview(
   accessToken: string,
   voiceId: string,
-  text?: string
+  text?: string,
+  model?: string
 ): Promise<Blob> {
   return apiBlobRequest(`/user/voices/${encodeURIComponent(voiceId)}/clone-preview`, {
     accessToken,
@@ -58,7 +59,11 @@ export function getVoiceClonePreview(
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ text: text || undefined }),
+    body: JSON.stringify({
+      text: text || undefined,
+      model: model || undefined,
+    }),
   })
 }
+
 

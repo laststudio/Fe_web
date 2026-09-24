@@ -82,6 +82,14 @@ function writeStoredSession(session: AuthSession | null) {
   }
 }
 
+export type FeatureCheck = {
+  enabled: boolean
+  status: 'enabled' | 'membership_required' | 'feature_disabled' | 'kill_switch'
+  reason: string
+  minMemberLevel?: number
+  minMemberTier?: string
+}
+
 
 function readStoredActiveTask(): AutoCompleteTaskResponse | null {
   try {
@@ -1471,6 +1479,7 @@ function SettingsPage({
   onToast,
   onRefreshSession,
   onOpenAnnouncement,
+  getFeatureStatus,
 }: {
   currentUser: User | null
   accountInfo: PlatformAccountInfo | null
@@ -1479,6 +1488,7 @@ function SettingsPage({
   onToast?: (msg: string) => void
   onRefreshSession: () => void
   onOpenAnnouncement: () => void
+  getFeatureStatus?: (featureKey: string, defaultName?: string) => FeatureCheck
 }) {
   const [skipRisk, setSkipRisk] = useState(readStoredSkipRiskWarning)
 
@@ -1493,7 +1503,7 @@ function SettingsPage({
   return (
     <div className="fe-settings-container">
       {/* Voice Clone & Online Studio Management */}
-      <VoiceManager accessToken={accessToken} onToast={onToast} />
+      <VoiceManager accessToken={accessToken} onToast={onToast} getFeatureStatus={getFeatureStatus} />
 
       {/* Current User Profile Card */}
       <section className="admin-policy-card">
@@ -1925,14 +1935,6 @@ function App() {
       active = false
     }
   }, [sessionAccessToken, sessionExpiresAt])
-
-  type FeatureCheck = {
-    enabled: boolean
-    status: 'enabled' | 'membership_required' | 'feature_disabled' | 'kill_switch'
-    reason: string
-    minMemberLevel?: number
-    minMemberTier?: string
-  }
 
   function getFeatureStatus(featureKey: string, defaultName = '该功能'): FeatureCheck {
     if (softwareConfig?.isKillSwitchOn) {
@@ -3390,6 +3392,7 @@ function App() {
                       navigate('/settings')
                     }}
                     isHubRoute={pathname === '/auto-complete'}
+                    getFeatureStatus={getFeatureStatus}
                     onToast={showToast}
                   />
                 )
@@ -3404,6 +3407,7 @@ function App() {
               onToast={showToast}
               onRefreshSession={handleRequestRefresh}
               onOpenAnnouncement={() => setShowAnnouncementModal(true)}
+              getFeatureStatus={getFeatureStatus}
             />
           ) : viewingPaper ? (
             <PaperReaderView
