@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from './components/Icon'
 import {
   cancelAutoCompleteTask,
-  rushAutoCompleteTask,
   checkHomeworkCompatibility,
   getAutoCompleteTasks,
   getAutoCompleteTaskStatus,
@@ -884,31 +883,6 @@ export function AutoCompletePage({
     }
   }
 
-  const [isRushing, setIsRushing] = useState(false)
-
-  const handleRushTask = async (taskIdToRush?: string) => {
-    const tid = taskIdToRush || currentTaskId
-    if (!tid || !accessToken || isRushing) return
-    setIsRushing(true)
-    try {
-      const res = await rushAutoCompleteTask(accessToken, tid)
-      if (res.success) {
-        onToast?.('已发出跳过等待指令，正在直接交卷...')
-        if (res.task) {
-          setLocalTaskStatus(res.task)
-          onTaskChangeRef.current?.(res.task)
-        }
-      } else {
-        onToast?.(res.message || '跳过等待失败')
-      }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : '网络请求失败，未能跳过等待'
-      onToast?.(message)
-    } finally {
-      setIsRushing(false)
-    }
-  }
-
   // Countdown timer effect
   useEffect(() => {
     let timer: number | null = null
@@ -1335,19 +1309,6 @@ export function AutoCompletePage({
                   <Icon name="headphones" />
                   <span>试听效果</span>
                 </button>
-                {activeTask.can_rush && (
-                  <button
-                    type="button"
-                    className="control-secondary fe-btn-sm"
-                    onClick={() => handleRushTask(activeTask.task_id)}
-                    disabled={isRushing}
-                    style={{ color: '#d97706', borderColor: '#fcd34d', background: '#fffbeb' }}
-                    title="立即跳过后续拟真等待时间，快速交卷"
-                  >
-                    <Icon name={isRushing ? 'sync' : 'fast_forward'} className={isRushing ? 'fe-spin' : ''} />
-                    <span>{isRushing ? '跳过中...' : '跳过等待交卷'}</span>
-                  </button>
-                )}
                 <button
                   type="button"
                   className="control-secondary fe-btn-sm"
@@ -1700,19 +1661,6 @@ export function AutoCompletePage({
               </p>
             </div>
             <div className="fe-execution-head-controls">
-              {currentTask && !['COMPLETED', 'FAILED'].includes(currentTask.status) && currentTask.can_rush && (
-                <button
-                  type="button"
-                  className="fe-head-control-btn"
-                  onClick={() => handleRushTask()}
-                  disabled={isRushing}
-                  title="立即跳过后续拟真等待时间，快速交卷"
-                  style={{ color: '#d97706', borderColor: '#fcd34d', background: '#fffbeb' }}
-                >
-                  <Icon name={isRushing ? 'sync' : 'fast_forward'} className={isRushing ? 'fe-spin' : ''} />
-                  <span>{isRushing ? '跳过中...' : '跳过等待立即交卷'}</span>
-                </button>
-              )}
               {currentTask && !['COMPLETED', 'FAILED'].includes(currentTask.status) && (
                 <button
                   type="button"
