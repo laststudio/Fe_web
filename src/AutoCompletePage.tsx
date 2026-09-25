@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from './components/Icon'
 import {
   cancelAutoCompleteTask,
+  rushAutoCompleteTask,
   checkHomeworkCompatibility,
   getAutoCompleteTasks,
   getAutoCompleteTaskStatus,
@@ -150,6 +151,7 @@ export function AutoCompletePage({
 
   // Mode selection
   const [mode, setMode] = useState<AutoCompleteMode>('auto')
+  const [paceMode, setPaceMode] = useState<'paced' | 'instant'>('paced')
 
   // Voice selection
   const [voiceMode, setVoiceMode] = useState<AutoCompleteVoiceMode>('clone')
@@ -837,6 +839,31 @@ export function AutoCompletePage({
     }
   }
 
+  const [isRushing, setIsRushing] = useState(false)
+
+  const handleRushTask = async (taskIdToRush?: string) => {
+    const tid = taskIdToRush || currentTaskId
+    if (!tid || !accessToken || isRushing) return
+    setIsRushing(true)
+    try {
+      const res = await rushAutoCompleteTask(accessToken, tid)
+      if (res.success) {
+        onToast?.('已发出跳过等待指令，正在直接交卷...')
+        if (res.task) {
+          setLocalTaskStatus(res.task)
+          onTaskChangeRef.current?.(res.task)
+        }
+      } else {
+        onToast?.(res.message || '跳过等待失败')
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '网络请求失败，未能跳过等待'
+      onToast?.(message)
+    } finally {
+      setIsRushing(false)
+    }
+  }
+
   // Countdown timer effect
   useEffect(() => {
     let timer: number | null = null
@@ -1122,7 +1149,7 @@ export function AutoCompletePage({
                               />
                             </div>
                           ) : (
-                            <span style={{ color: '#94a3b8', fontSize: 11 }}>无音频 (免录音题)</span>
+                            <span className="admin-pill-badge is-muted" style={{ fontSize: 11 }}>客观选择题 · 无需录音</span>
                           )}
                         </td>
                         <td>
@@ -1260,6 +1287,19 @@ export function AutoCompletePage({
                   <Icon name="headphones" />
                   <span>试听效果</span>
                 </button>
+                {activeTask.can_rush && (
+                  <button
+                    type="button"
+                    className="control-secondary fe-btn-sm"
+                    onClick={() => handleRushTask(activeTask.task_id)}
+                    disabled={isRushing}
+                    style={{ color: '#d97706', borderColor: '#fcd34d', background: '#fffbeb' }}
+                    title="立即跳过后续拟真等待时间，快速交卷"
+                  >
+                    <Icon name={isRushing ? 'sync' : 'fast_forward'} className={isRushing ? 'fe-spin' : ''} />
+                    <span>{isRushing ? '跳过中...' : '跳过等待交卷'}</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   className="control-secondary fe-btn-sm"
@@ -1612,6 +1652,19 @@ export function AutoCompletePage({
               </p>
             </div>
             <div className="fe-execution-head-controls">
+              {currentTask && !['COMPLETED', 'FAILED'].includes(currentTask.status) && currentTask.can_rush && (
+                <button
+                  type="button"
+                  className="fe-head-control-btn"
+                  onClick={() => handleRushTask()}
+                  disabled={isRushing}
+                  title="立即跳过后续拟真等待时间，快速交卷"
+                  style={{ color: '#d97706', borderColor: '#fcd34d', background: '#fffbeb' }}
+                >
+                  <Icon name={isRushing ? 'sync' : 'fast_forward'} className={isRushing ? 'fe-spin' : ''} />
+                  <span>{isRushing ? '跳过中...' : '跳过等待立即交卷'}</span>
+                </button>
+              )}
               {currentTask && !['COMPLETED', 'FAILED'].includes(currentTask.status) && (
                 <button
                   type="button"
@@ -1767,7 +1820,7 @@ export function AutoCompletePage({
                                   <audio controls src={audioUrl} preload="none" className="fe-audio-player" />
                                 </div>
                               ) : (
-                                <span style={{ color: '#94a3b8', fontSize: 11 }}>无音频 (免录音题)</span>
+                                <span className="admin-pill-badge is-muted" style={{ fontSize: 11 }}>客观选择题 · 无需录音</span>
                               )}
                             </td>
                             <td>
@@ -2013,6 +2066,7 @@ export function AutoCompletePage({
         target_total: mode === 'auto' ? autoTargetTotal : Number(manualTotalSum.toFixed(2)),
         allow_over_max: mode === 'manual' ? isManualTotalOverMax || manualOverMaxQuestions.length > 0 : false,
         use_time: selectedUseTimeSeconds,
+        pace_mode: paceMode,
         voice_mode: voiceMode,
         voice_id: voiceMode === 'clone' ? (selectedVoiceId || undefined) : undefined,
         clone_model: voiceMode === 'clone' ? cloneModel : undefined,
@@ -2688,6 +2742,48 @@ export function AutoCompletePage({
             )}
           </div>
         )}
+
+        <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #e2e8f0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+            <Icon name="speed" style={{ fontSize: 16, color: 'var(--control-blue)' }} />
+            <strong style={{ fontSize: 14 }}>后台做题节奏与控速模式：</strong>
+          </div>
+          <div className="fe-voice-options-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
+            <div
+              className={`fe-voice-option-card ${paceMode === 'paced' ? 'is-active' : ''}`}
+              onClick={() => setPaceMode('paced')}
+              style={{ cursor: 'pointer' }}
+            >
+              <div className="fe-voice-card-radio">
+                <span className={`fe-radio-circle ${paceMode === 'paced' ? 'is-checked' : ''}`} />
+              </div>
+              <div className="fe-voice-card-content">
+                <div className="fe-voice-card-title">
+                  <strong>真实拟真控速 (防封推荐)</strong>
+                  <span className="admin-pill-badge is-success">最高安全</span>
+                </div>
+                <p>后台按规划时长（{formatSeconds(selectedUseTimeSeconds)}）分步真实耗时作答，ETS平台留存真实考试时长记录。支持随时点击“跳过等待”提前交卷。</p>
+              </div>
+            </div>
+
+            <div
+              className={`fe-voice-option-card ${paceMode === 'instant' ? 'is-active' : ''}`}
+              onClick={() => setPaceMode('instant')}
+              style={{ cursor: 'pointer' }}
+            >
+              <div className="fe-voice-card-radio">
+                <span className={`fe-radio-circle ${paceMode === 'instant' ? 'is-checked' : ''}`} />
+              </div>
+              <div className="fe-voice-card-content">
+                <div className="fe-voice-card-title">
+                  <strong>极速秒刷提交</strong>
+                  <span className="admin-pill-badge is-muted">极速完成</span>
+                </div>
+                <p>不进行后台拟真读题耗时等待，直接以最快速度完成所有题目合成并交卷（耗时由接口提交参数决定）。</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* 3. Voice Selection Section */}
@@ -2813,16 +2909,19 @@ export function AutoCompletePage({
                     id: 'pocket-tts',
                     name: 'Pocket TTS',
                     badge: '极速·默认',
+                    isMaintenance: false,
                   },
                   {
                     id: 'ming-omni-tts',
                     name: 'Ming-Omni',
-                    badge: '多模态',
+                    badge: '云端维护中',
+                    isMaintenance: true,
                   },
                   {
                     id: 'moss-tts-nano',
                     name: 'MOSS Nano',
                     badge: '复旦架构',
+                    isMaintenance: false,
                   },
                 ].map((m) => {
                   const isSel = cloneModel === m.id
@@ -2831,7 +2930,7 @@ export function AutoCompletePage({
                     ? getFeatureStatus(featKey, m.name)
                     : { enabled: true, status: 'enabled', reason: '' }
                   const isRestricted = feat.status === 'membership_required'
-                  const isDisabled = feat.status === 'feature_disabled'
+                  const isDisabled = m.isMaintenance || feat.status === 'feature_disabled'
 
                   return (
                     <button
@@ -2840,6 +2939,10 @@ export function AutoCompletePage({
                       className={`fe-voice-model-tab-btn ${isSel ? 'is-active' : ''} ${isDisabled ? 'is-disabled' : ''}`}
                       onClick={(e) => {
                         e.stopPropagation()
+                        if (m.isMaintenance) {
+                          onToast?.('Ming-Omni 上游服务维护中（返回静音空音频），请使用推荐的 Pocket TTS 或 MOSS Nano')
+                          return
+                        }
                         if (isDisabled) {
                           onToast?.(feat.reason || `${m.name} 已被停用`)
                           return
@@ -2851,7 +2954,11 @@ export function AutoCompletePage({
                       }}
                     >
                       <span className="fe-voice-model-tab-name">{m.name}</span>
-                      {isDisabled ? (
+                      {m.isMaintenance ? (
+                        <span className="fe-voice-model-tab-badge" style={{ background: '#fee2e2', color: '#b91c1c' }}>
+                          云端维护中
+                        </span>
+                      ) : isDisabled ? (
                         <span className="fe-voice-model-tab-badge" style={{ background: '#fee2e2', color: '#b91c1c' }}>已停用</span>
                       ) : isRestricted ? (
                         <span className="fe-voice-model-tab-badge" style={{ background: '#fef3c7', color: '#b45309' }}>
@@ -2879,9 +2986,11 @@ export function AutoCompletePage({
                   <div>
                     <div className="fe-voice-model-detail-title">
                       <strong>Ming-Omni (0.5B 中英多模态架构)</strong>
-                      <span style={{ color: '#d97706', fontWeight: 600 }}>耗时较长（排队 60~120s）· 极高拟真</span>
+                      <span style={{ color: '#ef4444', fontWeight: 600 }}>云端维护中 · 推荐改选 Pocket TTS</span>
                     </div>
-                    <p>生动还原真人呼吸与自然口语顿挫，贴合中国学生发音习惯。注意：云端排队耗时较长，若超时系统将自动降级为 Pocket TTS 保障作答提交。</p>
+                    <p style={{ color: '#dc2626' }}>
+                      该模型目前 upstream 服务异常（输出纯静音音频）。系统已配置静音探测与自动兜底，遇到静音将秒级自动降级至 Pocket TTS。
+                    </p>
                   </div>
                 )}
                 {cloneModel === 'moss-tts-nano' && (
@@ -3043,7 +3152,7 @@ export function AutoCompletePage({
                     </p>
                     <p>
                       您当前配置的目标分数为 <strong>{autoTargetTotal.toFixed(1)} 分</strong>（已受 95% 保护线风控拦截），
-                      答题预计用时 <strong>{formatSeconds(selectedUseTimeSeconds)}</strong>。
+                      答题预计用时 <strong>{formatSeconds(selectedUseTimeSeconds)}</strong>（{paceMode === 'paced' ? '拟真控速模式 · 防封推荐' : '极速秒刷模式'}）。
                     </p>
                   </div>
 
