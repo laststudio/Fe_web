@@ -732,8 +732,8 @@ export function AutoCompletePage({
     if (getFeatureStatus) {
       const featKey = `tts_model_${modelToUse.replace(/-/g, '_')}`
       const feat = getFeatureStatus(featKey, modelToUse)
-      if (!feat.enabled) {
-        onToast?.(feat.reason || '该 TTS 模型当前不可用')
+      if (feat.status === 'feature_disabled' || feat.status === 'kill_switch') {
+        onToast?.(feat.reason || '该 TTS 模型当前已被管理员停用')
         return
       }
     }

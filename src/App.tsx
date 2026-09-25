@@ -1944,6 +1944,10 @@ function App() {
         reason: softwareConfig.noticeMessage || '系统正在维护，所有云端与解析功能已暂时关闭。',
       }
     }
+    // 管理员与系统管理员拥有全部功能最高权限
+    if (currentUser?.role === 0 || currentUser?.role === 1) {
+      return { enabled: true, status: 'enabled', reason: '' }
+    }
     const feat = softwareFeatures.find((f) => f.feature_key === featureKey)
     if (!feat) {
       return { enabled: true, status: 'enabled', reason: '' }

@@ -237,8 +237,8 @@ export function VoiceManager({
       const modelMeta = AUDITION_MODELS.find((m) => m.id === targetModel)
       const featKey = modelMeta?.featureKey || `tts_model_${targetModel.replace(/-/g, '_')}`
       const feat = getFeatureStatus(featKey, modelMeta?.name || '该模型')
-      if (!feat.enabled) {
-        onToast?.(feat.reason || '该 TTS 模型当前不可用')
+      if (feat.status === 'feature_disabled' || feat.status === 'kill_switch') {
+        onToast?.(feat.reason || '该 TTS 模型当前已被管理员停用')
         return
       }
     }
