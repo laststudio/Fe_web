@@ -1106,6 +1106,87 @@ html:has(.control-shell) {
   justify-content: center;
 }
 
+/* Desktop collapsed sidebar: use a stable icon rail instead of a squeezed text nav. */
+@media (min-width: 901px) {
+  .control-site-header,
+  .control-site-header.is-compact {
+    height: 73px;
+    box-sizing: border-box;
+  }
+
+  .control-sidebar.is-collapsed {
+    width: auto;
+    padding: 12px 8px 10px;
+  }
+
+  .control-sidebar.is-collapsed .admin-sidebar-head {
+    margin: -2px 0 8px;
+    justify-content: center;
+  }
+
+  .control-sidebar.is-collapsed .admin-collapse-toggle {
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+  }
+
+  .control-sidebar.is-collapsed nav {
+    gap: 2px;
+    padding: 0;
+    overflow-y: visible;
+  }
+
+  .control-sidebar.is-collapsed nav > section > small,
+  .control-sidebar.is-collapsed nav button > .control-nav-label,
+  .control-sidebar.is-collapsed .admin-footer-label {
+    display: none !important;
+  }
+
+  .control-sidebar.is-collapsed nav > section {
+    gap: 2px;
+  }
+
+  .control-sidebar.is-collapsed nav > section + section {
+    margin-top: 7px;
+    padding-top: 8px;
+  }
+
+  .control-sidebar.is-collapsed nav button {
+    width: 48px;
+    min-height: 46px;
+    height: 46px;
+    margin: 0 auto;
+    padding: 0;
+    border-radius: 11px;
+    display: grid;
+    grid-template-columns: 1fr;
+    place-items: center;
+  }
+
+  .control-sidebar.is-collapsed nav button > .material-symbols-outlined {
+    width: auto;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+  }
+
+  .control-sidebar.is-collapsed nav button.is-active {
+    box-shadow: inset 3px 0 #526ed2, inset 0 0 0 1px #d8e2f7;
+  }
+
+  .control-sidebar.is-collapsed footer {
+    justify-content: center;
+    padding-inline: 0;
+  }
+
+  .control-sidebar.is-collapsed footer i {
+    width: 8px;
+    height: 8px;
+  }
+}
+
 /* ==========================================================================
    Workspace & Page Heading
    ========================================================================== */
@@ -5200,35 +5281,49 @@ html:has(.control-shell) {
 /* Settlement Table */
 .fe-settlement-table-wrap {
   width: 100%;
-  max-height: 220px;
+  max-height: 280px;
+  overflow-x: auto;
   overflow-y: auto;
   border: 1px solid var(--control-line);
   border-radius: 8px;
   margin: 14px 0;
+  -webkit-overflow-scrolling: touch;
 }
 
 .fe-settlement-table {
   width: 100%;
+  min-width: 680px;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 12.5px;
   text-align: left;
 }
 
 .fe-settlement-table th {
   background: #f8fafc;
-  padding: 8px 10px;
+  padding: 10px 12px;
   color: var(--control-muted);
   font-weight: 600;
   border-bottom: 1px solid var(--control-line);
   position: sticky;
   top: 0;
   z-index: 1;
+  white-space: nowrap;
 }
 
 .fe-settlement-table td {
-  padding: 8px 10px;
+  padding: 10px 12px;
   border-bottom: 1px solid #f1f5f9;
   color: var(--control-ink);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.fe-settlement-table td.fe-td-text {
+  white-space: normal;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
 }
 
 .fe-settlement-table tr:hover td {
@@ -5869,4 +5964,3 @@ html:has(.control-shell) {
 .fe-record-btn.is-cancel:hover {
   color: #1e293b;
 }
-

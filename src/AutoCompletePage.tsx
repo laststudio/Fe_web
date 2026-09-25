@@ -1128,12 +1128,13 @@ export function AutoCompletePage({
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
                           }}
+                          className="fe-td-text"
                           title={text}
                         >
                           {text}
                         </td>
-                        <td>{Number(q.max_score || 0).toFixed(2)} 分</td>
-                        <td>
+                        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{Number(q.max_score || 0).toFixed(2)} 分</td>
+                        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                           <strong style={{ color: '#16a34a' }}>
                             {Number(q.awarded_score || 0).toFixed(2)} 分
                           </strong>
@@ -1148,11 +1149,13 @@ export function AutoCompletePage({
                                 className="fe-audio-player"
                               />
                             </div>
-                          ) : (
+                          ) : ['听后选择', '词汇选择', '单项选择', '选择题'].some(k => typeName.includes(k)) ? (
                             <span className="admin-pill-badge is-muted" style={{ fontSize: 11 }}>客观选择题 · 无需录音</span>
+                          ) : (
+                            <span className="admin-pill-badge is-danger" style={{ fontSize: 11 }}>无音频数据</span>
                           )}
                         </td>
-                        <td>
+                        <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                           <span className="admin-pill-badge is-active" style={{ fontSize: 11 }}>
                             <Icon name="check" style={{ fontSize: 12 }} /> 已核验
                           </span>
@@ -1807,23 +1810,25 @@ export function AutoCompletePage({
                         const audioUrl = item.audio_url as string | undefined
                         return (
                           <tr key={order}>
-                            <td><strong>Q{order}</strong></td>
-                            <td><span className="fe-td-type">{typeName}</span></td>
-                            <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={text}>
+                            <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}><strong>Q{order}</strong></td>
+                            <td style={{ whiteSpace: 'nowrap' }}><span className="fe-td-type">{typeName}</span></td>
+                            <td className="fe-td-text" title={text}>
                               {text}
                             </td>
-                            <td>{Number(maxS).toFixed(2)} 分</td>
-                            <td><strong style={{ color: '#16a34a' }}>{Number(score).toFixed(2)} 分</strong></td>
+                            <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{Number(maxS).toFixed(2)} 分</td>
+                            <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><strong style={{ color: '#16a34a' }}>{Number(score).toFixed(2)} 分</strong></td>
                             <td>
                               {audioUrl ? (
                                 <div className="fe-audio-cell">
                                   <audio controls src={audioUrl} preload="none" className="fe-audio-player" />
                                 </div>
-                              ) : (
+                              ) : ['听后选择', '词汇选择', '单项选择', '选择题'].some(k => typeName.includes(k)) ? (
                                 <span className="admin-pill-badge is-muted" style={{ fontSize: 11 }}>客观选择题 · 无需录音</span>
+                              ) : (
+                                <span className="admin-pill-badge is-danger" style={{ fontSize: 11 }}>无音频数据</span>
                               )}
                             </td>
-                            <td>
+                            <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                               <span className="admin-pill-badge is-active" style={{ fontSize: 11 }}>
                                 <Icon name="check" style={{ fontSize: 12 }} /> 官方已核验
                               </span>
