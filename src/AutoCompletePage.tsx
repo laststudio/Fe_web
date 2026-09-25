@@ -151,7 +151,6 @@ export function AutoCompletePage({
 
   // Mode selection
   const [mode, setMode] = useState<AutoCompleteMode>('auto')
-  const [paceMode, setPaceMode] = useState<'paced' | 'instant'>('paced')
 
   // Voice selection
   const [voiceMode, setVoiceMode] = useState<AutoCompleteVoiceMode>('clone')
@@ -381,30 +380,76 @@ export function AutoCompletePage({
   const [timeOption, setTimeOption] = useState<'recommended' | 'custom'>('recommended')
 
   // Calculate recommended time dynamically:
-  const recommendedTimeSeconds = useMemo(() => {
-    let sum = 0
+  // 按照每道题的参考录音时长相加 x 2 + 2 分钟 (120 秒)
+  const { recommendedTimeSeconds, totalRefAudioSeconds } = useMemo(() => {
+    let totalRef = 0
     const rawQuestions = ((activePaper as Record<string, unknown> | null)?.questions || questions) as Array<{
+      questionText?: string
+      originalText?: string
+      text?: string
+      answers?: string[]
+      typeName?: string
       category?: string
       structure_type?: string
+      audio_duration?: number
+      duration?: number
+      audio_time?: number
     }>
+
     if (rawQuestions && rawQuestions.length > 0) {
       for (const q of rawQuestions) {
-        if (q.category === 'choose' || q.structure_type === 'word_question') {
-          sum += 8
-        } else if (q.structure_type === 'collector.picture' || q.structure_type === 'collector.repeat_essay') {
-          sum += 12
+        // 1. 若题目有显式的音频时长（例如录音秒数或媒体元数据）
+        const explicit = q.audio_duration ?? q.duration ?? q.audio_time
+        if (typeof explicit === 'number' && explicit > 0) {
+          totalRef += explicit > 500 ? explicit / 1000 : explicit
+          continue
+        }
+
+        // 2. 提取参考录音文本（优先取参考答案/朗读原文，没有则取题干）
+        const refText = (q.answers && q.answers.length > 0 && String(q.answers[0]).trim())
+          ? String(q.answers[0])
+          : String(q.questionText || q.originalText || q.text || '')
+
+        const clean = refText
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/ets_th\d+/gi, '')
+          .trim()
+
+        const isChoose = /选择|choose|choice/i.test(`${q.category || ''} ${q.typeName || ''} ${q.structure_type || ''}`)
+        if (isChoose) {
+          // 听选/客观题：参考提示音频约为 6 秒
+          totalRef += 6
+        } else if (clean) {
+          const words = clean.match(/[a-zA-Z0-9'-]+/g)
+          if (words && words.length > 0) {
+            // 英文常规示范录音语速约 2.2 词/秒 (132 wpm)，每题基线不少于 3 秒
+            totalRef += Math.max(3, words.length / 2.2)
+          } else {
+            // 中文或汉字按 3.5 字/秒
+            const chars = clean.replace(/\s+/g, '').length
+            totalRef += Math.max(3, chars / 3.5)
+          }
         } else {
-          sum += 15
+          totalRef += 5
         }
       }
     } else {
-      sum = totalQuestions * 12
+      totalRef = totalQuestions * 6
     }
+
+    const roundedRef = Math.round(totalRef)
+    // 算法规则：每道题的参考录音时长相加 x 2 + 2min (120s)
     const kind = (currentHw as Record<string, unknown>)?.kind as string | undefined
-    if (kind === 'mock') return Math.max(sum, 180)
-    if (kind === 'pk' || kind === 'vocab') return Math.max(sum, 30)
-    if (kind === 'composition') return Math.max(sum, 300)
-    return Math.max(sum, 60)
+    let rec = roundedRef * 2 + 120
+    if (kind === 'mock') rec = Math.max(rec, 180)
+    if (kind === 'pk' || kind === 'vocab') rec = Math.max(rec, 30)
+    if (kind === 'composition') rec = Math.max(rec, 300)
+    rec = Math.max(rec, 60)
+
+    return {
+      recommendedTimeSeconds: rec,
+      totalRefAudioSeconds: roundedRef,
+    }
   }, [activePaper, questions, totalQuestions, currentHw])
 
   const [customMinutes, setCustomMinutes] = useState<number | null>(null)
@@ -2071,7 +2116,7 @@ export function AutoCompletePage({
         target_total: mode === 'auto' ? autoTargetTotal : Number(manualTotalSum.toFixed(2)),
         allow_over_max: mode === 'manual' ? isManualTotalOverMax || manualOverMaxQuestions.length > 0 : false,
         use_time: selectedUseTimeSeconds,
-        pace_mode: paceMode,
+        pace_mode: 'paced',
         voice_mode: voiceMode,
         voice_id: voiceMode === 'clone' ? (selectedVoiceId || undefined) : undefined,
         clone_model: voiceMode === 'clone' ? cloneModel : undefined,
@@ -2659,7 +2704,7 @@ export function AutoCompletePage({
                 <span className="admin-pill-badge is-success">算法推荐</span>
               </div>
               <p>
-                根据本试卷 {totalQuestions} 道题（按客观题 8 秒/题、口语朗读 12-15 秒/题及考卷类型最低限时）动态推算。
+                按本试卷每道题的参考录音时长（共约 {formatSeconds(totalRefAudioSeconds)}）× 2 + 2 分钟准备与过渡缓冲时间推算。
               </p>
             </div>
           </div>
@@ -2747,48 +2792,6 @@ export function AutoCompletePage({
             )}
           </div>
         )}
-
-        <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #e2e8f0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-            <Icon name="speed" style={{ fontSize: 16, color: 'var(--control-blue)' }} />
-            <strong style={{ fontSize: 14 }}>后台做题节奏与控速模式：</strong>
-          </div>
-          <div className="fe-voice-options-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
-            <div
-              className={`fe-voice-option-card ${paceMode === 'paced' ? 'is-active' : ''}`}
-              onClick={() => setPaceMode('paced')}
-              style={{ cursor: 'pointer' }}
-            >
-              <div className="fe-voice-card-radio">
-                <span className={`fe-radio-circle ${paceMode === 'paced' ? 'is-checked' : ''}`} />
-              </div>
-              <div className="fe-voice-card-content">
-                <div className="fe-voice-card-title">
-                  <strong>真实拟真控速 (防封推荐)</strong>
-                  <span className="admin-pill-badge is-success">最高安全</span>
-                </div>
-                <p>后台按规划时长（{formatSeconds(selectedUseTimeSeconds)}）分步真实耗时作答，ETS平台留存真实考试时长记录。支持随时点击“跳过等待”提前交卷。</p>
-              </div>
-            </div>
-
-            <div
-              className={`fe-voice-option-card ${paceMode === 'instant' ? 'is-active' : ''}`}
-              onClick={() => setPaceMode('instant')}
-              style={{ cursor: 'pointer' }}
-            >
-              <div className="fe-voice-card-radio">
-                <span className={`fe-radio-circle ${paceMode === 'instant' ? 'is-checked' : ''}`} />
-              </div>
-              <div className="fe-voice-card-content">
-                <div className="fe-voice-card-title">
-                  <strong>极速秒刷提交</strong>
-                  <span className="admin-pill-badge is-muted">极速完成</span>
-                </div>
-                <p>不进行后台拟真读题耗时等待，直接以最快速度完成所有题目合成并交卷（耗时由接口提交参数决定）。</p>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* 3. Voice Selection Section */}
@@ -3151,7 +3154,7 @@ export function AutoCompletePage({
                     </p>
                     <p>
                       您当前配置的目标分数为 <strong>{autoTargetTotal.toFixed(1)} 分</strong>（已受 95% 保护线风控拦截），
-                      答题预计用时 <strong>{formatSeconds(selectedUseTimeSeconds)}</strong>（{paceMode === 'paced' ? '拟真控速模式 · 防封推荐' : '极速秒刷模式'}）。
+                      答题预计用时 <strong>{formatSeconds(selectedUseTimeSeconds)}</strong>（拟真匀速作答 · 防封推荐）。
                     </p>
                   </div>
 
