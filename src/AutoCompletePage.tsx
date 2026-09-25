@@ -2914,8 +2914,8 @@ export function AutoCompletePage({
                   {
                     id: 'ming-omni-tts',
                     name: 'Ming-Omni',
-                    badge: '云端维护中',
-                    isMaintenance: true,
+                    badge: '多模态·排队长',
+                    isMaintenance: false,
                   },
                   {
                     id: 'moss-tts-nano',
@@ -2940,7 +2940,7 @@ export function AutoCompletePage({
                       onClick={(e) => {
                         e.stopPropagation()
                         if (m.isMaintenance) {
-                          onToast?.('Ming-Omni 上游服务维护中（返回静音空音频），请使用推荐的 Pocket TTS 或 MOSS Nano')
+                          onToast?.('Ming-Omni 上游服务维护中，请使用推荐的 Pocket TTS 或 MOSS Nano')
                           return
                         }
                         if (isDisabled) {
@@ -2954,11 +2954,7 @@ export function AutoCompletePage({
                       }}
                     >
                       <span className="fe-voice-model-tab-name">{m.name}</span>
-                      {m.isMaintenance ? (
-                        <span className="fe-voice-model-tab-badge" style={{ background: '#fee2e2', color: '#b91c1c' }}>
-                          云端维护中
-                        </span>
-                      ) : isDisabled ? (
+                      {isDisabled ? (
                         <span className="fe-voice-model-tab-badge" style={{ background: '#fee2e2', color: '#b91c1c' }}>已停用</span>
                       ) : isRestricted ? (
                         <span className="fe-voice-model-tab-badge" style={{ background: '#fef3c7', color: '#b45309' }}>
@@ -2986,11 +2982,9 @@ export function AutoCompletePage({
                   <div>
                     <div className="fe-voice-model-detail-title">
                       <strong>Ming-Omni (0.5B 中英多模态架构)</strong>
-                      <span style={{ color: '#ef4444', fontWeight: 600 }}>云端维护中 · 推荐改选 Pocket TTS</span>
+                      <span style={{ color: '#d97706', fontWeight: 600 }}>耗时较长（排队 60~120s）· 极高拟真</span>
                     </div>
-                    <p style={{ color: '#dc2626' }}>
-                      该模型目前 upstream 服务异常（输出纯静音音频）。系统已配置静音探测与自动兜底，遇到静音将秒级自动降级至 Pocket TTS。
-                    </p>
+                    <p>生动还原真人呼吸与自然口语顿挫，贴合中国学生发音习惯。注意：云端排队耗时较长（约 60~120 秒）。系统已内置人声音量质检与自动兜底，若超时或异常将秒级切换至 Pocket TTS 保障作答成功。</p>
                   </div>
                 )}
                 {cloneModel === 'moss-tts-nano' && (
