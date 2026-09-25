@@ -30,7 +30,6 @@ export type StartAutoCompletePayload = {
   target_total: number
   allow_over_max: boolean
   use_time: number
-  pace_mode?: 'paced' | 'instant'
   voice_mode: AutoCompleteVoiceMode
   voice_id?: string
   clone_model?: 'pocket-tts' | 'ming-omni-tts' | 'moss-tts-nano'
@@ -83,10 +82,8 @@ export type AutoCompleteTaskResponse = {
   question_results?: QuestionTaskDetail[]
   result?: AutoCompleteTaskResult | null
   error?: string | null
-  can_rush?: boolean
   target_use_time?: number
   current_elapsed_seconds?: number
-  skip_pace?: boolean
 }
 
 export function getAutoCompletePermit(
@@ -154,19 +151,6 @@ export function cancelAutoCompleteTask(
 ): Promise<{ success: boolean; task?: AutoCompleteTaskResponse; message?: string }> {
   return apiRequest<{ success: boolean; task?: AutoCompleteTaskResponse; message?: string }>(
     `/homework/auto-complete/tasks/${encodeURIComponent(taskId)}/cancel`,
-    {
-      method: 'POST',
-      accessToken,
-    }
-  )
-}
-
-export function rushAutoCompleteTask(
-  accessToken: string,
-  taskId: string
-): Promise<{ success: boolean; task?: AutoCompleteTaskResponse; message?: string }> {
-  return apiRequest<{ success: boolean; task?: AutoCompleteTaskResponse; message?: string }>(
-    `/homework/auto-complete/tasks/${encodeURIComponent(taskId)}/rush`,
     {
       method: 'POST',
       accessToken,

@@ -43,6 +43,8 @@ type Page = '/' | '/history' | '/pk' | '/settings' | '/auto-complete' | string
 const logoSrc = '/fe_logo.png'
 const sidebarCollapsedStorageKey = 'fe-web.sidebar-collapsed'
 const skipRiskWarningStorageKey = 'fe-web.skip-risk-warning'
+const legalConsentStorageKey = 'fe-web.legal-consent'
+const legalConsentVersion = '2026-09-25'
 const STORAGE_KEY_ACTIVE_TASK = 'fe_auto_complete_active_task'
 const SESSION_STORAGE_KEY = 'lastudio.feweb.session'
 const SESSION_EXPIRY_MARGIN_MS = 30_000
@@ -166,6 +168,22 @@ function readStoredSkipRiskWarning() {
   return window.localStorage.getItem(skipRiskWarningStorageKey) === 'true'
 }
 
+function readStoredLegalConsent(): boolean {
+  try {
+    return window.localStorage.getItem(legalConsentStorageKey) === legalConsentVersion
+  } catch {
+    return false
+  }
+}
+
+function writeStoredLegalConsent(): void {
+  try {
+    window.localStorage.setItem(legalConsentStorageKey, legalConsentVersion)
+  } catch {
+    // LocalStorage might be disabled in private mode; the in-memory state still gates this session.
+  }
+}
+
 function resolveAvatarUrl(avatarUrl?: string | null): string | null {
   if (!avatarUrl) return null
   if (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://')) return avatarUrl
@@ -246,6 +264,65 @@ function AnnouncementModal({
           )}
           <button className="control-primary" type="button" onClick={onClose}>
             我知道了
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function LegalConsentModal({ onAccept }: { onAccept: () => void }) {
+  const [checked, setChecked] = useState(false)
+  const checkboxId = useId()
+
+  return (
+    <div className="risk-modal-backdrop legal-consent-backdrop" role="dialog" aria-modal="true" aria-labelledby="legal-consent-title">
+      <div className="risk-modal-card legal-consent-card">
+        <div className="risk-modal-head legal-consent-head">
+          <div className="risk-icon-wrap legal-consent-icon">
+            <Icon name="verified_user" filled />
+          </div>
+          <div>
+            <h2 id="legal-consent-title">首次使用前，请阅读服务说明</h2>
+            <p className="risk-modal-subtitle">Fe Web · LA Studio 服务</p>
+          </div>
+        </div>
+        <div className="risk-modal-body legal-consent-body">
+          <p>
+            使用作业同步、解析、语音和第三方账号绑定功能前，请先阅读并理解以下文件。不同意时无法继续使用 Fe Web。
+          </p>
+          <div className="legal-consent-links" aria-label="服务文件">
+            <a href="https://lastudio.cc/terms#section-1" target="_blank" rel="noreferrer">
+              <Icon name="description" /> 服务协议
+              <Icon name="open_in_new" />
+            </a>
+            <a href="https://lastudio.cc/terms#section-3" target="_blank" rel="noreferrer">
+              <Icon name="lock" /> 隐私政策
+              <Icon name="open_in_new" />
+            </a>
+            <a href="https://lastudio.cc/terms#section-4" target="_blank" rel="noreferrer">
+              <Icon name="warning" /> 免责声明
+              <Icon name="open_in_new" />
+            </a>
+          </div>
+          <div className="legal-consent-note">
+            <strong>重点提示</strong>
+            <span>第三方账号凭据、作业内容和语音数据只会在你主动使用对应功能时处理；解析结果仅供课后学习参考，禁止用于考试作弊。</span>
+          </div>
+          <label className="risk-modal-checkbox legal-consent-checkbox" htmlFor={checkboxId}>
+            <input
+              id={checkboxId}
+              type="checkbox"
+              checked={checked}
+              onChange={(event) => setChecked(event.target.checked)}
+            />
+            <span>我已阅读并同意《服务协议》《隐私政策》和《免责声明》</span>
+          </label>
+        </div>
+        <div className="risk-modal-actions legal-consent-actions">
+          <span>协议版本：2026-09-25</span>
+          <button className="control-primary" type="button" disabled={!checked} onClick={onAccept}>
+            同意并继续
           </button>
         </div>
       </div>
@@ -1699,6 +1776,30 @@ function SettingsPage({
           />
         </div>
       </section>
+
+      <section className="admin-policy-card">
+        <div className="admin-policy-card-head">
+          <Icon name="gavel" />
+          <div>
+            <h3>服务协议与隐私</h3>
+            <p>查看当前生效的服务协议、隐私政策和免责声明</p>
+          </div>
+        </div>
+        <div className="admin-setting-switch-row">
+          <div className="admin-setting-switch-info">
+            <strong>LA Studio 法务与合规说明</strong>
+            <span>协议更新时会在首次启动时再次请求确认</span>
+          </div>
+          <a
+            className="control-secondary"
+            href="https://lastudio.cc/terms"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <Icon name="open_in_new" /> 查看完整文本
+          </a>
+        </div>
+      </section>
     </div>
   )
 }
@@ -1715,6 +1816,7 @@ function currentPage(pathname: string): Page | null {
 
 function App() {
   const [pathname, setPathname] = useState(() => window.location.pathname)
+  const [legalConsentAccepted, setLegalConsentAccepted] = useState(readStoredLegalConsent)
   const [session, setSessionState] = useState<AuthSession | null>(readStoredSession)
   const [currentUser, setCurrentUser] = useState<User | null>(() => readStoredSession()?.user ?? null)
   const [authMessage, setAuthMessage] = useState('')
@@ -2046,13 +2148,13 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!page || session || authMessage || authorizationStarted.current || pathname === '/auth/callback') return
+    if (!legalConsentAccepted || !page || session || authMessage || authorizationStarted.current || pathname === '/auth/callback') return
     authorizationStarted.current = true
     void startAuthorization(page).catch((error: unknown) => {
       authorizationStarted.current = false
       setAuthMessage(error instanceof Error ? error.message : '无法连接统一认证，请稍后重试。')
     })
-  }, [authMessage, page, pathname, session])
+  }, [authMessage, legalConsentAccepted, page, pathname, session])
 
   // Fetch platform account info on login (does not call ETS100, safe from kickout)
   useEffect(() => {
@@ -2873,6 +2975,15 @@ function App() {
       authorizationStarted.current = false
       setAuthMessage(error instanceof Error ? error.message : '无法连接统一认证，请稍后重试。')
     })
+  }
+
+  function acceptLegalConsent() {
+    writeStoredLegalConsent()
+    setLegalConsentAccepted(true)
+  }
+
+  if (!legalConsentAccepted) {
+    return <LegalConsentModal onAccept={acceptLegalConsent} />
   }
 
   if (pathname === '/auth/callback') {

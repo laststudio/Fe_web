@@ -2416,6 +2416,149 @@ html:has(.control-shell) {
   gap: 10px;
 }
 
+/* First-run legal consent */
+
+.legal-consent-backdrop {
+  z-index: 1200;
+}
+
+.legal-consent-card {
+  width: min(620px, 100%);
+}
+
+.legal-consent-head {
+  background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%);
+  border-bottom-color: #dbeafe;
+}
+
+.legal-consent-icon {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.legal-consent-head h2 {
+  color: #1e3a8a;
+}
+
+.legal-consent-head .risk-modal-subtitle {
+  color: #2563eb;
+}
+
+.legal-consent-body {
+  max-height: min(62vh, 520px);
+  overflow-y: auto;
+}
+
+.legal-consent-body > p {
+  margin-bottom: 16px;
+}
+
+.legal-consent-links {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.legal-consent-links a {
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid #dbe3ef;
+  border-radius: 9px;
+  color: #334155;
+  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.legal-consent-links a:hover,
+.legal-consent-links a:focus-visible {
+  color: #1d4ed8;
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.legal-consent-links a .material-symbols-outlined:last-child {
+  font-size: 15px;
+  color: #64748b;
+}
+
+.legal-consent-note {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 11px 13px;
+  border: 1px solid #bfdbfe;
+  border-radius: 9px;
+  color: #1e3a8a;
+  background: #eff6ff;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.legal-consent-note strong {
+  font-size: 12px;
+}
+
+.legal-consent-checkbox {
+  align-items: flex-start;
+  color: #1f2937;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.legal-consent-checkbox input {
+  margin-top: 3px;
+  accent-color: #2563eb;
+}
+
+.legal-consent-actions {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.legal-consent-actions > span {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.legal-consent-actions .control-primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+@media (max-width: 640px) {
+  .legal-consent-backdrop {
+    padding: 12px;
+  }
+
+  .legal-consent-head,
+  .legal-consent-body,
+  .legal-consent-actions {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .legal-consent-links {
+    grid-template-columns: 1fr;
+  }
+
+  .legal-consent-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .legal-consent-actions .control-primary {
+    width: 100%;
+  }
+}
+
 @keyframes modal-fade-in {
   from { opacity: 0; }
   to { opacity: 1; }

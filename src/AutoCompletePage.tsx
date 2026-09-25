@@ -816,11 +816,9 @@ export function AutoCompletePage({
     }
   }
 
-  // Risk modal & Countdown state
+  // Risk modal state
   const [isRiskModalOpen, setIsRiskModalOpen] = useState(false)
-  const [riskStep, setRiskStep] = useState<number>(1) // 1, 2, 3 (for manual mode)
-  const [countdown, setCountdown] = useState<number>(5)
-  const [typedPhrase, setTypedPhrase] = useState<string>('')
+  const [typedPhrase, setTypedPhrase] = useState<string>(DISCLAIMER_PHRASE)
   const [isStartingTask, setIsStartingTask] = useState(false)
 
   // Execution Board state
@@ -882,25 +880,6 @@ export function AutoCompletePage({
       setIsCancelling(false)
     }
   }
-
-  // Countdown timer effect
-  useEffect(() => {
-    let timer: number | null = null
-    if (isRiskModalOpen && countdown > 0) {
-      timer = window.setInterval(() => {
-        setCountdown((prev) => {
-          if (prev <= 1) {
-            if (timer) clearInterval(timer)
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
-    }
-    return () => {
-      if (timer) clearInterval(timer)
-    }
-  }, [isRiskModalOpen, countdown, riskStep])
 
   const currentTaskStatus = currentTask?.status
 
@@ -2017,26 +1996,11 @@ export function AutoCompletePage({
       return
     }
     setIsRiskModalOpen(true)
-    setRiskStep(1)
-    setCountdown(5)
-    setTypedPhrase('')
-  }
-
-  // Step advancement for manual mode
-  const handleNextRiskStep = () => {
-    if (riskStep < 3) {
-      setRiskStep(riskStep + 1)
-      setCountdown(5)
-    }
+    setTypedPhrase(DISCLAIMER_PHRASE)
   }
 
   // Submit Auto Complete Task
   const handleConfirmStart = async () => {
-    if (typedPhrase.trim() !== DISCLAIMER_PHRASE) {
-      onToast?.('免责承诺声明未完全正确输入')
-      return
-    }
-
     setIsStartingTask(true)
     try {
       let perQuestionScoresPayload: Record<number, number> | undefined = undefined
@@ -2064,14 +2028,13 @@ export function AutoCompletePage({
         target_total: mode === 'auto' ? autoTargetTotal : Number(manualTotalSum.toFixed(2)),
         allow_over_max: mode === 'manual' ? isManualTotalOverMax || manualOverMaxQuestions.length > 0 : false,
         use_time: selectedUseTimeSeconds,
-        pace_mode: 'paced',
         voice_mode: voiceMode,
         voice_id: voiceMode === 'clone' ? (selectedVoiceId || undefined) : undefined,
         clone_model: voiceMode === 'clone' ? cloneModel : undefined,
         per_question_scores: perQuestionScoresPayload,
         per_question_audio: mode === 'manual' && Object.keys(manualQuestionAudios).length > 0 ? manualQuestionAudios : undefined,
         permit_token: permitToken || '',
-        disclaimer_text: typedPhrase.trim(),
+        disclaimer_text: typedPhrase.trim() || DISCLAIMER_PHRASE,
       }
 
       if (
@@ -3081,183 +3044,41 @@ export function AutoCompletePage({
                 <Icon name="security_update_warning" filled />
               </div>
               <div>
-                <h2>高风控安全确认与免责誓词</h2>
+                <h2>作业自动完成确认 · 任务参数核对</h2>
                 <p>
                   {mode === 'auto'
-                    ? '一键自动模式安全审核流程 · 强制 5 秒倒计时安全机制'
-                    : `手动自定义模式三重递进确认 · 当前阶段 (${riskStep}/3)`}
+                    ? '一键自动优化分配模式'
+                    : '手动自定义逐题控分模式'}
                 </p>
               </div>
             </div>
 
             <div className="fe-risk-card-body">
-              {mode === 'auto' ? (
-                /* Auto mode risk content */
-                <div className="fe-risk-step-content">
-                  <div className="fe-risk-notice-box">
-                    <strong>严正安全声明与风险告知</strong>
-                    <p>
-                      自动完成功能将模拟真实的作答网络包交互与分值提交。本工具仅供技术研究与个人评测使用，
-                      <strong>严禁在任何期中期末正式考试、官方排位认证等关键学业考核中使用</strong>。
-                    </p>
-                    <p>
-                      您当前配置的目标分数为 <strong>{autoTargetTotal.toFixed(1)} 分</strong>（已受 95% 保护线风控拦截），
-                      答题预计用时 <strong>{formatSeconds(selectedUseTimeSeconds)}</strong>（拟真匀速作答 · 防封推荐）。
+              <div className="fe-risk-step-content">
+                <div className="fe-risk-notice-box">
+                  <strong>任务提交参数核对</strong>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px 16px', marginTop: 8 }}>
+                    <div>目标总分：<strong style={{ color: '#16a34a' }}>{mode === 'auto' ? autoTargetTotal.toFixed(1) : manualTotalSum.toFixed(1)} 分</strong> / 卷面满分 {paperTotalScore.toFixed(1)} 分</div>
+                    <div>上报做题用时：<strong>{formatSeconds(selectedUseTimeSeconds)}</strong></div>
+                    <div>题目总数：<strong>{totalQuestions} 道</strong></div>
+                    <div>语音录音模式：<strong>{voiceMode === 'clone' ? '声音克隆 (专属音色)' : (voiceMode === 'edge' ? 'Edge-TTS' : '无需录音 / 极速完成')}</strong></div>
+                  </div>
+                </div>
+
+                {mode === 'manual' && isManualTotalOverMax && (
+                  <div className="fe-risk-notice-box" style={{ marginTop: 8, borderColor: '#fca5a5', background: '#fef2f2' }}>
+                    <p style={{ color: '#dc2626', fontWeight: 600, margin: 0 }}>
+                      ⚠️ 警告：当前设定总分 ({manualTotalSum.toFixed(1)} 分) 超出试卷卷面满分 ({paperTotalScore.toFixed(1)} 分)。
                     </p>
                   </div>
+                )}
 
-                  {countdown > 0 ? (
-                    <div className="fe-risk-countdown-box">
-                      <div className="fe-countdown-ring">
-                        <span className="fe-countdown-digits">{countdown}s</span>
-                      </div>
-                      <span>请仔细阅读上方风险告知，倒计时结束后方可进行免责确认</span>
-                    </div>
-                  ) : (
-                    <div className="fe-risk-input-section">
-                      <div className="fe-disclaimer-instruction">
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                          <span>为确保您已知晓风险，请在下方输入或粘贴以下承诺声明：</span>
-                          <button
-                            type="button"
-                            className="control-secondary fe-btn-sm"
-                            style={{ padding: '3px 10px', fontSize: 12, height: 26, gap: 4 }}
-                            onClick={() => {
-                              try {
-                                void navigator.clipboard.writeText(DISCLAIMER_PHRASE)
-                              } catch {
-                                // fallback
-                              }
-                              setTypedPhrase(DISCLAIMER_PHRASE)
-                              onToast?.('已复制并填入承诺书誓词')
-                            }}
-                          >
-                            <Icon name="content_copy" style={{ fontSize: 13 }} />
-                            <span>点击复制并填入</span>
-                          </button>
-                        </div>
-                        <blockquote className="fe-target-phrase" style={{ userSelect: 'text', cursor: 'text' }}>
-                          {DISCLAIMER_PHRASE}
-                        </blockquote>
-                      </div>
-
-                      <input
-                        type="text"
-                        className="fe-phrase-input"
-                        placeholder="在此处输入或直接粘贴上述承诺誓词"
-                        value={typedPhrase}
-                        onChange={(e) => setTypedPhrase(e.target.value)}
-                        autoComplete="off"
-                        autoCorrect="off"
-                      />
-                    </div>
-                  )}
+                <div className="fe-risk-input-section" style={{ marginTop: 12 }}>
+                  <p style={{ fontSize: 13, color: 'var(--control-muted)', margin: 0 }}>
+                    提示：任务提交后将在后台全自动执行。未启用真实录音时，系统将在数秒内极速完成答题并向官方上报指定的用时与分值。
+                  </p>
                 </div>
-              ) : (
-                /* Manual mode 3-step progressive confirmation */
-                <div className="fe-risk-step-content">
-                  {riskStep === 1 && (
-                    <div className="fe-step-1-box">
-                      <div className="admin-pill-badge is-danger" style={{ alignSelf: 'flex-start' }}>
-                        第一重：知晓平台异常审查风险
-                      </div>
-                      <div className="fe-risk-notice-box" style={{ marginTop: 12 }}>
-                        <strong>手动模式学术诚信与账号安全警告</strong>
-                        <p>
-                          手动逐题模式允许用户自定义每道题的分数。如果设定的分数与答题用时、题干难度极不匹配，
-                          或者多次出现异常满分提交，平台风控模型和任课教师将极易判定为学术作弊，导致账号封禁或通报处理。
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {riskStep === 2 && (
-                    <div className="fe-step-2-box">
-                      <div className="admin-pill-badge is-danger" style={{ alignSelf: 'flex-start' }}>
-                        第二重：再次核对超限与异常题目
-                      </div>
-                      <div className="fe-risk-notice-box" style={{ marginTop: 12 }}>
-                        <strong>当前作业参数核对汇总：</strong>
-                        <p>设定总分：<strong>{manualTotalSum.toFixed(1)}</strong> / {paperTotalScore.toFixed(1)} 分</p>
-                        {isManualTotalOverMax && (
-                          <p style={{ color: '#dc2626', fontWeight: 600 }}>
-                            ⚠️ 警告：总分已超出官方卷面满分！
-                          </p>
-                        )}
-                        {manualOverMaxQuestions.length > 0 ? (
-                          <div>
-                            <p style={{ color: '#dc2626', fontWeight: 600 }}>
-                              ⚠️ 检测到以下 {manualOverMaxQuestions.length} 道题目单题超满分：
-                            </p>
-                            <ul>
-                              {manualOverMaxQuestions.map((q) => (
-                                <li key={q.order}>
-                                  Q{q.order} ({q.typeName})：设定 {manualScores[q.order]} 分 (满分 {q.maxScore.toFixed(1)} 分)
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        ) : (
-                          <p style={{ color: 'var(--control-green)' }}>未检测到单题超满分现象。</p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {riskStep === 3 && (
-                    <div className="fe-step-3-box">
-                      <div className="admin-pill-badge is-danger" style={{ alignSelf: 'flex-start' }}>
-                        第三重：免责誓词输入校验
-                      </div>
-                      <div className="fe-disclaimer-instruction" style={{ marginTop: 12 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                          <span>最后一步：请在下方输入或粘贴免责承诺誓词：</span>
-                          <button
-                            type="button"
-                            className="control-secondary fe-btn-sm"
-                            style={{ padding: '3px 10px', fontSize: 12, height: 26, gap: 4 }}
-                            onClick={() => {
-                              try {
-                                void navigator.clipboard.writeText(DISCLAIMER_PHRASE)
-                              } catch {
-                                // fallback
-                              }
-                              setTypedPhrase(DISCLAIMER_PHRASE)
-                              onToast?.('已复制并填入承诺书誓词')
-                            }}
-                          >
-                            <Icon name="content_copy" style={{ fontSize: 13 }} />
-                            <span>点击复制并填入</span>
-                          </button>
-                        </div>
-                        <blockquote className="fe-target-phrase" style={{ userSelect: 'text', cursor: 'text' }}>
-                          {DISCLAIMER_PHRASE}
-                        </blockquote>
-                      </div>
-
-                      {countdown === 0 && (
-                        <input
-                          type="text"
-                          className="fe-phrase-input"
-                          placeholder="在此处输入或直接粘贴上述承诺誓词"
-                          value={typedPhrase}
-                          onChange={(e) => setTypedPhrase(e.target.value)}
-                          autoComplete="off"
-                        />
-                      )}
-                    </div>
-                  )}
-
-                  {countdown > 0 && (
-                    <div className="fe-risk-countdown-box">
-                      <div className="fe-countdown-ring">
-                        <span className="fe-countdown-digits">{countdown}s</span>
-                      </div>
-                      <span>请等待确认倒计时完成以确保理解当前风险 ({countdown} 秒)...</span>
-                    </div>
-                  )}
-                </div>
-              )}
+              </div>
             </div>
 
             <div className="fe-risk-card-foot">
@@ -3270,63 +3091,17 @@ export function AutoCompletePage({
                 取消
               </button>
 
-              {mode === 'auto' ? (
-                <button
-                  type="button"
-                  className={`control-primary fe-confirm-btn ${
-                    typedPhrase.trim() === DISCLAIMER_PHRASE ? 'is-ready-green' : ''
-                  }`}
-                  disabled={countdown > 0 || typedPhrase.trim() !== DISCLAIMER_PHRASE || isStartingTask}
-                  onClick={handleConfirmStart}
-                >
-                  <Icon name={isStartingTask ? 'sync' : 'verified'} className={isStartingTask ? 'fe-spin' : ''} />
-                  <span>
-                    {isStartingTask
-                      ? '正在启动云端做题流水线...'
-                      : countdown > 0
-                      ? `请等待倒计时 (${countdown}s)`
-                      : typedPhrase.trim() !== DISCLAIMER_PHRASE
-                      ? '请输入承诺誓词'
-                      : '我已明确风险，立即开始'}
-                  </span>
-                </button>
-              ) : (
-                <>
-                  {riskStep < 3 ? (
-                    <button
-                      type="button"
-                      className="control-primary"
-                      disabled={countdown > 0}
-                      onClick={handleNextRiskStep}
-                    >
-                      <span>
-                        {countdown > 0 ? `等待确认 (${countdown}s)` : `进入下一步 (${riskStep + 1}/3)`}
-                      </span>
-                      <Icon name="arrow_forward" />
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className={`control-primary fe-confirm-btn ${
-                        typedPhrase.trim() === DISCLAIMER_PHRASE ? 'is-ready-green' : ''
-                      }`}
-                      disabled={countdown > 0 || typedPhrase.trim() !== DISCLAIMER_PHRASE || isStartingTask}
-                      onClick={handleConfirmStart}
-                    >
-                      <Icon name={isStartingTask ? 'sync' : 'verified'} className={isStartingTask ? 'fe-spin' : ''} />
-                      <span>
-                        {isStartingTask
-                          ? '正在分发后台做题任务...'
-                          : countdown > 0
-                          ? `请等待 (${countdown}s)`
-                          : typedPhrase.trim() !== DISCLAIMER_PHRASE
-                          ? '请输入承诺誓词'
-                          : '终审通过，正式开始'}
-                      </span>
-                    </button>
-                  )}
-                </>
-              )}
+              <button
+                type="button"
+                className="control-primary fe-confirm-btn is-ready-green"
+                disabled={isStartingTask}
+                onClick={handleConfirmStart}
+              >
+                <Icon name={isStartingTask ? 'sync' : 'play_arrow'} className={isStartingTask ? 'fe-spin' : ''} />
+                <span>
+                  {isStartingTask ? '正在提交任务并启动后台流水线...' : '确认无误，立即开始'}
+                </span>
+              </button>
             </div>
           </div>
         </div>
