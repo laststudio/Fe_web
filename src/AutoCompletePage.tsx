@@ -331,21 +331,21 @@ export function AutoCompletePage({
     let calculatedPaperTotal: number
 
     if (isMockSuite) {
-      // Mock Suite standard: 30.0 (or 40.0 for Beijing)
+      // 卷面总分口径：优先由小题满分累加得出；只有题目完全没有满分信息时，
+      // 才回退官方套题基准分（30.0 / 北京 40.0）。绝不把小题满分整体缩放去凑基准分，
+      // 否则会出现「前端显示一题 3.75、目标分却按 30 分算」的错位。
       const mockStandardTotal = isBeijing ? 40.0 : 30.0
-      const hasExplicitPoints = qList.some((q) => q.maxScore > 0)
       const explicitSum = Number(qList.reduce((sum, q) => sum + (q.maxScore > 0 ? q.maxScore : 0), 0).toFixed(2))
 
-      if (hasExplicitPoints && explicitSum > 0 && Math.abs(explicitSum - mockStandardTotal) < 0.1) {
+      if (explicitSum > 0) {
         calculatedPaperTotal = explicitSum
       } else {
         calculatedPaperTotal = mockStandardTotal
-        const baseWeights = qList.map((q) => (q.maxScore > 0 ? q.maxScore : getBenchmarkScore(q)))
-        const sumW = baseWeights.reduce((a, b) => a + b, 0)
+        const sumW = qList.reduce((acc, q) => acc + getBenchmarkScore(q), 0)
         const scale = sumW > 0 ? calculatedPaperTotal / sumW : 1
-        qList = qList.map((q, idx) => ({
+        qList = qList.map((q) => ({
           ...q,
-          maxScore: Number((baseWeights[idx] * scale).toFixed(2)),
+          maxScore: Number((getBenchmarkScore(q) * scale).toFixed(2)),
         }))
         const currentSum = Number(qList.reduce((sum, q) => sum + q.maxScore, 0).toFixed(2))
         const diff = Number((calculatedPaperTotal - currentSum).toFixed(2))
