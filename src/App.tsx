@@ -136,7 +136,7 @@ const pageMeta: Record<string, { title: string; caption: string }> = {
   },
   '/pk': {
     title: '词汇PK',
-    caption: '在线词汇竞赛与训练专项目标',
+    caption: '在线词汇练习',
   },
   '/settings': {
     title: '设置与账号',
@@ -144,8 +144,24 @@ const pageMeta: Record<string, { title: string; caption: string }> = {
   },
   '/auto-complete': {
     title: '作业自动完成',
-    caption: '高拟真自动化答题、分值调度与后台执行看板',
+    caption: '自动完成任务与进度查看',
   },
+}
+
+function friendlyTaskStage(stage: string | null | undefined): string {
+  const value = String(stage || '').trim()
+  if (!value) return '任务处理中...'
+  const cleaned = value
+    .replace(/^\[\d+\/\d+\]\s*/, '')
+    .replace(/国内代理节点|国内代理/g, '')
+    .replace(/出口节点/g, '网络')
+    .replace(/后台流水线|流水线/g, '任务')
+    .replace(/初始化 ETS 会话/g, '准备登录状态')
+    .replace(/初始化做题环境/g, '准备作业')
+    .replace(/无需重复配置部署/g, '无需重复配置')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+  return cleaned || '任务处理中...'
 }
 
 function Icon({ name, className = '', filled = false, style }: { name: string; className?: string; filled?: boolean; style?: CSSProperties }) {
@@ -757,7 +773,7 @@ function PaperReaderView({
                     cursor: compat.supported ? 'pointer' : 'not-allowed',
                   }}
                   onClick={onAutoComplete}
-                  title={compat.supported ? '使用高拟真语音与控分算法自动完成此试卷' : (compat.reason || '该试卷包含暂不支持的题型')}
+                  title={compat.supported ? '自动完成此试卷' : (compat.reason || '该试卷包含暂不支持的题型')}
                 >
                   <Icon name={compat.supported ? 'bolt' : 'block'} />
                   <span>{compat.supported ? '⚡ 自动完成此试卷' : '题型暂不支持'}</span>
@@ -1203,7 +1219,7 @@ function HomeworkListView({
     },
     pk: {
       title: '词汇PK',
-      desc: '在线词汇竞赛与专项目标',
+      desc: '在线词汇练习',
       count: pkHomeworks.length,
     },
   }[activeTab]
@@ -1391,7 +1407,7 @@ function HomeworkListView({
                   <Icon name="wifi_off" />
                 </div>
                 <h2>网络连接异常</h2>
-                <p>{errInfo.message || '无法连接到服务器，请检查您的网络连接或代理设置是否正常。'}</p>
+                <p>{errInfo.message || '无法连接到服务器，请检查网络连接。'}</p>
                 <button type="button" className="control-primary" onClick={hasLoaded ? onRefresh : onManualReadList}>
                   检查网络并重试
                 </button>
@@ -1447,8 +1463,8 @@ function HomeworkListView({
           </h3>
           <p className="fe-list-prompt-desc">
             {activeTab === 'pk'
-              ? '系统支持从云端拉取正在进行中的词汇PK竞技及专练试卷。'
-              : `系统支持从云端拉取${activeTab === 'current' ? '正在进行中的最新作业' : '往期完成及逾期的历史归档作业'}。`}
+              ? '读取当前词汇 PK 作业。'
+              : activeTab === 'current' ? '读取当前作业。' : '读取历史作业。'}
           </p>
 
           <div className="fe-list-prompt-risk-box">
@@ -1457,8 +1473,7 @@ function HomeworkListView({
               <span>官方客户端“顶号”风险重要说明</span>
             </div>
             <p>
-              使用云端模式直连 E听说 获取作业列表时，可能会导致 E听说 官方客户端被退出登录（“顶号”）。
-              为防止影响正常学习与答题，<strong>请务必避开考试、正式答题、录音提交等关键场景</strong>。在确认当前安全后，点击下方按钮手动读取。
+              读取作业时，手机端可能被退出登录。<strong>请先完成手机端作答，再使用网页读取。</strong>
             </p>
           </div>
 
@@ -1653,7 +1668,7 @@ function SettingsPage({
           <Icon name="account_box" />
           <div>
             <h3>ETS100 平台账号状态</h3>
-            <p>拉取作业试卷与答案所依赖的 E听说 平台登录凭据</p>
+            <p>用于读取作业的 E听说账号</p>
           </div>
         </div>
 
@@ -2555,7 +2570,7 @@ function App() {
           let errMsg = err.message || '作业列表同步失败'
           if (err.isNetworkError) {
             errType = 'network_error'
-            errMsg = '网络连接失败，请检查您的网络连接或代理设置是否正常。'
+            errMsg = '网络连接失败，请检查网络连接。'
           } else if (err.reason === 'membership_required' || err.message.includes('会员') || err.message.includes('VIP')) {
             errType = 'membership_required'
             errMsg = err.message || '作业列表同步需要开通会员。'
@@ -2610,7 +2625,7 @@ function App() {
           let errMsg = err.message || '历史作业获取失败'
           if (err.isNetworkError) {
             errType = 'network_error'
-            errMsg = '网络连接失败，请检查您的网络连接或代理设置是否正常。'
+            errMsg = '网络连接失败，请检查网络连接。'
           } else if (err.reason === 'membership_required' || err.message.includes('会员') || err.message.includes('VIP')) {
             errType = 'membership_required'
             errMsg = err.message || '历史作业获取需要开通会员。'
@@ -2661,7 +2676,7 @@ function App() {
         if (err.isNetworkError) {
           setHomeworkError({
             type: 'network_error',
-            message: '无法连接到云端服务器，请检查您的网络连接或代理设置。',
+            message: '无法连接到服务器，请检查网络连接。',
           })
           showToast('网络连接失败，请检查您的网络设置')
         } else if (err.reason === 'membership_required' || err.message.includes('会员') || err.message.includes('VIP')) {
@@ -2914,7 +2929,7 @@ function App() {
 
   // Dynamic sidebar navigation groups with live background task status
   const computedNavGroups = useMemo<{ label: string; items: NavItem[] }[]>(() => {
-    let caption = '高拟真自动化答题与执行看板'
+    let caption = '自动完成任务与进度查看'
     let badge: string | undefined
     let badgeType: 'running' | 'success' | 'failed' | undefined
     let isRunning = false
@@ -2929,7 +2944,7 @@ function App() {
         badge = '失败'
         badgeType = 'failed'
       } else {
-        caption = activeTask.stage_label || activeTask.stage_text || '后台极速执行中...'
+        caption = friendlyTaskStage(activeTask.stage_label || activeTask.stage_text)
         badge = `${activeTask.progress || 0}%`
         badgeType = 'running'
         isRunning = true
@@ -3025,7 +3040,7 @@ function App() {
   const meta = pageMeta[page] || (isAutoCompleteRoute
     ? {
         title: '作业自动完成',
-        caption: '高拟真自动化答题、分值调度与风控防呆',
+        caption: '自动完成任务与进度查看',
       }
     : {
         title: '作业工作台',
@@ -3378,8 +3393,8 @@ function App() {
                   ? (activeTask && !['COMPLETED', 'FAILED'].includes(activeTask.status)
                       ? `正在实时执行「${activeTask.homework_name || '作业'}」· 当前进度 ${activeTask.progress || 0}%`
                       : pathname === '/auto-complete'
-                      ? '后台流水线监控、实时答题跟踪与历史效果回溯'
-                      : '配置目标分值、作答时长与拟真音色模型')
+                      ? '查看任务进度和历史记录'
+                      : '配置目标分数、作答用时和声音')
                   : viewingPaper
                   ? '查看作业结构、题目解析与标准答案'
                   : meta.caption}

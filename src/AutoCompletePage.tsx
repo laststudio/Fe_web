@@ -16,6 +16,22 @@ import { getHomeworkDetail, startParseHomework, type HomeworkItem, type Paper } 
 
 const DISCLAIMER_PHRASE = '作者不为使用此功能造成的一切后果负责'
 
+function friendlyTaskStage(stage: string | null | undefined, fallback = '任务处理中...'): string {
+  const value = String(stage || '').trim()
+  if (!value) return fallback
+  const cleaned = value
+    .replace(/^\[\d+\/\d+\]\s*/, '')
+    .replace(/国内代理节点|国内代理/g, '')
+    .replace(/出口节点/g, '网络')
+    .replace(/后台流水线|流水线/g, '任务')
+    .replace(/初始化 ETS 会话/g, '准备登录状态')
+    .replace(/初始化做题环境/g, '准备作业')
+    .replace(/无需重复配置部署/g, '无需重复配置')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+  return cleaned || fallback
+}
+
 export type FeatureCheck = {
   enabled: boolean
   status: 'enabled' | 'membership_required' | 'feature_disabled' | 'kill_switch'
@@ -502,7 +518,7 @@ export function AutoCompletePage({
     if (val > maxAutoScore) {
       setCustomAutoTargetTotal(maxAutoScore)
       setSelectedRatio(0.95)
-      onToast?.(`已自动受风控限制截断为最高 95% 比例 (${maxAutoScore}分)`)
+      onToast?.(`目标分数最高为试卷满分的 95%（${maxAutoScore} 分）`)
     } else {
       const rounded = Number(val.toFixed(2))
       setCustomAutoTargetTotal(rounded)
@@ -1005,11 +1021,11 @@ export function AutoCompletePage({
             <div>
               <h2>{task.homework_name || '作业自动完成任务'}</h2>
               <p>
-                任务ID: {task.task_id} · 音色模式:{' '}
+                音色模式:{' '}
                 {task.voice_mode === 'clone'
-                  ? '专属声音克隆 (tts.ai)'
+                  ? '专属声音'
                   : task.voice_mode === 'edge'
-                  ? 'Edge-TTS 原声'
+                  ? '标准声音'
                   : '无录音'}
                 {completedAt ? ` · 完成时间: ${completedAt}` : ''}
               </p>
@@ -1063,7 +1079,7 @@ export function AutoCompletePage({
                 任务执行异常
               </strong>
               <span style={{ color: '#b91c1c', fontSize: 13 }}>
-                {task.error || task.stage_label || '任务在执行中遇到未知错误中断'}
+                {task.error || friendlyTaskStage(task.stage_label, '任务执行中断')}
               </span>
             </div>
           </div>
@@ -1216,10 +1232,10 @@ export function AutoCompletePage({
                 <h2>自动完成任务看板</h2>
                 <span className="admin-pill-badge is-muted">
                   <Icon name="analytics" style={{ fontSize: 13 }} />
-                  <span>任务流水与效果核验</span>
+                  <span>任务记录</span>
                 </span>
               </div>
-              <p>实时监控当前后台答题进度，回溯历史任务最终成绩与生成录音效果</p>
+              <p>查看任务进度和历史记录</p>
             </div>
           </div>
 
@@ -1260,11 +1276,11 @@ export function AutoCompletePage({
                       正在执行: {activeTask.homework_name || '作业自动完成'}
                     </h3>
                     <span className="admin-pill-badge is-active" style={{ fontSize: 11 }}>
-                      <Icon name="bolt" style={{ fontSize: 12 }} /> 流水线极速运行中
+                      <Icon name="bolt" style={{ fontSize: 12 }} /> 正在执行
                     </span>
                   </div>
                   <small style={{ color: '#047857', display: 'block', marginTop: 3 }}>
-                    {activeTask.stage_label || activeTask.stage_text || '后台流水线极速处理中...'}
+                    {friendlyTaskStage(activeTask.stage_label || activeTask.stage_text, '任务处理中...')}
                   </small>
                 </div>
               </div>
@@ -1474,7 +1490,7 @@ export function AutoCompletePage({
                           {t.voice_mode === 'clone'
                             ? '专属声音克隆'
                             : t.voice_mode === 'edge'
-                            ? 'Edge-TTS 微软'
+                            ? '标准声音'
                             : '原声回放'}
                         </span>
                       </div>
@@ -1483,7 +1499,7 @@ export function AutoCompletePage({
                           <Icon name="tune" style={{ fontSize: 13 }} /> 作答模式:
                         </span>
                         <span className="fe-kanban-setting-val">
-                          {t.mode === 'manual' ? '拟真人工作答' : '全自动目标分'}
+                          {t.mode === 'manual' ? '逐题设置分数' : '自动设置目标分'}
                         </span>
                       </div>
                       <div className="fe-kanban-setting-row">
@@ -1505,7 +1521,7 @@ export function AutoCompletePage({
                     {isErr && (
                       <div className="fe-kanban-card-error">
                         <Icon name="info" style={{ fontSize: 14 }} />
-                        <span>{t.error || '云端通信或出口节点异常中断'}</span>
+                        <span>{t.error || '网络连接中断'}</span>
                       </div>
                     )}
 
@@ -1563,7 +1579,7 @@ export function AutoCompletePage({
                   ? '任务执行中断'
                   : `正在自动完成 (${currentTask?.progress || 10}%)`}
               </strong>
-              <small>{currentTask?.stage_label || currentTask?.stage_text || '后台流水线处理中...'}</small>
+              <small>{friendlyTaskStage(currentTask?.stage_label || currentTask?.stage_text)}</small>
             </div>
             <button
               type="button"
@@ -1618,7 +1634,7 @@ export function AutoCompletePage({
                 ? '任务已顺利完成'
                 : currentTask?.status === 'FAILED'
                 ? '任务执行中断'
-                : '流水线实时执行中'}
+                : '正在执行'}
             </span>
           </span>
         </div>
@@ -1679,7 +1695,7 @@ export function AutoCompletePage({
                 </div>
                 <h2>任务执行遇到问题</h2>
                 <p style={{ maxWidth: 520, margin: '8px auto 0', color: '#b91c1c', wordBreak: 'break-word', whiteSpace: 'pre-line' }}>
-                  {currentTask.error || currentTask.stage_label || '云端同步或平台通信发生错误，请稍后重试。'}
+                  {currentTask.error || friendlyTaskStage(currentTask.stage_label, '任务执行失败，请稍后重试。')}
                 </p>
                 <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 20 }}>
                   <button
@@ -1726,7 +1742,7 @@ export function AutoCompletePage({
                 </div>
                 <h3>恭喜，作业已成功自动完成并提交！</h3>
                 <p className="fe-settlement-desc">
-                  所有题目作答录音与真实换算评分已通过国内代理成功上报至 ETS100 云端官方平台。
+                  所有题目已完成，作答结果已提交。
                 </p>
 
                 {/* Summary Score Stats */}
@@ -1892,7 +1908,7 @@ export function AutoCompletePage({
                 <div className="fe-exec-progress-meta">
                   <span className="fe-exec-stage-text">
                     <Icon name="sync" className="fe-spin" />
-                    {currentTask?.stage_label || currentTask?.stage_text || '正在连接国内代理节点并初始化做题环境...'}
+                    {friendlyTaskStage(currentTask?.stage_label || currentTask?.stage_text, '正在准备作业...')}
                   </span>
                   <strong className="fe-exec-percentage">
                     {currentTask?.progress || 10}%
@@ -1906,7 +1922,7 @@ export function AutoCompletePage({
                       当前作答题干 (第 {currentTask?.current_question_index || 1} / {currentTask?.total_questions || totalQuestions} 题)：
                     </small>
                     <span className="admin-pill-badge is-muted" style={{ fontSize: 11 }}>
-                      {voiceMode === 'clone' ? '专属音色克隆中' : voiceMode === 'edge' ? 'Edge-TTS 合成中' : '静音模式'}
+                      {voiceMode === 'clone' ? '专属声音生成中' : voiceMode === 'edge' ? '标准声音生成中' : '静音模式'}
                     </span>
                   </div>
                   <p className="fe-stem-text">
@@ -1918,7 +1934,7 @@ export function AutoCompletePage({
                 {currentTask?.question_results && currentTask.question_results.length > 0 && (
                   <div className="fe-exec-questions-checklist">
                     <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--control-muted)', marginBottom: 2 }}>
-                      已完成题目流水明细 ({currentTask.question_results.length}/{currentTask.total_questions || totalQuestions})：
+                      已完成题目 ({currentTask.question_results.length}/{currentTask.total_questions || totalQuestions})：
                     </div>
                     {currentTask.question_results.map((q) => (
                       <div key={q.order} className="fe-exec-q-item is-done">
@@ -1940,16 +1956,12 @@ export function AutoCompletePage({
 
                 <div className="fe-exec-details-grid">
                   <div className="fe-exec-tile">
-                    <small>代理通道</small>
-                    <span>国内双节点轮询容灾</span>
-                  </div>
-                  <div className="fe-exec-tile">
                     <small>音色模式</small>
                     <span>
                       {voiceMode === 'clone'
-                        ? '专属声音克隆 (tts.ai)'
+                        ? '专属声音'
                         : voiceMode === 'edge'
-                        ? 'Edge-TTS 机读原声'
+                        ? '标准声音'
                         : '不上传声音'}
                     </span>
                   </div>
@@ -1963,7 +1975,7 @@ export function AutoCompletePage({
                 <div className="fe-execution-in-progress-footer">
                   <div className="fe-exec-footer-tip">
                     <Icon name="info" style={{ fontSize: 16, color: '#3b82f6' }} />
-                    <span>提示：流水线在云端全自动持续运行，切换至看板或关闭页面不会影响答题进度</span>
+                    <span>任务会在后台继续运行，关闭页面不会影响进度</span>
                   </div>
                 </div>
               </div>
@@ -1992,7 +2004,7 @@ export function AutoCompletePage({
   // Trigger Risk Modal
   const handleOpenRiskModal = () => {
     if (voiceMode === 'clone' && (!selectedVoiceId || voices.length === 0)) {
-      onToast?.('您尚未录制专属声音，请先前往录制声音或切换至 Edge-TTS 音色')
+      onToast?.('您尚未录制专属声音，请先录制声音或切换至标准声音')
       return
     }
     setIsRiskModalOpen(true)
@@ -2067,8 +2079,8 @@ export function AutoCompletePage({
         task_id: res.task_id,
         status: 'PREPARING',
         progress: 10,
-        stage_label: '[1/8] 正在通过国内代理初始化 ETS 会话...',
-        stage_text: '[1/8] 正在通过国内代理初始化 ETS 会话...',
+        stage_label: '[1/8] 正在准备登录状态...',
+        stage_text: '[1/8] 正在准备登录状态...',
         homework_id: currentHw.id,
         homework_name: currentHw.name,
       }
@@ -2141,10 +2153,10 @@ export function AutoCompletePage({
             <Icon name="sync" className="fe-spin" style={{ fontSize: 24, color: '#059669', flexShrink: 0 }} />
             <div>
               <strong style={{ color: '#065f46', fontSize: 14.5, display: 'block', marginBottom: 2 }}>
-                该作业当前正在后台自动答题中（进度 {currentTask.progress || 0}%）
+                该作业正在自动完成（进度 {currentTask.progress || 0}%）
               </strong>
               <span style={{ color: '#047857', fontSize: 13 }}>
-                {currentTask.stage_label || currentTask.stage_text || '后台流水线处理中，无需重复配置部署'}
+                {friendlyTaskStage(currentTask.stage_label || currentTask.stage_text, '任务处理中，无需重复配置')}
               </span>
             </div>
           </div>
@@ -2195,7 +2207,7 @@ export function AutoCompletePage({
           </div>
           <div>
             <h2>{currentHw?.name && currentHw.name !== '作业自动完成' ? currentHw.name : (activePaper?.title || activePaper?.paperName || currentHw?.name || '作业自动完成')}</h2>
-            <p>高拟真作业自动完成调度工作台 · 请审慎配置分值与声音参数</p>
+            <p>配置自动完成任务</p>
           </div>
         </div>
 
@@ -2230,7 +2242,7 @@ export function AutoCompletePage({
             <Icon name="auto_mode" filled={mode === 'auto'} />
             <div className="fe-mode-tab-text">
               <strong>一键自动模式 (推荐)</strong>
-              <small>总分智能比例平衡 · 严格受控在 95% 满分风控线内</small>
+              <small>自动按比例设置目标分数，最高 95%</small>
             </div>
           </button>
 
@@ -2242,7 +2254,7 @@ export function AutoCompletePage({
             <Icon name="tune" filled={mode === 'manual'} />
             <div className="fe-mode-tab-text">
               <strong>手动逐题模式 (高级)</strong>
-              <small>支持自定义单题分值 · 遇超限题目触发刺眼告警</small>
+              <small>可自定义每道题的分值，超出满分时提示</small>
             </div>
           </button>
         </div>
@@ -2479,7 +2491,7 @@ export function AutoCompletePage({
                                 </span>
                               ) : (
                                 <span className="admin-pill-badge is-muted" style={{ fontSize: 11 }}>
-                                  默认合成 ({voiceMode === 'clone' ? '克隆' : voiceMode === 'edge' ? 'Edge-TTS' : '无声音'})
+                                  默认合成 ({voiceMode === 'clone' ? '专属声音' : voiceMode === 'edge' ? '标准声音' : '无声音'})
                                 </span>
                               )}
                             </div>
@@ -2595,8 +2607,8 @@ export function AutoCompletePage({
             <Icon name="schedule" />
           </div>
           <div>
-            <h3>作答耗时规划 (防刷题与拟真设置)</h3>
-            <p>合理设置提交用时可有效避免被平台判定为瞬间秒刷，拟真学生真实作答过程</p>
+            <h3>作答用时</h3>
+            <p>设置合理的提交用时，避免提交过快</p>
           </div>
         </div>
 
@@ -2697,7 +2709,7 @@ export function AutoCompletePage({
                 <Icon name="warning" filled />
                 <div>
                   <strong>【高风险告警】作答耗时少于 30 秒！</strong>
-                  <p>瞬间秒刷作答极容易被官方平台后台行为审计识别，强烈建议设置不少于 60 秒。</p>
+                  <p>建议作答用时不少于 60 秒。</p>
                 </div>
               </div>
             )}
@@ -2728,14 +2740,14 @@ export function AutoCompletePage({
             </div>
             <div className="fe-voice-card-content">
               <div className="fe-voice-card-title">
-                <strong>专属声音克隆 (tts.ai)</strong>
-                <span className="admin-pill-badge is-success">最高拟真</span>
+                <strong>专属声音</strong>
+                <span className="admin-pill-badge is-success">推荐</span>
               </div>
-              <p>使用您在录音棚录制的音色特征，通过深度学习生成个人声音。</p>
+              <p>使用您录制的声音生成朗读音频。</p>
             </div>
           </div>
 
-          {/* Option 2: Edge-TTS */}
+          {/* Option 2: standard voice */}
           <div
             className={`fe-voice-option-card ${voiceMode === 'edge' ? 'is-active' : ''}`}
             onClick={() => setVoiceMode('edge')}
@@ -2745,10 +2757,10 @@ export function AutoCompletePage({
             </div>
             <div className="fe-voice-card-content">
               <div className="fe-voice-card-title">
-                <strong>Edge-TTS 机读原声</strong>
+                <strong>标准声音</strong>
                 <span className="admin-pill-badge is-muted">标准发音</span>
               </div>
-              <p>微软云端自然高清晰度神经发音人，适合纯标准英语口音朗读。</p>
+              <p>标准英语发音，适合普通朗读。</p>
             </div>
           </div>
 
@@ -2827,19 +2839,19 @@ export function AutoCompletePage({
                   {
                     id: 'pocket-tts',
                     name: 'Pocket TTS',
-                    badge: '极速·默认',
+                    badge: '快速·默认',
                     isMaintenance: false,
                   },
                   {
                     id: 'ming-omni-tts',
                     name: 'Ming-Omni',
-                    badge: '多模态·排队长',
+                    badge: '自然·较慢',
                     isMaintenance: false,
                   },
                   {
                     id: 'moss-tts-nano',
                     name: 'MOSS Nano',
-                    badge: '复旦架构',
+                    badge: '平稳',
                     isMaintenance: false,
                   },
                 ].map((m) => {
@@ -2891,28 +2903,28 @@ export function AutoCompletePage({
                 {cloneModel === 'pocket-tts' && (
                   <div>
                     <div className="fe-voice-model-detail-title">
-                      <strong>Pocket TTS (Kyutai 100M 极速模型)</strong>
+                      <strong>Pocket TTS · 推荐</strong>
                       <span>耗时 ~2s · 推荐</span>
                     </div>
-                    <p>纯正美式/英式语音流，发音连贯清晰，极低延迟高并发，最适合常规作答朗读。</p>
+                    <p>响应快，适合普通朗读。</p>
                   </div>
                 )}
                 {cloneModel === 'ming-omni-tts' && (
                   <div>
                     <div className="fe-voice-model-detail-title">
-                      <strong>Ming-Omni (0.5B 中英多模态架构)</strong>
-                      <span style={{ color: '#d97706', fontWeight: 600 }}>耗时较长（排队 60~120s）· 极高拟真</span>
+                      <strong>Ming-Omni</strong>
+                      <span style={{ color: '#d97706', fontWeight: 600 }}>预计等待 60~120 秒</span>
                     </div>
-                    <p>生动还原真人呼吸与自然口语顿挫，贴合中国学生发音习惯。注意：云端排队耗时较长（约 60~120 秒）。系统已内置人声音量质检与自动兜底，若超时或异常将秒级切换至 Pocket TTS 保障作答成功。</p>
+                    <p>声音更接近自然口语，预计等待 60~120 秒。</p>
                   </div>
                 )}
                 {cloneModel === 'moss-tts-nano' && (
                   <div>
                     <div className="fe-voice-model-detail-title">
-                      <strong>MOSS TTS Nano (复旦 100M 轻量版)</strong>
+                      <strong>MOSS TTS Nano</strong>
                       <span>耗时 ~2s · 自然平稳</span>
                     </div>
-                    <p>复旦团队多语种低延迟开源架构，声线细腻平稳，适合多语境口语表达。</p>
+                    <p>声音自然平稳，适合口语朗读。</p>
                   </div>
                 )}
 
@@ -3061,7 +3073,7 @@ export function AutoCompletePage({
                     <div>目标总分：<strong style={{ color: '#16a34a' }}>{mode === 'auto' ? autoTargetTotal.toFixed(1) : manualTotalSum.toFixed(1)} 分</strong> / 卷面满分 {paperTotalScore.toFixed(1)} 分</div>
                     <div>上报做题用时：<strong>{formatSeconds(selectedUseTimeSeconds)}</strong></div>
                     <div>题目总数：<strong>{totalQuestions} 道</strong></div>
-                    <div>语音录音模式：<strong>{voiceMode === 'clone' ? '声音克隆 (专属音色)' : (voiceMode === 'edge' ? 'Edge-TTS' : '无需录音 / 极速完成')}</strong></div>
+                    <div>语音录音模式：<strong>{voiceMode === 'clone' ? '专属声音' : (voiceMode === 'edge' ? '标准声音' : '无需录音 / 快速完成')}</strong></div>
                   </div>
                 </div>
 
@@ -3075,7 +3087,7 @@ export function AutoCompletePage({
 
                 <div className="fe-risk-input-section" style={{ marginTop: 12 }}>
                   <p style={{ fontSize: 13, color: 'var(--control-muted)', margin: 0 }}>
-                    提示：任务提交后将在后台全自动执行。未启用真实录音时，系统将在数秒内极速完成答题并向官方上报指定的用时与分值。
+                    任务提交后会在后台执行；未启用真实录音时完成会更快。
                   </p>
                 </div>
               </div>
@@ -3099,7 +3111,7 @@ export function AutoCompletePage({
               >
                 <Icon name={isStartingTask ? 'sync' : 'play_arrow'} className={isStartingTask ? 'fe-spin' : ''} />
                 <span>
-                  {isStartingTask ? '正在提交任务并启动后台流水线...' : '确认无误，立即开始'}
+                  {isStartingTask ? '正在提交任务...' : '确认无误，立即开始'}
                 </span>
               </button>
             </div>
@@ -3122,7 +3134,7 @@ export function AutoCompletePage({
           </div>
           <div className="fe-capsule-info">
             <strong>正在自动完成 ({currentTask?.progress || 10}%)</strong>
-            <small>{currentTask?.stage_label || currentTask?.stage_text || '后台流水线处理中...'}</small>
+            <small>{friendlyTaskStage(currentTask?.stage_label || currentTask?.stage_text)}</small>
           </div>
           <button
             type="button"

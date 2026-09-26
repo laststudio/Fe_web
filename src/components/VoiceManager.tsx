@@ -36,24 +36,24 @@ const AUDITION_MODELS: Array<{
     id: 'pocket-tts',
     name: 'Pocket TTS',
     featureKey: 'tts_model_pocket_tts',
-    badge: '极速·推荐',
-    desc: 'Kyutai 100M 极速模型，极低延迟，清晰流利',
+    badge: '快速·推荐',
+    desc: '响应快，适合普通朗读',
     latency: '~2s',
   },
   {
     id: 'ming-omni-tts',
     name: 'Ming-Omni',
     featureKey: 'tts_model_ming_omni_tts',
-    badge: '多模态',
-    desc: '0.5B 中英多模态架构，还原真人呼吸与自然口语顿挫（排队较长）',
+    badge: '自然',
+    desc: '声音更接近自然口语，等待时间较长',
     latency: '60~120s',
   },
   {
     id: 'moss-tts-nano',
     name: 'MOSS Nano',
     featureKey: 'tts_model_moss_tts_nano',
-    badge: '复旦架构',
-    desc: '复旦团队多语种开源轻量模型，自然细腻平稳',
+    badge: '平稳',
+    desc: '声音自然平稳，适合口语朗读',
     latency: '~2s',
   },
 ]
@@ -601,7 +601,7 @@ export function VoiceManager({
                 <Icon name="refresh" className={loading ? 'fe-spin' : ''} />
               </button>
             </div>
-            <p>已录制或上传并同步至云端的声音样本，每个账号最多保留 3 个，可用于 tts.ai 高拟真自动朗读答题</p>
+            <p>已保存的声音样本，可用于自动朗读；每个账号最多保存 3 个</p>
           </div>
         </div>
 
@@ -812,7 +812,7 @@ export function VoiceManager({
           </div>
           <div>
             <h3>声音样本采集棚 (3~30秒录制或上传 · 每个账号上限3个)</h3>
-            <p>朗读下方简单通用的示范英语或直接上传已有音频，每个账号最多保留 3 个音色样本</p>
+            <p>录制或上传 3~30 秒声音，每个账号最多保存 3 个样本</p>
           </div>
         </div>
 
@@ -857,7 +857,7 @@ export function VoiceManager({
             <div className="admin-status-strip is-warning" style={{ marginBottom: 14 }}>
               <Icon name="info" />
               <span>
-                检测到当前页面未处于安全上下文（HTTPS 或安全源），浏览器限制了麦克风权限。建议直接切换至「本地音频文件上传」直接选择已有音频文件。
+                当前浏览器不允许麦克风，请切换到“本地音频文件上传”。
               </span>
             </div>
           )}
@@ -866,7 +866,7 @@ export function VoiceManager({
           <div className="fe-studio-sample-box">
             <div className="fe-studio-sample-header">
               <span className="fe-studio-tag">朗读范本 (简单通用)</span>
-              <small>请以自然语速、吐字清晰地朗读以下标准基础文本（录制 3~30 秒均可）：</small>
+              <small>请自然朗读以下文本，录制 3~30 秒即可：</small>
             </div>
             <blockquote className="fe-studio-text">
               “{SAMPLE_TEXT}”
@@ -1009,7 +1009,7 @@ export function VoiceManager({
                   <span className="fe-studio-hint">
                     {isAtLimit
                       ? '每个账号最多保存 3 个声音样本，如需新录制请先删除已有声音。'
-                      : '录制 3~30 秒的声音样本，浏览器将直接编码为无损高拟真 WAV 音频。'}
+                      : '录制 3~30 秒的声音样本即可。'}
                   </span>
                 </div>
               )}
@@ -1125,7 +1125,7 @@ export function VoiceManager({
                   <div className="fe-upload-dropzone-hint">
                     {isAtLimit
                       ? '每个账号最多保存 3 个声音样本，请先在上方资产库中删除已有声音后再上传新文件。'
-                      : '支持 MP3, WAV, M4A, AAC, WebM, OGG 等常见格式；大小不超过 5MB；时长 3 ~ 30 秒（系统将自动转码并归一化为标准高拟真样本）。'}
+                      : '支持 MP3、WAV、M4A、AAC、WebM、OGG；大小不超过 5MB，时长 3 ~ 30 秒。'}
                   </div>
                 </div>
               )}
