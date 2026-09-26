@@ -188,12 +188,14 @@ export function checkHomeworkCompatibility(
   const unsupportedList: string[] = []
 
   const hw = homework as { kind?: string; set_type?: number; name?: string }
-  // 1. 检查作业类型是否为考试/模拟考
-  if (hw.kind === 'mock' || hw.set_type === 6) {
+  // 1. 检查作业类型是否属于词汇/PK（set_type=6），这类作业走的是词汇通道而非听说通道
+  // 注意：kind === 'mock' / set_type === 1 的听说模拟卷已改为放行，
+  // 由后端 runner 通过 /m/exam/struct 探测 combination_id 后走官方模拟考提交通道，前端不再提前拦截。
+  if (hw.set_type === 6) {
     return {
       supported: false,
-      reason: '该作业属于考场模拟卷（含严格防作弊及考场ID校验），暂未开放自动完成。',
-      unsupportedList: ['模拟考卷'],
+      reason: '该作业属于词汇/PK 类作业（含单词对战与默写校验），暂未开放自动完成。',
+      unsupportedList: ['词汇/PK 作业'],
     }
   }
 
