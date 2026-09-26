@@ -337,9 +337,7 @@ export function AutoCompletePage({
       const mockStandardTotal = isBeijing ? 40.0 : 30.0
       const explicitSum = Number(qList.reduce((sum, q) => sum + (q.maxScore > 0 ? q.maxScore : 0), 0).toFixed(2))
 
-      if (Number.isFinite(rawTotal) && rawTotal > 0 && Math.abs(rawTotal - 100.0) >= 0.01) {
-        calculatedPaperTotal = rawTotal
-      } else if (explicitSum > 0) {
+      if (explicitSum > 0) {
         calculatedPaperTotal = explicitSum
       } else {
         calculatedPaperTotal = mockStandardTotal
@@ -373,10 +371,10 @@ export function AutoCompletePage({
       const hasExplicit = qList.some((q) => q.maxScore > 0)
       const explicitSum = Number(qList.reduce((sum, q) => sum + (q.maxScore > 0 ? q.maxScore : 0), 0).toFixed(2))
 
-      // 优先采用官方卷面总分（非 100 制）；与后端 runner 保持一致
-      if (Number.isFinite(rawTotal) && rawTotal > 0 && Math.abs(rawTotal - 100.0) >= 0.01) {
-        calculatedPaperTotal = rawTotal
-      } else if (hasExplicit && explicitSum > 0 && Math.abs(explicitSum - 100.0) >= 0.1 && Math.abs(explicitSum - 30.0) >= 0.1) {
+      // 卷面总分口径 = 各小题满分累加（与后端 runner 唯一口径保持一致）；
+      // 官方 item 的 total_score 与小题实际满分经常对不上（30 vs 16.5），
+      // 用它当分母会造成"设定分 / 结算分 / 客户端显示"三方错位。
+      if (hasExplicit && explicitSum > 0 && Math.abs(explicitSum - 100.0) >= 0.1) {
         calculatedPaperTotal = explicitSum
       } else {
         // Assign benchmark points per question type!
@@ -513,31 +511,15 @@ export function AutoCompletePage({
   // （hw.total_score / paper.totalScore，非 100 制），仅当官方值不可信时才用小题累加值。
   // 否则前端会按残缺的小题累加值（如 6.4）去压 95% 上限，把用户设定的 28.5 截成 6.1。
   const targetPaperTotal = useMemo(() => {
-    const hwObjEff = currentHw as Record<string, unknown> | undefined
-    const paperObjEff = activePaper as Record<string, unknown> | null
-    const official = Number(
-      hwObjEff?.total_score ??
-        hwObjEff?.total_point ??
-        paperObjEff?.totalScore ??
-        paperObjEff?.total_score
-    )
-    if (Number.isFinite(official) && official > 0 && Math.abs(official - 100) >= 0.01) {
-      return official
-    }
-    return paperTotalScore
-  }, [currentHw, activePaper, paperTotalScore])
+    return paperTotalScore > 0 ? paperTotalScore : 0
+  }, [paperTotalScore])
 
   // 逐题满分的展示口径：当解析出来的小题满分之和与官方卷面满分不一致时
   // （例如官方 30 分卷，14 道小题只累加到 16.5），按官方总分等比归一后再展示，
   // 这样"题面满分 / 设定比例 / 后端结算"三者才是同一套数。
   const displayQuestionMax = useMemo(() => {
-    const sumParsed = questions.reduce((acc, q) => acc + (q.maxScore > 0 ? q.maxScore : 0), 0)
-    const scale =
-      sumParsed > 0 && targetPaperTotal > 0 && Math.abs(sumParsed - targetPaperTotal) > 0.01
-        ? targetPaperTotal / sumParsed
-        : 1
-    return (q: { maxScore: number }) => Number(((q.maxScore || 0) * scale).toFixed(2))
-  }, [questions, targetPaperTotal])
+    return (q: { maxScore: number }) => Number((q.maxScore || 0).toFixed(2))
+  }, [])
 
   // 1. Auto mode target total score state: strictly capped at <= targetPaperTotal * 0.95
   const maxAutoScore = useMemo(() => {
