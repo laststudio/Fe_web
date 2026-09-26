@@ -509,17 +509,35 @@ export function AutoCompletePage({
     return mins > 0 ? `${mins} 分 ${s} 秒` : `${s} 秒`
   }
 
-  // 1. Auto mode target total score state: strictly capped at <= paperTotalScore * 0.95
+  // 目标分口径的卷面总分：与后端 runner 保持一致，优先采用官方卷面满分
+  // （hw.total_score / paper.totalScore，非 100 制），仅当官方值不可信时才用小题累加值。
+  // 否则前端会按残缺的小题累加值（如 6.4）去压 95% 上限，把用户设定的 28.5 截成 6.1。
+  const targetPaperTotal = useMemo(() => {
+    const hwObjEff = currentHw as Record<string, unknown> | undefined
+    const paperObjEff = activePaper as Record<string, unknown> | null
+    const official = Number(
+      hwObjEff?.total_score ??
+        hwObjEff?.total_point ??
+        paperObjEff?.totalScore ??
+        paperObjEff?.total_score
+    )
+    if (Number.isFinite(official) && official > 0 && Math.abs(official - 100) >= 0.01) {
+      return official
+    }
+    return paperTotalScore
+  }, [currentHw, activePaper, paperTotalScore])
+
+  // 1. Auto mode target total score state: strictly capped at <= targetPaperTotal * 0.95
   const maxAutoScore = useMemo(() => {
-    return Number((paperTotalScore * 0.95).toFixed(2))
-  }, [paperTotalScore])
+    return Number((targetPaperTotal * 0.95).toFixed(2))
+  }, [targetPaperTotal])
 
   const [selectedRatio, setSelectedRatio] = useState<number>(0.92)
   const [customAutoTargetTotal, setCustomAutoTargetTotal] = useState<number | null>(null)
 
   const defaultAutoTarget = useMemo(() => {
-    return Number((paperTotalScore * selectedRatio).toFixed(2))
-  }, [paperTotalScore, selectedRatio])
+    return Number((targetPaperTotal * selectedRatio).toFixed(2))
+  }, [targetPaperTotal, selectedRatio])
 
   const autoTargetTotal = useMemo(() => {
     const candidate = customAutoTargetTotal !== null ? customAutoTargetTotal : defaultAutoTarget
@@ -527,13 +545,13 @@ export function AutoCompletePage({
   }, [customAutoTargetTotal, defaultAutoTarget, maxAutoScore])
 
   const currentRatio = useMemo(() => {
-    return paperTotalScore > 0 ? autoTargetTotal / paperTotalScore : 0.95
-  }, [autoTargetTotal, paperTotalScore])
+    return targetPaperTotal > 0 ? autoTargetTotal / targetPaperTotal : 0.95
+  }, [autoTargetTotal, targetPaperTotal])
 
   const handleSelectRatio = (ratio: number) => {
     const safeRatio = Math.min(0.95, Math.max(0, ratio))
     setSelectedRatio(safeRatio)
-    setCustomAutoTargetTotal(Number((paperTotalScore * safeRatio).toFixed(2)))
+    setCustomAutoTargetTotal(Number((targetPaperTotal * safeRatio).toFixed(2)))
   }
 
   const handleUpdateAutoTargetTotal = (val: number) => {
@@ -544,8 +562,8 @@ export function AutoCompletePage({
     } else {
       const rounded = Number(val.toFixed(2))
       setCustomAutoTargetTotal(rounded)
-      if (paperTotalScore > 0) {
-        setSelectedRatio(Number((rounded / paperTotalScore).toFixed(2)))
+      if (targetPaperTotal > 0) {
+        setSelectedRatio(Number((rounded / targetPaperTotal).toFixed(2)))
       }
     }
   }
@@ -754,7 +772,7 @@ export function AutoCompletePage({
     return questions.filter((q) => (manualScores[q.order] || 0) > q.maxScore)
   }, [questions, manualScores])
 
-  const isManualTotalOverMax = manualTotalSum > paperTotalScore
+  const isManualTotalOverMax = manualTotalSum > targetPaperTotal
 
   // Fetch voices
   useEffect(() => {
@@ -2081,7 +2099,7 @@ export function AutoCompletePage({
         status: currentHw.status !== undefined ? String(currentHw.status) : undefined,
         paper_total: paperTotalScore,
         target_ratio: mode === 'auto'
-          ? (paperTotalScore > 0 ? Number((autoTargetTotal / paperTotalScore).toFixed(4)) : 0.95)
+          ? (targetPaperTotal > 0 ? Number((autoTargetTotal / targetPaperTotal).toFixed(4)) : 0.95)
           : undefined,
         mode,
         target_total: mode === 'auto' ? autoTargetTotal : Number(manualTotalSum.toFixed(2)),
@@ -2265,7 +2283,7 @@ export function AutoCompletePage({
           </div>
           <div className="fe-stat-tile">
             <span className="fe-stat-label">试卷官方满分</span>
-            <strong className="fe-stat-value">{paperTotalScore.toFixed(1)} 分</strong>
+            <strong className="fe-stat-value">{targetPaperTotal.toFixed(1)} 分</strong>
           </div>
           <div className="fe-stat-tile">
             <span className="fe-stat-label">建议答题用时</span>
@@ -2350,7 +2368,7 @@ export function AutoCompletePage({
                         handleUpdateAutoTargetTotal(val)
                       }}
                     />
-                    <span>/ {paperTotalScore.toFixed(1)} 分</span>
+                    <span>/ {targetPaperTotal.toFixed(1)} 分</span>
                   </div>
                 </div>
 
@@ -2371,7 +2389,7 @@ export function AutoCompletePage({
                         className={`fe-ratio-preset-btn ${isActive ? 'is-active' : ''}`}
                         onClick={() => handleSelectRatio(p.ratio)}
                       >
-                        {p.label} · {(paperTotalScore * p.ratio).toFixed(1)}分
+                        {p.label} · {(targetPaperTotal * p.ratio).toFixed(1)}分
                       </button>
                     )
                   })}
@@ -2389,7 +2407,7 @@ export function AutoCompletePage({
                   />
                   <div className="fe-slider-ticks">
                     <span>0 分 (0%)</span>
-                    <span>推荐安全区: {(paperTotalScore * 0.85).toFixed(1)} - {maxAutoScore} 分</span>
+                    <span>推荐安全区: {(targetPaperTotal * 0.85).toFixed(1)} - {maxAutoScore} 分</span>
                     <span style={{ color: '#dc2626', fontWeight: 600 }}>95% 上限 {maxAutoScore} 分</span>
                   </div>
                 </div>
@@ -2447,7 +2465,7 @@ export function AutoCompletePage({
                 <div className="fe-danger-banner">
                   <Icon name="crisis_alert" filled />
                   <div>
-                    <strong>【极度危险】当前设定总分 ({manualTotalSum.toFixed(1)}分) 超过试卷官方真正满分 ({paperTotalScore.toFixed(1)}分)！</strong>
+                    <strong>【极度危险】当前设定总分 ({manualTotalSum.toFixed(1)}分) 超过试卷官方真正满分 ({targetPaperTotal.toFixed(1)}分)！</strong>
                     <p>提交超满分成绩极易被平台异常判定系统与教师人工审查立刻识破，强烈建议重新调整！</p>
                   </div>
                 </div>
@@ -2483,7 +2501,7 @@ export function AutoCompletePage({
                   <strong className={isManualTotalOverMax ? 'fe-text-danger' : 'fe-text-success'}>
                     {manualTotalSum.toFixed(2)}
                   </strong>
-                  <span> / {paperTotalScore.toFixed(1)} 分 ({(manualTotalSum / maxAutoScore > 1 ? '超过95%' : `${(manualTotalSum / paperTotalScore * 100).toFixed(1)}%`)})</span>
+                  <span> / {targetPaperTotal.toFixed(1)} 分 ({(manualTotalSum / maxAutoScore > 1 ? '超过95%' : `${(manualTotalSum / targetPaperTotal * 100).toFixed(1)}%`)})</span>
                 </div>
               </div>
 
@@ -3117,8 +3135,8 @@ export function AutoCompletePage({
                 <div className="fe-risk-notice-box">
                   <strong>任务提交参数核对</strong>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px 16px', marginTop: 8 }}>
-                    <div>目标总分：<strong style={{ color: '#16a34a' }}>{mode === 'auto' ? autoTargetTotal.toFixed(1) : manualTotalSum.toFixed(1)} 分</strong> / 卷面满分 {paperTotalScore.toFixed(1)} 分</div>
-                    <div>题目数：<strong>{totalQuestions} 道</strong> · 卷面由小题满分累加：<strong>{paperTotalScore.toFixed(2)} 分</strong></div>
+                    <div>目标总分：<strong style={{ color: '#16a34a' }}>{mode === 'auto' ? autoTargetTotal.toFixed(1) : manualTotalSum.toFixed(1)} 分</strong> / 卷面满分 {targetPaperTotal.toFixed(1)} 分</div>
+                    <div>题目数：<strong>{totalQuestions} 道</strong> · 卷面由小题满分累加：<strong>{targetPaperTotal.toFixed(2)} 分</strong></div>
                     <div>上报做题用时：<strong>{formatSeconds(selectedUseTimeSeconds)}</strong></div>
                     <div>题目总数：<strong>{totalQuestions} 道</strong></div>
                     <div>语音录音模式：<strong>{voiceMode === 'clone' ? '专属声音' : (voiceMode === 'edge' ? '标准声音' : '无需录音 / 快速完成')}</strong></div>
@@ -3128,7 +3146,7 @@ export function AutoCompletePage({
                 {mode === 'manual' && isManualTotalOverMax && (
                   <div className="fe-risk-notice-box" style={{ marginTop: 8, borderColor: '#fca5a5', background: '#fef2f2' }}>
                     <p style={{ color: '#dc2626', fontWeight: 600, margin: 0 }}>
-                      ⚠️ 警告：当前设定总分 ({manualTotalSum.toFixed(1)} 分) 超出试卷卷面满分 ({paperTotalScore.toFixed(1)} 分)。
+                      ⚠️ 警告：当前设定总分 ({manualTotalSum.toFixed(1)} 分) 超出试卷卷面满分 ({targetPaperTotal.toFixed(1)} 分)。
                     </p>
                   </div>
                 )}
