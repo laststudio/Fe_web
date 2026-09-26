@@ -851,6 +851,14 @@ export function AutoCompletePage({
   const currentTask = isTaskForCurrentHw ? activeTask || localTaskStatus : localTaskStatus
   const currentTaskId = (isTaskForCurrentHw ? activeTask?.task_id || localTaskId : localTaskId) || null
 
+  // 查看历史任务时当前作业的试卷结构通常已不在内存里，paperTotalScore 会是 0；
+  // 展示口径一律优先采用任务结果里后端回传的真实满分（max_score/total_point）。
+  const effectivePaperTotal = useMemo(() => {
+    const fromTask = Number(currentTask?.result?.max_score ?? currentTask?.result?.total_point)
+    if (Number.isFinite(fromTask) && fromTask > 0) return fromTask
+    return paperTotalScore
+  }, [currentTask, paperTotalScore])
+
   const onCompletedRef = useRef(onCompleted)
   const onTaskChangeRef = useRef(onTaskChange)
   useEffect(() => {
@@ -1755,14 +1763,14 @@ export function AutoCompletePage({
                   </div>
                   <div className="fe-settlement-tile">
                     <small>试卷总满分</small>
-                    <strong>{paperTotalScore.toFixed(1)} 分</strong>
+                    <strong>{effectivePaperTotal.toFixed(1)} 分</strong>
                   </div>
                   <div className="fe-settlement-tile">
                     <small>最终得分率</small>
                     <strong style={{ color: '#2563eb' }}>
                       {currentTask.result?.score_rate ?? (
-                        paperTotalScore > 0
-                          ? ((Number(currentTask.result?.score ?? currentTask.result?.final_score ?? (mode === 'auto' ? autoTargetTotal : manualTotalSum)) / paperTotalScore) * 100).toFixed(1)
+                        effectivePaperTotal > 0
+                          ? ((Number(currentTask.result?.score ?? currentTask.result?.final_score ?? (mode === 'auto' ? autoTargetTotal : manualTotalSum)) / effectivePaperTotal) * 100).toFixed(1)
                           : '95.0'
                       )}%
                     </strong>
@@ -1793,7 +1801,7 @@ export function AutoCompletePage({
                         const order = Number(item.order || idx + 1)
                         const typeName = String(item.type_name || item.typeName || '题目')
                         const text = String(item.text || item.questionText || `第 ${order} 题`)
-                        const maxS = (item.max_score ?? item.maxScore ?? (paperTotalScore / Math.max(1, totalQuestions))) as number
+                        const maxS = (item.max_score ?? item.maxScore ?? (effectivePaperTotal / Math.max(1, totalQuestions))) as number
                         const score = (item.awarded_score ?? item.allocatedScore ?? (manualScores[order] || 0)) as number
                         const audioUrl = item.audio_url as string | undefined
                         return (
