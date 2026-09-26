@@ -30,6 +30,8 @@ export type StartAutoCompletePayload = {
   paper_total?: number
   /** 用户设定的目标得分率（0-1）；后端以它为契约反推目标分，避免两端卷面口径差异 */
   target_ratio?: number
+  /** 前端展示用的逐题满分（题号 -> 满分），仅用于后端核对两端题分口径 */
+  question_maxes?: Record<string, number>
   mode: AutoCompleteMode
   target_total: number
   allow_over_max: boolean

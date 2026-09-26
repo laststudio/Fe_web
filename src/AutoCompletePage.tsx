@@ -527,6 +527,18 @@ export function AutoCompletePage({
     return paperTotalScore
   }, [currentHw, activePaper, paperTotalScore])
 
+  // 逐题满分的展示口径：当解析出来的小题满分之和与官方卷面满分不一致时
+  // （例如官方 30 分卷，14 道小题只累加到 16.5），按官方总分等比归一后再展示，
+  // 这样"题面满分 / 设定比例 / 后端结算"三者才是同一套数。
+  const displayQuestionMax = useMemo(() => {
+    const sumParsed = questions.reduce((acc, q) => acc + (q.maxScore > 0 ? q.maxScore : 0), 0)
+    const scale =
+      sumParsed > 0 && targetPaperTotal > 0 && Math.abs(sumParsed - targetPaperTotal) > 0.01
+        ? targetPaperTotal / sumParsed
+        : 1
+    return (q: { maxScore: number }) => Number(((q.maxScore || 0) * scale).toFixed(2))
+  }, [questions, targetPaperTotal])
+
   // 1. Auto mode target total score state: strictly capped at <= targetPaperTotal * 0.95
   const maxAutoScore = useMemo(() => {
     return Number((targetPaperTotal * 0.95).toFixed(2))
@@ -2101,6 +2113,10 @@ export function AutoCompletePage({
         target_ratio: mode === 'auto'
           ? (targetPaperTotal > 0 ? Number((autoTargetTotal / targetPaperTotal).toFixed(4)) : 0.95)
           : undefined,
+        question_maxes: questions.reduce<Record<string, number>>((acc, q) => {
+          acc[String(q.order)] = displayQuestionMax(q)
+          return acc
+        }, {}),
         mode,
         target_total: mode === 'auto' ? autoTargetTotal : Number(manualTotalSum.toFixed(2)),
         allow_over_max: mode === 'manual' ? isManualTotalOverMax || manualOverMaxQuestions.length > 0 : false,
