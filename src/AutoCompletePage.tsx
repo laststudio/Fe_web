@@ -1779,6 +1779,19 @@ export function AutoCompletePage({
                     <small>实际做题用时</small>
                     <strong>{formatSeconds(currentTask.result?.use_time || selectedUseTimeSeconds)}</strong>
                   </div>
+                  {currentTask.result?.target_total !== undefined && currentTask.result?.target_total !== null && (
+                    <div className="fe-settlement-tile">
+                      <small>本次上报目标分</small>
+                      <strong>
+                        {Number(currentTask.result.target_total).toFixed(2)} 分
+                        {currentTask.result.client_paper_total !== undefined && currentTask.result.client_paper_total !== null && (
+                          <span style={{ display: 'block', fontSize: 11, color: 'var(--control-muted)' }}>
+                            前端卷面 {Number(currentTask.result.client_paper_total).toFixed(2)} / 后端卷面 {Number(currentTask.result.paper_total ?? 0).toFixed(2)}
+                          </span>
+                        )}
+                      </strong>
+                    </div>
+                  )}
                 </div>
 
                 {/* Question by question completion breakdown table */}
@@ -2044,6 +2057,7 @@ export function AutoCompletePage({
         set_id: currentHw.set_id || ((activePaper as Record<string, unknown> | null)?.set_id as string | undefined),
         set_type: currentHw.set_type !== undefined ? Number(currentHw.set_type) : ((activePaper as Record<string, unknown> | null)?.set_type as number | undefined),
         status: currentHw.status !== undefined ? String(currentHw.status) : undefined,
+        paper_total: paperTotalScore,
         mode,
         target_total: mode === 'auto' ? autoTargetTotal : Number(manualTotalSum.toFixed(2)),
         allow_over_max: mode === 'manual' ? isManualTotalOverMax || manualOverMaxQuestions.length > 0 : false,
@@ -3079,6 +3093,7 @@ export function AutoCompletePage({
                   <strong>任务提交参数核对</strong>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px 16px', marginTop: 8 }}>
                     <div>目标总分：<strong style={{ color: '#16a34a' }}>{mode === 'auto' ? autoTargetTotal.toFixed(1) : manualTotalSum.toFixed(1)} 分</strong> / 卷面满分 {paperTotalScore.toFixed(1)} 分</div>
+                    <div>题目数：<strong>{totalQuestions} 道</strong> · 卷面由小题满分累加：<strong>{paperTotalScore.toFixed(2)} 分</strong></div>
                     <div>上报做题用时：<strong>{formatSeconds(selectedUseTimeSeconds)}</strong></div>
                     <div>题目总数：<strong>{totalQuestions} 道</strong></div>
                     <div>语音录音模式：<strong>{voiceMode === 'clone' ? '专属声音' : (voiceMode === 'edge' ? '标准声音' : '无需录音 / 快速完成')}</strong></div>

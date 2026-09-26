@@ -26,6 +26,8 @@ export type StartAutoCompletePayload = {
   set_id?: string
   set_type?: number
   status?: string
+  /** 前端按小题满分累加得到的卷面总分，用于后端核对两端分母是否一致 */
+  paper_total?: number
   mode: AutoCompleteMode
   target_total: number
   allow_over_max: boolean
@@ -56,6 +58,14 @@ export type AutoCompleteTaskResult = {
   max_score?: number
   total_point?: number
   score_rate?: number
+  /** 后端结算时实际采用的目标分 */
+  target_total?: number | null
+  /** 后端结算时实际采用的卷面总分（由小题满分累加） */
+  paper_total?: number
+  /** 前端上报的卷面总分，用于核对两端分母是否一致 */
+  client_paper_total?: number | null
+  /** 官方回读到的分数，用于核对提交是否真的生效 */
+  official_point?: number | null
   use_time: number
   homework_id?: string
   homework_name?: string
