@@ -337,7 +337,9 @@ export function AutoCompletePage({
       const mockStandardTotal = isBeijing ? 40.0 : 30.0
       const explicitSum = Number(qList.reduce((sum, q) => sum + (q.maxScore > 0 ? q.maxScore : 0), 0).toFixed(2))
 
-      if (explicitSum > 0) {
+      if (Number.isFinite(rawTotal) && rawTotal > 0 && Math.abs(rawTotal - 100.0) >= 0.01) {
+        calculatedPaperTotal = rawTotal
+      } else if (explicitSum > 0) {
         calculatedPaperTotal = explicitSum
       } else {
         calculatedPaperTotal = mockStandardTotal
@@ -371,8 +373,10 @@ export function AutoCompletePage({
       const hasExplicit = qList.some((q) => q.maxScore > 0)
       const explicitSum = Number(qList.reduce((sum, q) => sum + (q.maxScore > 0 ? q.maxScore : 0), 0).toFixed(2))
 
-      // If paper has explicit native scores that are NOT a generic 100-percentage scale:
-      if (hasExplicit && explicitSum > 0 && Math.abs(explicitSum - 100.0) >= 0.1 && Math.abs(explicitSum - 30.0) >= 0.1) {
+      // 优先采用官方卷面总分（非 100 制）；与后端 runner 保持一致
+      if (Number.isFinite(rawTotal) && rawTotal > 0 && Math.abs(rawTotal - 100.0) >= 0.01) {
+        calculatedPaperTotal = rawTotal
+      } else if (hasExplicit && explicitSum > 0 && Math.abs(explicitSum - 100.0) >= 0.1 && Math.abs(explicitSum - 30.0) >= 0.1) {
         calculatedPaperTotal = explicitSum
       } else {
         // Assign benchmark points per question type!
@@ -381,6 +385,24 @@ export function AutoCompletePage({
           return { ...q, maxScore: Number(pt.toFixed(2)) }
         })
         calculatedPaperTotal = Number(qList.reduce((sum, q) => sum + q.maxScore, 0).toFixed(2))
+      }
+    }
+
+    // 与后端 runner 同口径：有可信的官方卷面总分时以它为分母，
+    // 并把各小题满分按比例归一到该总分，保证「显示满分 / 目标分 / 逐题得分」三者自洽。
+    if (calculatedPaperTotal > 0 && qList.length > 0) {
+      const currentSum = qList.reduce((acc, q) => acc + (q.maxScore > 0 ? q.maxScore : 0), 0)
+      if (currentSum > 0 && Math.abs(currentSum - calculatedPaperTotal) > 0.01) {
+        const scale = calculatedPaperTotal / currentSum
+        qList = qList.map((q) => ({ ...q, maxScore: Number((q.maxScore * scale).toFixed(2)) }))
+      }
+      const scaledSum = Number(qList.reduce((acc, q) => acc + q.maxScore, 0).toFixed(2))
+      const diff = Number((calculatedPaperTotal - scaledSum).toFixed(2))
+      if (diff !== 0 && qList.length > 0) {
+        qList[qList.length - 1] = {
+          ...qList[qList.length - 1],
+          maxScore: Number((qList[qList.length - 1].maxScore + diff).toFixed(2)),
+        }
       }
     }
 
