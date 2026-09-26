@@ -2080,6 +2080,9 @@ export function AutoCompletePage({
         set_type: currentHw.set_type !== undefined ? Number(currentHw.set_type) : ((activePaper as Record<string, unknown> | null)?.set_type as number | undefined),
         status: currentHw.status !== undefined ? String(currentHw.status) : undefined,
         paper_total: paperTotalScore,
+        target_ratio: mode === 'auto'
+          ? (paperTotalScore > 0 ? Number((autoTargetTotal / paperTotalScore).toFixed(4)) : 0.95)
+          : undefined,
         mode,
         target_total: mode === 'auto' ? autoTargetTotal : Number(manualTotalSum.toFixed(2)),
         allow_over_max: mode === 'manual' ? isManualTotalOverMax || manualOverMaxQuestions.length > 0 : false,

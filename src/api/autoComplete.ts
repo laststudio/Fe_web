@@ -28,6 +28,8 @@ export type StartAutoCompletePayload = {
   status?: string
   /** 前端按小题满分累加得到的卷面总分，用于后端核对两端分母是否一致 */
   paper_total?: number
+  /** 用户设定的目标得分率（0-1）；后端以它为契约反推目标分，避免两端卷面口径差异 */
+  target_ratio?: number
   mode: AutoCompleteMode
   target_total: number
   allow_over_max: boolean
