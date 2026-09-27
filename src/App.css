@@ -51,11 +51,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 
 .material-symbols-outlined {
+  font-family: "Fe Material Symbols", "Material Symbols Outlined", sans-serif;
   font-size: 20px;
   line-height: 1;
   vertical-align: middle;
   display: inline-block;
   user-select: none;
+  font-feature-settings: "liga";
+  speak: never;
 }
 
 /* ==========================================================================
