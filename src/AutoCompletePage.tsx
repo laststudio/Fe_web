@@ -521,11 +521,17 @@ export function AutoCompletePage({
         paperObjEff?.totalScore ??
         paperObjEff?.total_score
     )
+    // 后端已用官方 total_point 校正过试卷，这里以"逐题满分累加"为最终校验：
+    // 若题目分值已被校正（Σ 明显大于旧分母），以 Sum 为准，避免继续用旧总分。
+    const sumQuestionMax = questions.reduce((acc, q) => acc + (q.maxScore > 0 ? q.maxScore : 0), 0)
+    if (sumQuestionMax > 0 && Math.abs(sumQuestionMax - official) > 0.01) {
+      return Number(sumQuestionMax.toFixed(2))
+    }
     if (Number.isFinite(official) && official > 0 && Math.abs(official - 100) >= 0.01) {
       return official
     }
     return paperTotalScore > 0 ? paperTotalScore : 0
-  }, [currentHw, activePaper, paperTotalScore])
+  }, [currentHw, activePaper, paperTotalScore, questions])
 
   // 逐题满分的展示口径：当解析出来的小题满分之和与官方卷面满分不一致时
   // （例如官方 30 分卷，14 道小题只累加到 16.5），按官方总分等比归一后再展示，
