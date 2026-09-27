@@ -181,6 +181,9 @@ export function AutoCompletePage({
 
   const activePaper = paper || fetchedPaper
 
+  // 推荐用时抖动量（±8%）：载入试卷时在回调里随机一次，避免每次推荐值完全相同
+  const [timeJitter, setTimeJitter] = useState(1)
+
   useEffect(() => {
     if (!permitToken || !currentHw.id || !accessToken) return
     if (paper || fetchedPaper) {
@@ -191,6 +194,8 @@ export function AutoCompletePage({
       .then((res) => {
         if (active && res) {
           setFetchedPaper(res)
+          // 每次载入试卷时重新抖一次推荐用时（±8%），避免每次推荐值都一样
+          setTimeJitter(1 + (Math.random() * 0.16 - 0.08))
         }
       })
       .catch(async (err) => {
@@ -416,76 +421,104 @@ export function AutoCompletePage({
 
   // Calculate recommended time dynamically:
   // 按照每道题的参考录音时长相加 x 2 + 2 分钟 (120 秒)
+  // 推荐用时的随机抖动：在 effect 里生成（render 期不可有副作用），
+  // 换卷/换作业时重新抖一次，保证每次推荐不完全相同。
+
   const { recommendedTimeSeconds, totalRefAudioSeconds } = useMemo(() => {
-    let totalRef = 0
-    const rawQuestions = ((activePaper as Record<string, unknown> | null)?.questions || questions) as Array<{
-      questionText?: string
-      originalText?: string
-      text?: string
-      answers?: string[]
+    // 推荐用时 = ①听题 + ②准备 + ③作答 + ④单题开销 + ⑤大题开销
+    // ①听题优先用后端 ffprobe 实测的 section 音频时长（audioDurationSeconds），
+    //   缺失时才按题干文本估算；②朗读类大题首题 50s、其余每题 8s；
+    //   ③作答按参考答案文本估算（执行时会用真实 TTS 时长替换）；
+    //   ④每题 5s（提示音/切换/缓冲）；⑤每个大题 15s（题型说明/页面切换）。
+    // 不做卷面总分区间约束；结果做 ±8% 抖动并取整到 5 秒，避免每次推荐值相同。
+    const kind = (currentHw as Record<string, unknown>)?.kind as string | undefined
+
+    const estimateSpeech = (text: string): number => {
+      const clean = text
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/ets_th\d+/gi, '')
+        .trim()
+      if (!clean) return 3
+      const words = clean.match(/[a-zA-Z0-9'-]+/g)
+      if (words && words.length > 0) return Math.max(3, words.length / 2.2)
+      const chars = clean.replace(/\s+/g, '').length
+      return Math.max(3, chars / 3.5)
+    }
+
+    const shuffle = (value: number): number => {
+      return Math.max(30, Math.round((value * timeJitter) / 5) * 5)
+    }
+
+    // 词汇 PK / 作文：量纲与听说卷不同，单独处理
+    if (kind === 'pk' || kind === 'vocab') {
+      const value = Math.max(totalQuestions * 3, 30)
+      return { recommendedTimeSeconds: shuffle(value), totalRefAudioSeconds: Math.max(10, totalQuestions * 3) }
+    }
+    if (kind === 'composition') {
+      const chars = questions.reduce((acc, q) => acc + (q.questionText || '').replace(/\s+/g, '').length, 0)
+      const value = Math.max(chars / 8, 300)
+      return { recommendedTimeSeconds: shuffle(value), totalRefAudioSeconds: Math.round(chars / 8) }
+    }
+
+    type SecShape = {
       typeName?: string
+      type?: string
       category?: string
-      structure_type?: string
-      audio_duration?: number
-      duration?: number
-      audio_time?: number
-    }>
+      audioDurationSeconds?: number
+      questions?: Array<Record<string, unknown>>
+    }
+    const sections = (((activePaper as Record<string, unknown> | null)?.sections as SecShape[] | undefined) || [])
+      .filter((sec) => Array.isArray(sec.questions) && (sec.questions as unknown[]).length > 0)
 
-    if (rawQuestions && rawQuestions.length > 0) {
-      for (const q of rawQuestions) {
-        // 1. 若题目有显式的音频时长（例如录音秒数或媒体元数据）
-        const explicit = q.audio_duration ?? q.duration ?? q.audio_time
-        if (typeof explicit === 'number' && explicit > 0) {
-          totalRef += explicit > 500 ? explicit / 1000 : explicit
-          continue
-        }
+    let listenTotal = 0
+    let prepTotal = 0
+    let answerTotal = 0
+    let overhead = 0
 
-        // 2. 提取参考录音文本（优先取参考答案/朗读原文，没有则取题干）
-        const refText = (q.answers && q.answers.length > 0 && String(q.answers[0]).trim())
+    if (sections.length === 0) {
+      // 拿不到结构化试卷时，退化为"每题 15 秒"
+      const value = totalQuestions * 15
+      return { recommendedTimeSeconds: shuffle(value), totalRefAudioSeconds: totalQuestions * 6 }
+    }
+
+    for (const sec of sections) {
+      const secQs = (sec.questions || []) as Array<Record<string, unknown>>
+      const typeText = `${sec.category || ''} ${sec.type || ''} ${sec.typeName || ''}`.toLowerCase()
+      // 听选信息/信息转述/询问信息这类需要"听两遍"
+      const playedTwice = /choose|choice|select|simple_expression|picture|topic|retell|转述|听选|询问|回答/i.test(typeText)
+      const isRead = /read|朗读|跟读|repeat/i.test(typeText)
+
+      let secListen: number
+      if (typeof sec.audioDurationSeconds === 'number' && sec.audioDurationSeconds > 0) {
+        secListen = sec.audioDurationSeconds * (playedTwice ? 2 : 1)
+      } else {
+        secListen =
+          secQs.reduce(
+            (acc, q) =>
+              acc +
+              Math.max(5, estimateSpeech(String(q.questionText || q.originalText || q.text || ''))),
+            0
+          ) * (playedTwice ? 2 : 1)
+      }
+      listenTotal += secListen
+
+      secQs.forEach((q, idx) => {
+        prepTotal += isRead && idx === 0 ? 50 : 8
+        const answerText = Array.isArray(q.answers) && q.answers.length > 0
           ? String(q.answers[0])
           : String(q.questionText || q.originalText || q.text || '')
+        answerTotal += estimateSpeech(answerText)
+      })
 
-        const clean = refText
-          .replace(/<[^>]+>/g, ' ')
-          .replace(/ets_th\d+/gi, '')
-          .trim()
-
-        const isChoose = /选择|choose|choice/i.test(`${q.category || ''} ${q.typeName || ''} ${q.structure_type || ''}`)
-        if (isChoose) {
-          // 听选/客观题：参考提示音频约为 6 秒
-          totalRef += 6
-        } else if (clean) {
-          const words = clean.match(/[a-zA-Z0-9'-]+/g)
-          if (words && words.length > 0) {
-            // 英文常规示范录音语速约 2.2 词/秒 (132 wpm)，每题基线不少于 3 秒
-            totalRef += Math.max(3, words.length / 2.2)
-          } else {
-            // 中文或汉字按 3.5 字/秒
-            const chars = clean.replace(/\s+/g, '').length
-            totalRef += Math.max(3, chars / 3.5)
-          }
-        } else {
-          totalRef += 5
-        }
-      }
-    } else {
-      totalRef = totalQuestions * 6
+      overhead += 15 + secQs.length * 5
     }
 
-    const roundedRef = Math.round(totalRef)
-    // 算法规则：每道题的参考录音时长相加 x 2 + 2min (120s)
-    const kind = (currentHw as Record<string, unknown>)?.kind as string | undefined
-    let rec = roundedRef * 2 + 120
-    if (kind === 'mock') rec = Math.max(rec, 180)
-    if (kind === 'pk' || kind === 'vocab') rec = Math.max(rec, 30)
-    if (kind === 'composition') rec = Math.max(rec, 300)
-    rec = Math.max(rec, 60)
-
+    const raw = listenTotal + prepTotal + answerTotal + overhead
     return {
-      recommendedTimeSeconds: rec,
-      totalRefAudioSeconds: roundedRef,
+      recommendedTimeSeconds: shuffle(raw),
+      totalRefAudioSeconds: Math.round(answerTotal),
     }
-  }, [activePaper, questions, totalQuestions, currentHw])
+  }, [activePaper, questions, totalQuestions, currentHw, timeJitter])
 
   const [customMinutes, setCustomMinutes] = useState<number | null>(null)
   const [customSeconds, setCustomSeconds] = useState<number | null>(null)
@@ -2125,6 +2158,7 @@ export function AutoCompletePage({
         target_ratio: mode === 'auto'
           ? (targetPaperTotal > 0 ? Number((autoTargetTotal / targetPaperTotal).toFixed(4)) : 0.95)
           : undefined,
+        use_time_source: timeOption === 'recommended' ? 'recommended' : 'manual',
         question_maxes: questions.reduce<Record<string, number>>((acc, q) => {
           acc[String(q.order)] = displayQuestionMax(q)
           return acc

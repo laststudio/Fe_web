@@ -32,6 +32,8 @@ export type StartAutoCompletePayload = {
   target_ratio?: number
   /** 前端展示用的逐题满分（题号 -> 满分），仅用于后端核对两端题分口径 */
   question_maxes?: Record<string, number>
+  /** 用时来源：recommended=用后端实测构成，manual=用用户填写的时长 */
+  use_time_source?: 'recommended' | 'manual'
   mode: AutoCompleteMode
   target_total: number
   allow_over_max: boolean
