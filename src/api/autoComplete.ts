@@ -70,6 +70,14 @@ export type AutoCompleteTaskResult = {
   client_paper_total?: number | null
   /** 官方回读到的分数，用于核对提交是否真的生效 */
   official_point?: number | null
+  /** 官方自己记录的用时（秒），用于核对"客户端显示用时"来源 */
+  official_use_time?: number | null
+  /** 官方记录的提交时刻 */
+  official_submit_time?: string | null
+  /** 我们上报给官方的 use_time（秒） */
+  reported_use_time?: number | null
+  /** 服务端真实耗时（秒） */
+  real_elapsed_seconds?: number | null
   use_time: number
   homework_id?: string
   homework_name?: string

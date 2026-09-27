@@ -1832,6 +1832,17 @@ export function AutoCompletePage({
                     <small>实际做题用时</small>
                     <strong>{formatSeconds(currentTask.result?.use_time || selectedUseTimeSeconds)}</strong>
                   </div>
+                  {(currentTask.result?.official_use_time !== undefined && currentTask.result?.official_use_time !== null) && (
+                    <div className="fe-settlement-tile">
+                      <small>用时核对</small>
+                      <strong style={{ fontSize: 13, fontWeight: 600 }}>
+                        官方记录 {formatSeconds(Number(currentTask.result.official_use_time))}
+                        <span style={{ display: 'block', fontSize: 11, color: 'var(--control-muted)', fontWeight: 400 }}>
+                          上报 {currentTask.result.reported_use_time ?? '--'}s · 真实 {Math.round(Number(currentTask.result.real_elapsed_seconds ?? 0))}s
+                        </span>
+                      </strong>
+                    </div>
+                  )}
                   {currentTask.result?.target_total !== undefined && currentTask.result?.target_total !== null && (
                     <div className="fe-settlement-tile">
                       <small>本次上报目标分</small>
