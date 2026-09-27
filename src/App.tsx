@@ -1836,7 +1836,8 @@ function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => readStoredSession()?.user ?? null)
   const [authMessage, setAuthMessage] = useState('')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(readStoredSidebarCollapsed)
-  const [headerCompact, setHeaderCompact] = useState(false)
+  const [headerCompact, setHeaderCompact] = useState(() => window.scrollY > 56)
+  const headerCompactRef = useRef(headerCompact)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const authorizationStarted = useRef(false)
   const sessionRef = useRef(session)
@@ -1846,12 +1847,26 @@ function App() {
   const sessionExpiresAt = session?.expiresAt
   const page = currentPage(pathname)
 
-  // Fluid header scroll state
+  // Keep the compact threshold stable while mobile browsers rubber-band around the boundary.
   useEffect(() => {
-    const updateHeader = () => setHeaderCompact(window.scrollY > 42)
+    let frame = 0
+    const updateHeader = () => {
+      frame = 0
+      const scrollY = window.scrollY
+      const next = headerCompactRef.current ? scrollY > 24 : scrollY > 56
+      if (next === headerCompactRef.current) return
+      headerCompactRef.current = next
+      setHeaderCompact(next)
+    }
+    const onScroll = () => {
+      if (!frame) frame = window.requestAnimationFrame(updateHeader)
+    }
     updateHeader()
-    window.addEventListener('scroll', updateHeader, { passive: true })
-    return () => window.removeEventListener('scroll', updateHeader)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      if (frame) window.cancelAnimationFrame(frame)
+    }
   }, [])
 
   // Active Auto Complete Task State (persisted to localStorage)

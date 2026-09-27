@@ -241,6 +241,8 @@ html:has(.control-shell) {
 
 /* Floating Site Header Capsule */
 .control-site-header {
+  height: 73px;
+  box-sizing: border-box;
   position: sticky;
   z-index: 80;
   top: 0;
@@ -2991,6 +2993,7 @@ html:has(.control-shell) {
   }
 
   .control-site-header {
+    height: calc(64px + env(safe-area-inset-top));
     padding: 10px 12px 0;
   }
 
