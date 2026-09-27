@@ -511,8 +511,21 @@ export function AutoCompletePage({
   // （hw.total_score / paper.totalScore，非 100 制），仅当官方值不可信时才用小题累加值。
   // 否则前端会按残缺的小题累加值（如 6.4）去压 95% 上限，把用户设定的 28.5 截成 6.1。
   const targetPaperTotal = useMemo(() => {
+    // 卷面满分口径与后端一致：优先官方卷面总分（作业元数据 / 试卷缓存的 totalScore），
+    // 其次是后端已回传的任务结论分，最后才是本地小题累加值。
+    const hwObjEff = currentHw as Record<string, unknown> | undefined
+    const paperObjEff = activePaper as Record<string, unknown> | null
+    const official = Number(
+      hwObjEff?.total_score ??
+        hwObjEff?.total_point ??
+        paperObjEff?.totalScore ??
+        paperObjEff?.total_score
+    )
+    if (Number.isFinite(official) && official > 0 && Math.abs(official - 100) >= 0.01) {
+      return official
+    }
     return paperTotalScore > 0 ? paperTotalScore : 0
-  }, [paperTotalScore])
+  }, [currentHw, activePaper, paperTotalScore])
 
   // 逐题满分的展示口径：当解析出来的小题满分之和与官方卷面满分不一致时
   // （例如官方 30 分卷，14 道小题只累加到 16.5），按官方总分等比归一后再展示，
