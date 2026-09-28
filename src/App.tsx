@@ -1583,6 +1583,7 @@ function SettingsPage({
   onToast,
   onRefreshSession,
   onOpenAnnouncement,
+  onChangyanLogin,
   getFeatureStatus,
 }: {
   currentUser: User | null
@@ -1592,6 +1593,7 @@ function SettingsPage({
   onToast?: (msg: string) => void
   onRefreshSession: () => void
   onOpenAnnouncement: () => void
+  onChangyanLogin?: () => void
   getFeatureStatus?: (featureKey: string, defaultName?: string) => FeatureCheck
 }) {
   const [skipRisk, setSkipRisk] = useState(readStoredSkipRiskWarning)
@@ -1751,7 +1753,7 @@ function SettingsPage({
             <strong>账号管理操作</strong>
             <span>解绑、换绑或重新同步账号信息</span>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <a
               href="https://lastudio.cc/account"
               target="_blank"
@@ -1763,6 +1765,11 @@ function SettingsPage({
             <button className="control-secondary" type="button" onClick={onRefreshSession}>
               <Icon name="refresh" /> 重新检测绑定
             </button>
+            {onChangyanLogin && (
+              <button className="control-secondary" type="button" onClick={onChangyanLogin}>
+                <Icon name="login" /> 讯飞登录
+              </button>
+            )}
           </div>
         </div>
       </section>
@@ -3598,6 +3605,10 @@ function App() {
               onToast={showToast}
               onRefreshSession={handleRequestRefresh}
               onOpenAnnouncement={() => setShowAnnouncementModal(true)}
+              onChangyanLogin={() => {
+                setChangyanError(null)
+                setChangyanOpen(true)
+              }}
               getFeatureStatus={getFeatureStatus}
             />
           ) : viewingPaper ? (
