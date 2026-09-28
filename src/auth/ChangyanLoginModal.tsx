@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ETS100_ORIGIN,
   buildChangyanLoginUrl,
@@ -21,11 +21,23 @@ type ChangyanLoginModalProps = {
   error?: string | null
 }
 
+function symbol(name: string) {
+  return (
+    <span className="material-symbols-outlined" aria-hidden="true">
+      {name}
+    </span>
+  )
+}
+
 /**
  * 内嵌畅言通行证登录页。
  *
  * 用户在 iframe 内正常输入账号密码并完成极验滑块，登录成功后由
  * loginCheck.html（或本站回调页）把凭据交回父页面 —— 全程不需要任何注入。
+ *
+ * 布局说明见 App.css 中 `.fe-changyan-*`：畅言页是固定桌面布局（容器
+ * min-width:780px，左半是背景大图、右半是表单），桌面端给足宽度即可，
+ * 移动端则固定 780px 宽并横向平移，加载后自动把表单对齐进屏幕。
  */
 export default function ChangyanLoginModal({
   onCredential,
@@ -34,16 +46,40 @@ export default function ChangyanLoginModal({
   busy = false,
   error = null,
 }: ChangyanLoginModalProps) {
-  const iframeRef = useRef<HTMLIFrameElement | null>(null)
+  const bodyRef = useRef<HTMLDivElement | null>(null)
   const deliveredRef = useRef(false)
   const [loaded, setLoaded] = useState(false)
+  const [frameKey, setFrameKey] = useState(0)
 
   const activeMode = useMemo<ChangyanMode>(() => mode ?? resolveDefaultChangyanMode(), [mode])
+  // 重载靠 iframe 的 key 重新挂载，URL 本身不变
   const loginUrl = useMemo(() => buildChangyanLoginUrl(resolveNextpageUrl(activeMode)), [activeMode])
 
+  // 打开期间锁定页面滚动，避免背景跟着滚
   useEffect(() => {
-    deliveredRef.current = false
-  }, [loginUrl])
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previous
+    }
+  }, [])
+
+  // Esc 关闭（提交中不响应，避免打断兑换）
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape' && !busy) onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [busy, onClose])
+
+  // 兜底：极端情况下 onLoad 不触发（页面加载失败等）也要收起加载提示，
+  // 否则用户会一直以为在加载。遮罩本身已设为 pointer-events:none，不会挡操作。
+  useEffect(() => {
+    if (loaded) return
+    const timer = window.setTimeout(() => setLoaded(true), 12000)
+    return () => window.clearTimeout(timer)
+  }, [loaded])
 
   // 通路 1：loginCheck.html 的 window.parent.postMessage
   useEffect(() => {
@@ -58,13 +94,24 @@ export default function ChangyanLoginModal({
     return () => window.removeEventListener('message', handleMessage)
   }, [onCredential])
 
-  // 通路 2：nextpage 指向本站回调页，同源读取查询串里的 CAS 票据
+  /**
+   * 移动端把横向滚动条拉到底：畅言页 780px 布局里表单占据右半部分
+   * （实测卡片 x∈[40,759]、表单面板 x≈400..759），滚到最右正好对齐表单。
+   */
+  const alignToForm = useCallback(() => {
+    const body = bodyRef.current
+    if (!body || body.scrollWidth <= body.clientWidth) return
+    body.scrollLeft = body.scrollWidth
+  }, [])
+
   function handleFrameLoad() {
     setLoaded(true)
-    const frame = iframeRef.current
-    if (!frame || activeMode !== 'callback' || deliveredRef.current) return
+    alignToForm()
+
+    if (activeMode !== 'callback' || deliveredRef.current) return
+    const frame = bodyRef.current?.querySelector('iframe')
     try {
-      const href = frame.contentWindow?.location.href
+      const href = frame?.contentWindow?.location.href
       if (!href) return
       const current = new URL(href)
       if (current.origin !== window.location.origin) return
@@ -77,105 +124,83 @@ export default function ChangyanLoginModal({
     }
   }
 
+  const statusText = error
+    ? error
+    : busy
+      ? '正在建立云端会话，请稍候…'
+      : activeMode === 'callback'
+        ? '登录成功后会自动返回本页。若页面空白，可点「重新加载」或改用其他通路。'
+        : '登录可能需要完成极验滑块；若页面空白，请确认浏览器未拦截第三方 Cookie。'
+
   return (
     <div
+      className="fe-changyan-backdrop"
       role="dialog"
       aria-modal="true"
       aria-label="讯飞登录"
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 1200,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'rgba(15, 23, 42, 0.55)',
-        padding: 16,
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !busy) onClose()
       }}
     >
-      <div
-        className="fe-card"
-        style={{
-          width: 'min(560px, 100%)',
-          maxHeight: '92vh',
-          display: 'flex',
-          flexDirection: 'column',
-          background: 'var(--surface, #fff)',
-          borderRadius: 16,
-          overflow: 'hidden',
-          boxShadow: '0 24px 64px rgba(15, 23, 42, 0.28)',
-        }}
-      >
-        <header
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            padding: '14px 16px',
-            borderBottom: '1px solid var(--control-border, #e2e8f0)',
-          }}
-        >
-          <div>
-            <strong style={{ fontSize: 15 }}>讯飞登录</strong>
-            <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--control-muted, #64748b)' }}>
-              在下方完成 ETS100 账号登录，凭据将直接用于建立云端会话
-            </p>
+      <div className="fe-changyan-card">
+        <header className="fe-changyan-head">
+          <div className="fe-changyan-title">
+            <span className="fe-changyan-title-icon">{symbol('verified_user')}</span>
+            <div>
+              <h2>讯飞登录</h2>
+              <p>在下方完成 ETS100 账号登录，凭据将直接用于建立云端会话</p>
+            </div>
           </div>
           <button
             type="button"
-            className="control-ghost"
+            className="control-icon-button"
             onClick={onClose}
             disabled={busy}
-            style={{ flexShrink: 0 }}
+            aria-label="关闭"
+            title="关闭"
           >
-            关闭
+            {symbol('close')}
           </button>
         </header>
 
-        <div style={{ position: 'relative', flex: 1, minHeight: 420, background: '#fff' }}>
+        <div className="fe-changyan-body" ref={bodyRef}>
           <iframe
-            ref={iframeRef}
+            key={frameKey}
+            className="fe-changyan-frame"
             title="畅言通行证登录"
             src={loginUrl}
             onLoad={handleFrameLoad}
-            style={{ width: '100%', height: '100%', minHeight: 420, border: 0, display: 'block' }}
           />
           {!loaded && (
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--control-muted, #64748b)',
-                fontSize: 13,
-                pointerEvents: 'none',
-              }}
-            >
-              正在加载畅言登录页…
+            <div className="fe-changyan-loading">
+              <span className="fe-changyan-spinner" />
+              <span>正在加载畅言登录页…</span>
             </div>
           )}
         </div>
 
-        <footer
-          style={{
-            padding: '10px 16px 14px',
-            fontSize: 12,
-            color: 'var(--control-muted, #64748b)',
-            borderTop: '1px solid var(--control-border, #e2e8f0)',
-          }}
-        >
-          {error ? (
-            <span style={{ color: '#b91c1c' }}>{error}</span>
-          ) : busy ? (
-            <span>正在建立云端会话，请稍候…</span>
-          ) : (
-            <span>
-              登录可能需要完成极验滑块；若页面空白，请确认浏览器未拦截第三方 Cookie。
-            </span>
-          )}
+        <footer className={`fe-changyan-foot${error ? ' is-error' : ''}`}>
+          <span className="fe-changyan-foot-text">{statusText}</span>
+          <span className="fe-changyan-actions">
+            {error ? (
+              <button
+                type="button"
+                className="control-secondary"
+                onClick={() => {
+                  deliveredRef.current = false
+                  setLoaded(false)
+                  setFrameKey((value) => value + 1)
+                }}
+                disabled={busy}
+              >
+                {symbol('refresh')} 重新加载
+              </button>
+            ) : (
+              <button type="button" className="control-secondary" onClick={onClose} disabled={busy}>
+                关闭
+              </button>
+            )}
+          </span>
         </footer>
       </div>
     </div>

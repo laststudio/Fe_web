@@ -143,7 +143,7 @@ const pageMeta: Record<string, { title: string; caption: string }> = {
   },
   '/settings': {
     title: '设置与账号',
-    caption: '平台账号绑定、系统公告与功能设置',
+    caption: '平台账号绑定与功能设置',
   },
   '/auto-complete': {
     title: '作业自动完成',
@@ -1578,21 +1578,17 @@ function HomeworkListView({
 function SettingsPage({
   currentUser,
   accountInfo,
-  softwareConfig,
   accessToken,
   onToast,
   onRefreshSession,
-  onOpenAnnouncement,
   onChangyanLogin,
   getFeatureStatus,
 }: {
   currentUser: User | null
   accountInfo: PlatformAccountInfo | null
-  softwareConfig: SoftwareConfig | null
   accessToken: string
   onToast?: (msg: string) => void
   onRefreshSession: () => void
-  onOpenAnnouncement: () => void
   onChangyanLogin?: () => void
   getFeatureStatus?: (featureKey: string, defaultName?: string) => FeatureCheck
 }) {
@@ -1650,34 +1646,6 @@ function SettingsPage({
           </a>
         </div>
       </section>
-
-      {/* Announcements */}
-      {softwareConfig && (softwareConfig.announcementTitle || softwareConfig.announcementMessage) && (
-        <section className="admin-policy-card">
-          <div className="admin-policy-card-head">
-            <Icon name="campaign" />
-            <div>
-              <h3>系统公告</h3>
-              <p>官方最新动态与服务通知</p>
-            </div>
-          </div>
-
-          <div className="admin-setting-switch-row">
-            <div className="admin-setting-switch-info">
-              <strong>{softwareConfig.announcementTitle || '公告'}</strong>
-              <span style={{ whiteSpace: 'pre-line', lineHeight: 1.6 }}>{softwareConfig.announcementMessage}</span>
-              {softwareConfig.announcementUpdatedAt && (
-                <span style={{ color: '#94a3b8', fontSize: 11, marginTop: 4 }}>
-                  更新时间：{softwareConfig.announcementUpdatedAt}
-                </span>
-              )}
-            </div>
-            <button className="control-secondary" type="button" onClick={onOpenAnnouncement}>
-              <Icon name="visibility" /> 查看公告
-            </button>
-          </div>
-        </section>
-      )}
 
       {/* ETS100 Platform Account Binding */}
       <section className="admin-policy-card">
@@ -2026,7 +1994,6 @@ function App() {
   // Software Config & Features State
   const [softwareConfig, setSoftwareConfig] = useState<SoftwareConfig | null>(null)
   const [softwareFeatures, setSoftwareFeatures] = useState<SoftwareFeatureItem[]>([])
-  const [announcementDismissed, setAnnouncementDismissed] = useState(false)
 
   const pollingTimerRef = useRef<number | null>(null)
   const isFetchingHomeworksRef = useRef(false)
@@ -3305,26 +3272,6 @@ function App() {
                         <Icon name="open_in_new" className="control-user-dropdown-arrow" />
                       </a>
 
-                      {softwareConfig && (softwareConfig.announcementTitle || softwareConfig.announcementMessage) && (
-                        <button
-                          className="control-user-dropdown-item as-button"
-                          onClick={() => {
-                            setUserMenuOpen(false)
-                            setShowAnnouncementModal(true)
-                          }}
-                          type="button"
-                          role="menuitem"
-                        >
-                          <div className="control-user-dropdown-icon">
-                            <Icon name="campaign" />
-                          </div>
-                          <div className="control-user-dropdown-text">
-                            <strong>系统公告</strong>
-                            <small>{softwareConfig.announcementTitle || '查看系统通知'}</small>
-                          </div>
-                          <Icon name="chevron_right" className="control-user-dropdown-arrow" />
-                        </button>
-                      )}
                     </div>
 
                     <div className="control-user-dropdown-divider" />
@@ -3470,33 +3417,6 @@ function App() {
             </div>
           </header>
 
-          {/* Announcement Card if present */}
-          {softwareConfig && (softwareConfig.announcementTitle || softwareConfig.announcementMessage) && !announcementDismissed && (
-            <div className="fe-announcement-card">
-              <div className="fe-announcement-icon">
-                <Icon name="campaign" filled />
-              </div>
-              <div className="fe-announcement-content">
-                <strong>{softwareConfig.announcementTitle || '系统公告'}</strong>
-                <p>{softwareConfig.announcementMessage}</p>
-                {softwareConfig.announcementUrl && (
-                  <a href={softwareConfig.announcementUrl} target="_blank" rel="noreferrer">
-                    查看详情 <Icon name="open_in_new" />
-                  </a>
-                )}
-              </div>
-              <button
-                className="fe-announcement-close"
-                onClick={() => setAnnouncementDismissed(true)}
-                title="关闭公告"
-                type="button"
-                aria-label="关闭公告"
-              >
-                <Icon name="close" />
-              </button>
-            </div>
-          )}
-
           {/* Mobile Drawer Trigger & Overlay */}
           <button
             className="control-mobile-navigation"
@@ -3600,11 +3520,9 @@ function App() {
             <SettingsPage
               currentUser={currentUser}
               accountInfo={accountInfo}
-              softwareConfig={softwareConfig}
               accessToken={session.accessToken}
               onToast={showToast}
               onRefreshSession={handleRequestRefresh}
-              onOpenAnnouncement={() => setShowAnnouncementModal(true)}
               onChangyanLogin={() => {
                 setChangyanError(null)
                 setChangyanOpen(true)

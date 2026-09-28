@@ -2636,126 +2636,6 @@ html:has(.control-shell) {
   color: #b91c1c;
 }
 
-.system-announcement-banner {
-  background: #eff6ff;
-  color: #1d4ed8;
-  border-bottom: 1px solid #bfdbfe;
-  padding: 9px 24px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 13px;
-  z-index: 69;
-}
-
-.system-announcement-content {
-  flex: 1;
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.system-announcement-content strong {
-  font-weight: 750;
-}
-
-.system-announcement-content p {
-  margin: 0;
-  color: #1e40af;
-}
-
-.system-announcement-link {
-  color: #2563eb;
-  font-weight: 650;
-  text-decoration: underline;
-  white-space: nowrap;
-}
-
-.system-announcement-close {
-  width: 28px;
-  height: 28px;
-  color: #64748b;
-  background: transparent;
-  border-radius: 6px;
-  display: grid;
-  place-items: center;
-}
-
-.system-announcement-close:hover {
-  background: #dbeafe;
-  color: #1e293b;
-}
-
-.fe-announcement-card {
-  margin-bottom: 20px;
-  padding: 14px 18px;
-  border: 1px solid #bfdbfe;
-  border-radius: 12px;
-  background: #eff6ff;
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.06);
-}
-
-.fe-announcement-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 9px;
-  background: #dbeafe;
-  color: #1d4ed8;
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-}
-
-.fe-announcement-content {
-  flex: 1;
-  display: grid;
-  gap: 4px;
-  font-size: 13.5px;
-}
-
-.fe-announcement-content strong {
-  color: #1e3a8a;
-  font-size: 14px;
-  font-weight: 750;
-}
-
-.fe-announcement-content p {
-  margin: 0;
-  color: #1e40af;
-  white-space: pre-line;
-  line-height: 1.55;
-}
-
-.fe-announcement-content a {
-  color: #2563eb;
-  font-weight: 650;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 4px;
-  text-decoration: underline;
-}
-
-.fe-announcement-close {
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-  color: #60a5fa;
-  background: transparent;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-}
-
-.fe-announcement-close:hover {
-  background: #dbeafe;
-  color: #1e40af;
-}
-
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
@@ -3545,18 +3425,6 @@ html:has(.control-shell) {
     min-height: 36px;
   }
 
-  /* Announcement Card */
-  .fe-announcement-card {
-    padding: 10px 12px;
-    gap: 10px;
-    font-size: 12.5px;
-  }
-
-  .fe-announcement-icon {
-    width: 30px;
-    height: 30px;
-    border-radius: 7px;
-  }
 }
 
 /* ==========================================================================
@@ -6184,4 +6052,202 @@ html:has(.control-shell) {
 
 .fe-record-btn.is-cancel:hover {
   color: #1e293b;
+}
+
+/* ============================================================
+   畅言网页登录（讯飞登录）内嵌弹窗
+   ------------------------------------------------------------
+   畅言通行证登录页是固定桌面布局：容器 min-width:780px，左半为背景大图，
+   右半是表单（实测卡片 x∈[40,759]，表单面板 x≈400..759）。
+   因此：
+   - 桌面端给足宽度，让页面按 780~960px 正常排版（920px 时内容高约 502px）；
+   - 移动端不做整体缩放（极验滑块需要原始触摸尺寸），而是把 iframe 固定
+     780px 宽、外层横向滚动，加载后自动滚到最右，把表单对齐进屏幕。
+   ============================================================ */
+
+.fe-changyan-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(6px);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.fe-changyan-card {
+  width: min(920px, 92vw);
+  height: min(640px, 88vh);
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid var(--control-line);
+  border-radius: 16px;
+  box-shadow: 0 28px 64px -16px rgba(15, 23, 42, 0.35);
+  overflow: hidden;
+}
+
+.fe-changyan-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  background: #f8fafc;
+  border-bottom: 1px solid var(--control-line);
+  flex-shrink: 0;
+}
+
+.fe-changyan-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.fe-changyan-title-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: #e0edff;
+  color: #1d4ed8;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.fe-changyan-title-icon .material-symbols-outlined {
+  font-size: 22px;
+}
+
+.fe-changyan-title h2 {
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 750;
+  color: var(--control-ink);
+}
+
+.fe-changyan-title p {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--control-muted);
+}
+
+.fe-changyan-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: #fff;
+}
+
+.fe-changyan-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+.fe-changyan-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: #fff;
+  color: var(--control-muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 24px;
+  /* 纯视觉提示，绝不能挡住下方 iframe 的操作 */
+  pointer-events: none;
+}
+
+.fe-changyan-spinner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2.5px solid var(--control-line);
+  border-top-color: #2563eb;
+  animation: fe-changyan-spin 0.8s linear infinite;
+}
+
+@keyframes fe-changyan-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.fe-changyan-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 20px;
+  background: #f8fafc;
+  border-top: 1px solid var(--control-line);
+  font-size: 12px;
+  color: var(--control-muted);
+  flex-shrink: 0;
+}
+
+.fe-changyan-foot.is-error {
+  background: #fef2f2;
+  border-top-color: #fee2e2;
+  color: #b91c1c;
+}
+
+.fe-changyan-foot-text {
+  min-width: 0;
+}
+
+.fe-changyan-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* 移动端：整屏铺满，横向平移查看固定桌面布局的登录页 */
+@media (max-width: 640px) {
+  .fe-changyan-backdrop {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .fe-changyan-card {
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .fe-changyan-head {
+    padding: 12px 14px;
+  }
+
+  .fe-changyan-title p {
+    display: none;
+  }
+
+  .fe-changyan-body {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+
+  .fe-changyan-frame {
+    width: 780px;
+    min-width: 780px;
+  }
+
+  .fe-changyan-foot {
+    padding: 8px 14px;
+    font-size: 11.5px;
+  }
 }
