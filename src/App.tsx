@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import './App.css'
 import { ApiError, getCurrentUser, setUnauthorizedHandler, type User } from './api/auth'
 import {
@@ -1593,9 +1594,10 @@ function SettingsPage({
   getFeatureStatus?: (featureKey: string, defaultName?: string) => FeatureCheck
 }) {
   const [skipRisk, setSkipRisk] = useState(readStoredSkipRiskWarning)
-  // 账号中心绑定（binding）与「讯飞登录」（changyan）都视为已连接 ETS100。
+  // 账号中心绑定与「讯飞登录」都视为已连接 ETS100。
   const etsReady = Boolean(accountInfo?.bound || accountInfo?.session_ready)
-  const etsSource = accountInfo?.bound ? 'binding' : accountInfo?.session_ready ? 'changyan' : ''
+  // 后端 source：phone（手机号体系绑定）/ changyan（讯飞·畅言体系绑定）
+  const etsSource = etsReady ? accountInfo?.source || '' : ''
 
   function toggleSkipRisk() {
     const next = !skipRisk
@@ -1663,7 +1665,7 @@ function SettingsPage({
             <span>是否已在 LastStudio 账号中心绑定 ETS100 账号</span>
           </div>
           <span className={`admin-pill-badge ${etsReady ? 'is-success' : 'is-danger'}`}>
-            {etsSource === 'binding' ? '已绑定' : etsSource === 'changyan' ? '讯飞登录' : '未绑定'}
+            {etsSource === 'changyan' ? '讯飞登录' : etsSource === 'phone' ? '已绑定' : etsReady ? '已连接' : '未绑定'}
           </span>
         </div>
 
@@ -1903,7 +1905,8 @@ function App() {
   // Modals & UI feedback
   const [showRiskModal, setShowRiskModal] = useState<HomeworkItem | null>(null)
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false)
-  const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [toastMessage, setToastMessage] = useState<{ text: string; isError: boolean } | null>(null)
+  const toastTimerRef = useRef<number | null>(null)
   const [homeworkError, setHomeworkError] = useState<HomeworkErrorInfo | string | null>(null)
 
   // User Profile Dropdown Popover state
@@ -2104,11 +2107,18 @@ function App() {
   }
 
   function showToast(message: string) {
-    setToastMessage(message)
-    window.setTimeout(() => {
+    if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current)
+    const isError = /失败|错误|异常|中断|无法|未能|不可用|不支持|超时|拒绝|失效|未就绪|过期|error|failed/i.test(message)
+    setToastMessage({ text: message, isError })
+    toastTimerRef.current = window.setTimeout(() => {
       setToastMessage(null)
-    }, 2800)
+      toastTimerRef.current = null
+    }, isError ? 10000 : 4000)
   }
+
+  useEffect(() => () => {
+    if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current)
+  }, [])
 
   useEffect(() => {
     const onPopState = () => {
@@ -3085,11 +3095,24 @@ function App() {
 
   return (
     <main className={`control-shell ${mobileNavOpen ? 'drawer-open' : ''}`}>
-      {toastMessage && (
-        <div className="toast-notification" role="status">
-          <Icon name="check_circle" filled />
-          <span>{toastMessage}</span>
-        </div>
+      {toastMessage && createPortal(
+        <div className={`toast-notification ${toastMessage.isError ? 'is-error' : ''}`} role={toastMessage.isError ? 'alert' : 'status'}>
+          <Icon name={toastMessage.isError ? 'error' : 'check_circle'} filled />
+          <span>{toastMessage.text}</span>
+          <button
+            className="toast-notification-close"
+            type="button"
+            onClick={() => {
+              if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current)
+              toastTimerRef.current = null
+              setToastMessage(null)
+            }}
+            aria-label="关闭通知"
+          >
+            <Icon name="close" />
+          </button>
+        </div>,
+        document.body
       )}
 
       {showRiskModal && (
