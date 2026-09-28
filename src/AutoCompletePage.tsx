@@ -111,6 +111,11 @@ export function AutoCompletePage({
     if (activeTask && !['COMPLETED', 'FAILED'].includes(activeTask.status)) {
       return 'execution'
     }
+    // A completed task opens its unified result detail by default. The overview
+    // remains available through the explicit “返回任务看板” action.
+    if (activeTask?.status === 'COMPLETED') {
+      return 'execution'
+    }
     // 2. Hub route (/auto-complete) defaults to kanban overview
     if (isHubRoute || (typeof window !== 'undefined' && window.location.pathname === '/auto-complete')) {
       return 'kanban'
@@ -937,14 +942,6 @@ export function AutoCompletePage({
   const currentTask = isTaskForCurrentHw ? activeTask || localTaskStatus : localTaskStatus
   const currentTaskId = (isTaskForCurrentHw ? activeTask?.task_id || localTaskId : localTaskId) || null
 
-  // 查看历史任务时当前作业的试卷结构通常已不在内存里，paperTotalScore 会是 0；
-  // 展示口径一律优先采用任务结果里后端回传的真实满分（max_score/total_point）。
-  const effectivePaperTotal = useMemo(() => {
-    const fromTask = Number(currentTask?.result?.max_score ?? currentTask?.result?.total_point)
-    if (Number.isFinite(fromTask) && fromTask > 0) return fromTask
-    return paperTotalScore
-  }, [currentTask, paperTotalScore])
-
   const onCompletedRef = useRef(onCompleted)
   const onTaskChangeRef = useRef(onTaskChange)
   useEffect(() => {
@@ -1054,7 +1051,8 @@ export function AutoCompletePage({
     const qDetails = task.result?.question_details || task.question_results || []
     const isCompleted = task.status === 'COMPLETED'
     const isFailed = task.status === 'FAILED'
-    const finalScore = task.result?.final_score ?? task.result?.score ?? null
+    // 与执行页结算卡保持同一口径：优先使用后端最终结算分，再回退到兼容字段。
+    const finalScore = task.result?.score ?? task.result?.final_score ?? task.result?.official_point ?? null
     const maxScore = task.result?.max_score ?? task.result?.total_point ?? null
     const scoreRate =
       task.result?.score_rate ??
@@ -1062,6 +1060,12 @@ export function AutoCompletePage({
         ? ((Number(finalScore) / Number(maxScore)) * 100).toFixed(1)
         : null)
     const useTime = task.result?.use_time ? formatSeconds(task.result.use_time) : null
+    const officialUseTime = task.result?.official_use_time
+    const reportedUseTime = task.result?.reported_use_time
+    const realElapsedSeconds = task.result?.real_elapsed_seconds
+    const targetTotal = task.result?.target_total
+    const clientPaperTotal = task.result?.client_paper_total
+    const backendPaperTotal = task.result?.paper_total
     const completedAt =
       task.result?.completed_at ||
       (task.created_at ? new Date(task.created_at * 1000).toLocaleString() : null)
@@ -1126,7 +1130,7 @@ export function AutoCompletePage({
             </div>
           </div>
 
-          <div className="fe-autocomplete-stats-grid">
+          <div className="fe-autocomplete-stats-grid fe-completed-stats-grid">
             <div className="fe-stat-tile">
               <span className="fe-stat-label">官方最终得分</span>
               <strong className="fe-stat-value" style={{ color: isCompleted ? '#16a34a' : undefined }}>
@@ -1148,6 +1152,30 @@ export function AutoCompletePage({
             <div className="fe-stat-tile">
               <span className="fe-stat-label">实际答题用时</span>
               <strong className="fe-stat-value">{useTime || '--'}</strong>
+            </div>
+            <div className="fe-stat-tile">
+              <span className="fe-stat-label">用时核对</span>
+              <strong className="fe-stat-value fe-stat-value--stacked">
+                {officialUseTime !== undefined && officialUseTime !== null
+                  ? `官方记录 ${formatSeconds(Number(officialUseTime))}`
+                  : '官方记录 --'}
+                <small>
+                  上报 {reportedUseTime !== undefined && reportedUseTime !== null ? `${reportedUseTime}s` : '--'}
+                  {' · '}
+                  真实 {realElapsedSeconds !== undefined && realElapsedSeconds !== null ? `${Math.round(Number(realElapsedSeconds))}s` : '--'}
+                </small>
+              </strong>
+            </div>
+            <div className="fe-stat-tile">
+              <span className="fe-stat-label">本次上报目标分</span>
+              <strong className="fe-stat-value fe-stat-value--stacked">
+                {targetTotal !== undefined && targetTotal !== null ? `${Number(targetTotal).toFixed(2)} 分` : '--'}
+                <small>
+                  前端卷面 {clientPaperTotal !== undefined && clientPaperTotal !== null ? Number(clientPaperTotal).toFixed(2) : '--'}
+                  {' / '}
+                  后端卷面 {backendPaperTotal !== undefined && backendPaperTotal !== null ? Number(backendPaperTotal).toFixed(2) : '--'}
+                </small>
+              </strong>
             </div>
           </div>
         </div>
@@ -1276,23 +1304,6 @@ export function AutoCompletePage({
             </div>
           )}
 
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginTop: 20,
-            }}
-          >
-            <button
-              type="button"
-              className="control-secondary"
-              onClick={() => setSelectedHistoryTask(null)}
-            >
-              <Icon name="arrow_back" />
-              <span>返回看板列表</span>
-            </button>
-          </div>
         </div>
       </div>
     )
@@ -1696,6 +1707,13 @@ export function AutoCompletePage({
   // Dedicated Task Execution View (Full Dashboard Page)
   const renderExecutionView = () => {
     if (!currentTaskId) return null
+
+    // 完成态统一使用历史详情看板，避免执行页结算卡与历史详情同时成为两套“完成看板”。
+    // 这也让任务刚完成时直接看到完整的逐题得分、录音和六项结算数据。
+    if (currentTask?.status === 'COMPLETED') {
+      return renderTaskEffectView(currentTask)
+    }
+
     return (
       <div className="fe-autocomplete-container">
         {/* Top Breadcrumb & Return Nav */}
@@ -1763,21 +1781,6 @@ export function AutoCompletePage({
                   <span>{isCancelling ? '终止中...' : '终止任务'}</span>
                 </button>
               )}
-              <button
-                type="button"
-                className="fe-head-control-btn"
-                onClick={() => {
-                  if (currentTask && ['COMPLETED', 'FAILED'].includes(currentTask.status)) {
-                    handleDismissTaskModal()
-                  }
-                  setViewMode('kanban')
-                  void loadHistoryTasks(false)
-                }}
-                title="前往任务总览看板查看全部记录"
-              >
-                <Icon name="dashboard" />
-                <span>任务总览看板</span>
-              </button>
             </div>
           </div>
 
@@ -1825,163 +1828,6 @@ export function AutoCompletePage({
                   >
                     <Icon name="arrow_back" />
                     <span>返回作业列表</span>
-                  </button>
-                </div>
-              </div>
-            ) : currentTask?.status === 'COMPLETED' ? (
-              /* Settlement card (做题效果全景展示) */
-              <div className="fe-settlement-card">
-                <div className="fe-settlement-icon-wrap">
-                  <Icon name="verified" filled />
-                </div>
-                <h3>恭喜，作业已成功自动完成并提交！</h3>
-                <p className="fe-settlement-desc">
-                  所有题目已完成，作答结果已提交。
-                </p>
-
-                {/* Summary Score Stats */}
-                <div className="fe-settlement-stats">
-                  <div className="fe-settlement-tile">
-                    <small>官方最终得分</small>
-                    <strong style={{ color: '#16a34a' }}>
-                      {Number((currentTask.result?.score ?? currentTask.result?.final_score ?? (mode === 'auto' ? autoTargetTotal : manualTotalSum)).toFixed(2))} 分
-                    </strong>
-                  </div>
-                  <div className="fe-settlement-tile">
-                    <small>试卷总满分</small>
-                    <strong>{effectivePaperTotal.toFixed(1)} 分</strong>
-                  </div>
-                  <div className="fe-settlement-tile">
-                    <small>最终得分率</small>
-                    <strong style={{ color: '#2563eb' }}>
-                      {currentTask.result?.score_rate ?? (
-                        effectivePaperTotal > 0
-                          ? ((Number(currentTask.result?.score ?? currentTask.result?.final_score ?? (mode === 'auto' ? autoTargetTotal : manualTotalSum)) / effectivePaperTotal) * 100).toFixed(1)
-                          : '95.0'
-                      )}%
-                    </strong>
-                  </div>
-                  <div className="fe-settlement-tile">
-                    <small>实际做题用时</small>
-                    <strong>{formatSeconds(currentTask.result?.use_time || selectedUseTimeSeconds)}</strong>
-                  </div>
-                  {(currentTask.result?.official_use_time !== undefined && currentTask.result?.official_use_time !== null) && (
-                    <div className="fe-settlement-tile">
-                      <small>用时核对</small>
-                      <strong style={{ fontSize: 13, fontWeight: 600 }}>
-                        官方记录 {formatSeconds(Number(currentTask.result.official_use_time))}
-                        <span style={{ display: 'block', fontSize: 11, color: 'var(--control-muted)', fontWeight: 400 }}>
-                          上报 {currentTask.result.reported_use_time ?? '--'}s · 真实 {Math.round(Number(currentTask.result.real_elapsed_seconds ?? 0))}s
-                        </span>
-                      </strong>
-                    </div>
-                  )}
-                  {currentTask.result?.target_total !== undefined && currentTask.result?.target_total !== null && (
-                    <div className="fe-settlement-tile">
-                      <small>本次上报目标分</small>
-                      <strong>
-                        {Number(currentTask.result.target_total).toFixed(2)} 分
-                        {currentTask.result.client_paper_total !== undefined && currentTask.result.client_paper_total !== null && (
-                          <span style={{ display: 'block', fontSize: 11, color: 'var(--control-muted)' }}>
-                            前端卷面 {Number(currentTask.result.client_paper_total).toFixed(2)} / 后端卷面 {Number(currentTask.result.paper_total ?? 0).toFixed(2)}
-                          </span>
-                        )}
-                      </strong>
-                    </div>
-                  )}
-                </div>
-
-                {/* Question by question completion breakdown table */}
-                <div className="fe-settlement-table-wrap">
-                  <table className="fe-settlement-table">
-                    <thead>
-                      <tr>
-                        <th>题号</th>
-                        <th>题型</th>
-                        <th>题目内容节选</th>
-                        <th>真实满分</th>
-                        <th>最终实际得分</th>
-                        <th>克隆音频回放</th>
-                        <th>官方状态</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(currentTask.result?.question_details || currentTask.question_results || allocatedQuestionScores).map((rawItem: unknown, idx: number) => {
-                        const item = rawItem as Record<string, unknown>
-                        const order = Number(item.order || idx + 1)
-                        const typeName = String(item.type_name || item.typeName || '题目')
-                        const text = String(item.text || item.questionText || `第 ${order} 题`)
-                        const maxS = (item.max_score ?? item.maxScore ?? (effectivePaperTotal / Math.max(1, totalQuestions))) as number
-                        const score = (item.awarded_score ?? item.allocatedScore ?? (manualScores[order] || 0)) as number
-                        const audioUrl = item.audio_url as string | undefined
-                        return (
-                          <tr key={order}>
-                            <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}><strong>Q{order}</strong></td>
-                            <td style={{ whiteSpace: 'nowrap' }}><span className="fe-td-type">{typeName}</span></td>
-                            <td className="fe-td-text" title={text}>
-                              {text}
-                            </td>
-                            <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{Number(maxS).toFixed(2)} 分</td>
-                            <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}><strong style={{ color: '#16a34a' }}>{Number(score).toFixed(2)} 分</strong></td>
-                            <td>
-                              {audioUrl ? (
-                                <div className="fe-audio-cell">
-                                  <audio controls src={audioUrl} preload="none" className="fe-audio-player" />
-                                </div>
-                              ) : ['听后选择', '词汇选择', '单项选择', '选择题'].some(k => typeName.includes(k)) ? (
-                                <span className="admin-pill-badge is-muted" style={{ fontSize: 11 }}>客观选择题 · 无需录音</span>
-                              ) : (
-                                <span className="admin-pill-badge is-danger" style={{ fontSize: 11 }}>无音频数据</span>
-                              )}
-                            </td>
-                            <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
-                              <span className="admin-pill-badge is-active" style={{ fontSize: 11 }}>
-                                <Icon name="check" style={{ fontSize: 12 }} /> 官方已核验
-                              </span>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="fe-settlement-actions" style={{ display: 'flex', gap: 12, justifyContent: 'center', width: '100%', marginTop: 8, flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    className="control-primary"
-                    onClick={() => {
-                      handleDismissTaskModal()
-                      onToast?.('正在返回作业列表...')
-                      onBack()
-                    }}
-                  >
-                    <Icon name="assignment" />
-                    <span>返回作业列表</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="control-secondary"
-                    onClick={() => {
-                      handleDismissTaskModal()
-                      void loadHistoryTasks(false)
-                      setSelectedHistoryTask(null)
-                      setViewMode('kanban')
-                    }}
-                  >
-                    <Icon name="dashboard" />
-                    <span>前往任务看板</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="control-secondary"
-                    onClick={() => {
-                      handleDismissTaskModal()
-                      setViewMode('config')
-                    }}
-                  >
-                    <Icon name="tune" />
-                    <span>重新配置此作业</span>
                   </button>
                 </div>
               </div>
@@ -2033,19 +1879,38 @@ export function AutoCompletePage({
                   </strong>
                 </div>
 
-                {/* Question Stem preview with fade in */}
-                <div className="fe-exec-stem-preview">
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <small>
-                      当前作答题干 (第 {currentTask?.current_question_index || 1} / {currentTask?.total_questions || totalQuestions} 题)：
-                    </small>
-                    <span className="admin-pill-badge is-muted" style={{ fontSize: 11 }}>
-                      {voiceMode === 'clone' ? '专属声音生成中' : voiceMode === 'edge' ? '标准声音生成中' : '静音模式'}
-                    </span>
+                <div className="fe-exec-content-row">
+                  {/* Question Stem preview with fade in */}
+                  <div className="fe-exec-stem-preview">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <small>
+                        当前作答题干 (第 {currentTask?.current_question_index || 1} / {currentTask?.total_questions || totalQuestions} 题)：
+                      </small>
+                      <span className="admin-pill-badge is-muted" style={{ fontSize: 11 }}>
+                        {voiceMode === 'clone' ? '专属声音生成中' : voiceMode === 'edge' ? '标准声音生成中' : '静音模式'}
+                      </span>
+                    </div>
+                    <p className="fe-stem-text">
+                      {currentTask?.current_question_text || '正在逐题提取作答素材与发音词汇表...'}
+                    </p>
                   </div>
-                  <p className="fe-stem-text">
-                    {currentTask?.current_question_text || '正在逐题提取作答素材与发音词汇表...'}
-                  </p>
+
+                  <div className="fe-exec-details-grid">
+                    <div className="fe-exec-tile">
+                      <small>音色模式</small>
+                      <span>
+                        {voiceMode === 'clone'
+                          ? '专属声音'
+                          : voiceMode === 'edge'
+                          ? '标准声音'
+                          : '不上传声音'}
+                      </span>
+                    </div>
+                    <div className="fe-exec-tile">
+                      <small>目标总分与比例</small>
+                      <span>{mode === 'auto' ? `${autoTargetTotal.toFixed(2)}分 (95%比例)` : `${manualTotalSum.toFixed(2)}分`}</span>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Live Questions Checklist */}
@@ -2071,23 +1936,6 @@ export function AutoCompletePage({
                     ))}
                   </div>
                 )}
-
-                <div className="fe-exec-details-grid">
-                  <div className="fe-exec-tile">
-                    <small>音色模式</small>
-                    <span>
-                      {voiceMode === 'clone'
-                        ? '专属声音'
-                        : voiceMode === 'edge'
-                        ? '标准声音'
-                        : '不上传声音'}
-                    </span>
-                  </div>
-                  <div className="fe-exec-tile">
-                    <small>目标总分与比例</small>
-                    <span>{mode === 'auto' ? `${autoTargetTotal.toFixed(2)}分 (95%比例)` : `${manualTotalSum.toFixed(2)}分`}</span>
-                  </div>
-                </div>
 
                 {/* In-Progress Footer Navigation Actions */}
                 <div className="fe-execution-in-progress-footer">
