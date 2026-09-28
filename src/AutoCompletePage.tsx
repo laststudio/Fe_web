@@ -14,6 +14,8 @@ import {
 import { getVoiceAudioUrl, getVoiceClonePreview, getVoices, type VoiceProfile } from './api/voice'
 import { getHomeworkDetail, startParseHomework, type HomeworkItem, type Paper } from './api/homework'
 import {
+  GRADUATION,
+  createRng,
   planQuestionAllocations,
   toFiveScale,
   type QuestionAllocation,
@@ -58,6 +60,7 @@ export type AutoCompletePageProps = {
   permitToken?: string
   accessToken: string
   onBack: () => void
+  returnLabel?: string
   onRequestPermit?: () => void
   onOpenSettingsVoice?: () => void
   onToast?: (msg: string) => void
@@ -88,6 +91,7 @@ export function AutoCompletePage({
   permitToken,
   accessToken,
   onBack,
+  returnLabel = '当前作业',
   onRequestPermit,
   onOpenSettingsVoice,
   onToast,
@@ -200,8 +204,6 @@ export function AutoCompletePage({
 
   const activePaper = paper || fetchedPaper
 
-  // 推荐用时抖动量（±8%）：载入试卷时在回调里随机一次，避免每次推荐值完全相同
-  const [timeJitter, setTimeJitter] = useState(1)
 
   useEffect(() => {
     if (!permitToken || !currentHw.id || !accessToken) return
@@ -213,8 +215,7 @@ export function AutoCompletePage({
       .then((res) => {
         if (active && res) {
           setFetchedPaper(res)
-          // 每次载入试卷时重新抖一次推荐用时（±8%），避免每次推荐值都一样
-          setTimeJitter(1 + (Math.random() * 0.16 - 0.08))
+          // 推荐用时与快捷预设分尾数统一在"试卷指纹变化"的 effect 里重新随机
         }
       })
       .catch(async (err) => {
@@ -435,13 +436,33 @@ export function AutoCompletePage({
     }
   }, [currentHw, activePaper])
 
+  // ── 真实性随机量 ──────────────────────────────────────────────────
+  // 推荐用时抖动 + 快捷预设分尾数。不用 effect 同步 state（会触发级联渲染），
+  // 而是把"试卷指纹 + 会话盐 + 手动换尾数次数"揉成种子：
+  // 同一份卷数值稳定，切卷或点"换个尾数"就换一组零散尾数。
+  const [sessionSalt] = useState(() => Math.floor(Math.random() * 1e9))
+  const [rerollNonce, setRerollNonce] = useState(0)
+
+  const realismSeed = useMemo(() => {
+    const text = `${currentHw?.id ?? ''}|${questions.length}|${paperTotalScore}|${rerollNonce}|${sessionSalt}`
+    let hash = 2166136261
+    for (let index = 0; index < text.length; index += 1) {
+      hash ^= text.charCodeAt(index)
+      hash = Math.imul(hash, 16777619)
+    }
+    return hash >>> 0
+  }, [currentHw?.id, questions.length, paperTotalScore, rerollNonce, sessionSalt])
+
+  // 推荐用时抖动量（±12%）：每次换卷/换尾数都不同
+  const timeJitter = useMemo(() => 1 + (createRng(realismSeed)() * 0.24 - 0.12), [realismSeed])
+
   // 1. Time Planning States & Calculation (reference: ets_auto_complete/src/ets_demo/workflow.py)
   const [timeOption, setTimeOption] = useState<'recommended' | 'custom'>('recommended')
 
   // Calculate recommended time dynamically:
   // 按照每道题的参考录音时长相加 x 2 + 2 分钟 (120 秒)
-  // 推荐用时的随机抖动：在 effect 里生成（render 期不可有副作用），
-  // 换卷/换作业时重新抖一次，保证每次推荐不完全相同。
+  // 推荐用时的随机抖动由上面的 realismSeed 推导（纯计算，无副作用），
+  // 换卷/换作业或点"换个尾数"都会得到新的用时。
 
   const { recommendedTimeSeconds, totalRefAudioSeconds } = useMemo(() => {
     // 推荐用时 = ①听题 + ②准备 + ③作答 + ④单题开销 + ⑤大题开销
@@ -449,7 +470,7 @@ export function AutoCompletePage({
     //   缺失时才按题干文本估算；②朗读类大题首题 50s、其余每题 8s；
     //   ③作答按参考答案文本估算（执行时会用真实 TTS 时长替换）；
     //   ④每题 5s（提示音/切换/缓冲）；⑤每个大题 15s（题型说明/页面切换）。
-    // 不做卷面总分区间约束；结果做 ±8% 抖动并取整到 5 秒，避免每次推荐值相同。
+    // 不做卷面总分区间约束；结果做 ±12% 抖动并保留到秒，避免每次推荐值相同且过于整齐。
     const kind = (currentHw as Record<string, unknown>)?.kind as string | undefined
 
     const estimateSpeech = (text: string): number => {
@@ -464,8 +485,10 @@ export function AutoCompletePage({
       return Math.max(3, chars / 3.5)
     }
 
+    // 抖动后保留到"秒"这一位（不再取整到 5 秒）：这样推荐用时是 14 分 37 秒
+    // 这类零散值，而不是 14 分 35 秒这种一眼看出是凑整的数字。
     const shuffle = (value: number): number => {
-      return Math.max(30, Math.round((value * timeJitter) / 5) * 5)
+      return Math.max(30, Math.round(value * timeJitter))
     }
 
     // 词汇 PK / 作文：量纲与听说卷不同，单独处理
@@ -553,6 +576,12 @@ export function AutoCompletePage({
 
   const selectedUseTimeSeconds = timeOption === 'recommended' ? recommendedTimeSeconds : customUseTimeSeconds
 
+  // 0.125 档位的分数最多三位小数，去掉无意义的尾随 0：26.625 / 27.5 / 28
+  const formatScore = (value: number) => {
+    const text = Number(value).toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
+    return text === '-0' ? '0' : text
+  }
+
   const formatSeconds = (sec: number) => {
     const mins = Math.floor(sec / 60)
     const s = sec % 60
@@ -613,23 +642,20 @@ export function AutoCompletePage({
     return targetPaperTotal > 0 ? autoTargetTotal / targetPaperTotal : 0.95
   }, [autoTargetTotal, targetPaperTotal])
 
-  const handleSelectRatio = (ratio: number) => {
-    const safeRatio = Math.min(0.95, Math.max(0, ratio))
-    setSelectedRatio(safeRatio)
-    setCustomAutoTargetTotal(Number((targetPaperTotal * safeRatio).toFixed(2)))
-  }
-
   const handleUpdateAutoTargetTotal = (val: number) => {
     if (val > maxAutoScore) {
       setCustomAutoTargetTotal(maxAutoScore)
       setSelectedRatio(0.95)
       onToast?.(`目标分数最高为试卷满分的 95%（${maxAutoScore} 分）`)
-    } else {
-      const rounded = Number(val.toFixed(2))
-      setCustomAutoTargetTotal(rounded)
-      if (targetPaperTotal > 0) {
-        setSelectedRatio(Number((rounded / targetPaperTotal).toFixed(2)))
-      }
+      return
+    }
+    // 对齐到 0.125 分档位：ETS 结算只认这一档，对齐后"设定多少就结算多少"，
+    // 不会再出现"填 27.6、结算 27.63"的落差。
+    const snapped = Math.max(0, Math.round(val / GRADUATION) * GRADUATION)
+    const rounded = Number(snapped.toFixed(3))
+    setCustomAutoTargetTotal(rounded)
+    if (targetPaperTotal > 0) {
+      setSelectedRatio(Number((rounded / targetPaperTotal).toFixed(4)))
     }
   }
 
@@ -806,6 +832,39 @@ export function AutoCompletePage({
       allocation: plan[idx],
     }))
   }, [questions, autoTargetTotal, manualScores, allocationSeed])
+
+  // 快捷预设：不再用 85%→25.5 / 92%→27.6 这种一眼看出是手填的整数，
+  // 而是在目标比例附近随机取一个"落在 0.125 分档位上的零散值"
+  // （例如 26.625 / 27.125 / 28.375），既真实又能被后端精确结算。
+  const scorePresets = useMemo(() => {
+    const defs = [
+      { key: 'safe', label: '稳妥', ratio: 0.85, hint: '留足余量，最不容易被盯上' },
+      { key: 'good', label: '良好', ratio: 0.9, hint: '常规偏上水平' },
+      { key: 'strong', label: '优异', ratio: 0.92, hint: '读得好的常态区间' },
+      { key: 'max', label: '最高上限', ratio: 0.95, hint: '95% 硬上限，不可再高' },
+    ]
+    const rng = createRng(realismSeed ^ 0x5bf03635)
+    return defs.map((def) => {
+      if (def.ratio >= 0.95 || targetPaperTotal <= 0) {
+        return { ...def, score: Number(maxAutoScore.toFixed(3)) }
+      }
+      const base = targetPaperTotal * def.ratio
+      // 抖动幅度取卷面总分的 1.3%（30 分卷 ≈ ±0.39 分），再对齐到 0.125 档位
+      const spread = targetPaperTotal * 0.013
+      const jittered = base + (rng() * 2 - 1) * spread
+      const snapped = Math.round(jittered / GRADUATION) * GRADUATION
+      const score = Math.min(maxAutoScore, Math.max(GRADUATION, snapped))
+      return { ...def, score: Number(score.toFixed(3)) }
+    })
+  }, [targetPaperTotal, maxAutoScore, realismSeed])
+
+  const applyPresetScore = (score: number) => {
+    setCustomAutoTargetTotal(Number(score.toFixed(3)))
+    if (targetPaperTotal > 0) {
+      setSelectedRatio(Number((score / targetPaperTotal).toFixed(4)))
+    }
+    onToast?.(`目标总分已设为 ${formatScore(score)} 分（0.125 档位精确值）`)
+  }
 
   // 计划满分题数 / 明显偏低的题数，用于面板上给出"本次形态"摘要
   const allocationSummary = useMemo(() => {
@@ -1092,7 +1151,7 @@ export function AutoCompletePage({
             }}
           >
             <Icon name="arrow_back" />
-            <span>返回任务看板</span>
+            <span>返回任务总览</span>
           </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span
@@ -1358,10 +1417,10 @@ export function AutoCompletePage({
               type="button"
               className="control-secondary fe-btn-sm"
               onClick={onBack}
-              title="返回作业列表"
+              title={`返回${returnLabel}`}
             >
               <Icon name="arrow_back" />
-              <span>返回作业列表</span>
+              <span>返回{returnLabel}</span>
             </button>
             <button
               type="button"
@@ -1731,10 +1790,10 @@ export function AutoCompletePage({
             className="control-secondary fe-back-btn"
             type="button"
             onClick={onBack}
-            title="返回作业列表"
+            title={`返回${returnLabel}`}
           >
             <Icon name="arrow_back" />
-            <span>返回作业列表</span>
+            <span>返回{returnLabel}</span>
           </button>
           <button
             className="control-secondary fe-back-btn"
@@ -1743,10 +1802,10 @@ export function AutoCompletePage({
               setViewMode('kanban')
               void loadHistoryTasks(false)
             }}
-            title="前往自动完成任务总览看板"
+            title="返回自动完成任务总览"
           >
             <Icon name="dashboard" />
-            <span>任务总览看板</span>
+            <span>返回任务总览</span>
           </button>
           <span className={`admin-pill-badge ${currentTask?.status === 'COMPLETED' ? 'is-success' : currentTask?.status === 'FAILED' ? 'is-danger' : 'is-active'}`}>
             <Icon name={currentTask?.status === 'COMPLETED' ? 'check_circle' : currentTask?.status === 'FAILED' ? 'error' : 'bolt'} style={{ fontSize: 13 }} />
@@ -1825,7 +1884,7 @@ export function AutoCompletePage({
                     }}
                   >
                     <Icon name="dashboard" />
-                    <span>前往任务看板</span>
+                    <span>返回任务总览</span>
                   </button>
                   <button
                     type="button"
@@ -1836,7 +1895,7 @@ export function AutoCompletePage({
                     }}
                   >
                     <Icon name="arrow_back" />
-                    <span>返回作业列表</span>
+                    <span>返回{returnLabel}</span>
                   </button>
                 </div>
               </div>
@@ -2097,10 +2156,10 @@ export function AutoCompletePage({
           className="control-secondary fe-back-btn"
           type="button"
           onClick={onBack}
-          title="返回作业列表"
+          title={`返回${returnLabel}`}
         >
           <Icon name="arrow_back" />
-          <span>返回作业列表</span>
+          <span>返回{returnLabel}</span>
         </button>
         <button
           className="control-secondary fe-back-btn"
@@ -2109,7 +2168,7 @@ export function AutoCompletePage({
           title="前往自动完成任务看板"
         >
           <Icon name="dashboard" />
-          <span>前往任务看板</span>
+          <span>返回任务总览</span>
         </button>
         <span className="admin-pill-badge is-muted">
           <Icon name="lock" style={{ fontSize: 14 }} />
@@ -2278,7 +2337,7 @@ export function AutoCompletePage({
                   <div className="fe-slider-input-box">
                     <input
                       type="number"
-                      step={0.1}
+                      step={GRADUATION}
                       min={0}
                       max={maxAutoScore}
                       value={autoTargetTotal}
@@ -2291,27 +2350,40 @@ export function AutoCompletePage({
                   </div>
                 </div>
 
-                {/* Ratio Preset Buttons */}
+                {/* Score Preset Buttons：分数带随机尾数（0.125 档位对齐），不再是整数 */}
                 <div className="fe-ratio-presets">
-                  <span style={{ fontSize: 12, color: 'var(--control-muted)', fontWeight: 600 }}>比例快捷预设:</span>
-                  {[
-                    { label: '85% 比例 (推荐安全)', ratio: 0.85 },
-                    { label: '90% 比例 (良好)', ratio: 0.90 },
-                    { label: '92% 比例 (优异)', ratio: 0.92 },
-                    { label: '95% 比例 (最高安全上限)', ratio: 0.95 },
-                  ].map((p) => {
-                    const isActive = Math.abs(currentRatio - p.ratio) < 0.015
+                  <span style={{ fontSize: 12, color: 'var(--control-muted)', fontWeight: 600 }}>
+                    快捷预设:
+                  </span>
+                  {scorePresets.map((p) => {
+                    const isActive = Math.abs(autoTargetTotal - p.score) < 0.001
                     return (
                       <button
-                        key={p.ratio}
+                        key={p.key}
                         type="button"
+                        title={`${p.hint}（约 ${(p.ratio * 100).toFixed(0)}% 得分率，本次随机尾数）`}
                         className={`fe-ratio-preset-btn ${isActive ? 'is-active' : ''}`}
-                        onClick={() => handleSelectRatio(p.ratio)}
+                        onClick={() => applyPresetScore(p.score)}
                       >
-                        {p.label} · {(targetPaperTotal * p.ratio).toFixed(1)}分
+                        {p.label} · <strong>{formatScore(p.score)}</strong> 分
+                        <em className="fe-preset-ratio">
+                          {p.ratio >= 0.95 ? '上限' : `≈${(p.ratio * 100).toFixed(0)}%`}
+                        </em>
                       </button>
                     )
                   })}
+                  <button
+                    type="button"
+                    className="fe-reroll-btn is-inline"
+                    onClick={() => {
+                      setRerollNonce((prev) => prev + 1)
+                      onToast?.('已重新随机：快捷预设分尾数与推荐用时都换了一组')
+                    }}
+                    title="重新随机尾数（分数与推荐用时）"
+                  >
+                    <Icon name="casino" />
+                    换个尾数
+                  </button>
                 </div>
 
                 <div className="fe-range-container">
@@ -2686,9 +2758,12 @@ export function AutoCompletePage({
               <div className="fe-voice-card-title">
                 <strong>智能推荐耗时: {formatSeconds(recommendedTimeSeconds)}</strong>
                 <span className="admin-pill-badge is-success">算法推荐</span>
+                <span className="admin-pill-badge is-muted">含随机抖动</span>
               </div>
               <p>
-                按本试卷每道题的参考录音时长（共约 {formatSeconds(totalRefAudioSeconds)}）× 2 + 2 分钟准备与过渡缓冲时间推算。
+                逐题累加推算：听题（参考录音共约 {formatSeconds(totalRefAudioSeconds)}）+ 准备 + 作答 + 单题开销 + 大题切换开销，
+                再叠加 ±12% 随机抖动并保留到秒 —— 所以是 {formatSeconds(recommendedTimeSeconds)} 这种零散值，不会每次都凑成整分钟。
+                实际上报时以后端真实 TTS 时长与作答节奏累加为准（同样不会凑整）。
               </p>
             </div>
           </div>
