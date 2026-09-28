@@ -50,6 +50,7 @@ const skipRiskWarningStorageKey = 'fe-web.skip-risk-warning'
 const legalConsentStorageKey = 'fe-web.legal-consent'
 const legalConsentVersion = '2026-09-25'
 const STORAGE_KEY_ACTIVE_TASK = 'fe_auto_complete_active_task'
+const STORAGE_KEY_AUTO_COMPLETE_RETURN_PAGE = 'fe_auto_complete_return_page'
 const SESSION_STORAGE_KEY = 'lastudio.feweb.session'
 const SESSION_EXPIRY_MARGIN_MS = 30_000
 
@@ -408,11 +409,6 @@ function RiskWarningModal({
   )
 }
 
-const REFRESH_TIMESTAMPS_KEY = 'fe-web.refresh-timestamps'
-const RATE_LIMIT_WINDOW_MS = 20000
-const MAX_REFRESH_PER_WINDOW = 3
-const MIN_REFRESH_INTERVAL_MS = 2500
-
 /**
  * 会话是否已过期。
  * 抽到模块作用域：React Compiler 的 react-hooks/purity 会把 effect 内的
@@ -420,50 +416,6 @@ const MIN_REFRESH_INTERVAL_MS = 2500
  */
 function isSessionExpired(expiresAt: number | undefined | null): boolean {
   return typeof expiresAt === 'number' && expiresAt <= Date.now()
-}
-
-function getRecentRefreshTimestamps(): number[] {
-  try {
-    const raw = sessionStorage.getItem(REFRESH_TIMESTAMPS_KEY)
-    if (!raw) return []
-    const now = Date.now()
-    const list: number[] = JSON.parse(raw)
-    return list.filter((t) => typeof t === 'number' && now - t < RATE_LIMIT_WINDOW_MS)
-  } catch {
-    return []
-  }
-}
-
-function recordRefreshTimestamp(): void {
-  try {
-    const list = getRecentRefreshTimestamps()
-    list.push(Date.now())
-    sessionStorage.setItem(REFRESH_TIMESTAMPS_KEY, JSON.stringify(list))
-  } catch {
-    // ignore
-  }
-}
-
-function clearRefreshTimestamps(): void {
-  try {
-    sessionStorage.removeItem(REFRESH_TIMESTAMPS_KEY)
-  } catch {
-    // ignore
-  }
-}
-
-function shouldTriggerCaptchaDefense(): boolean {
-  const list = getRecentRefreshTimestamps()
-  if (list.length >= MAX_REFRESH_PER_WINDOW) {
-    return true
-  }
-  if (list.length > 0) {
-    const last = list[list.length - 1]
-    if (Date.now() - last < MIN_REFRESH_INTERVAL_MS) {
-      return true
-    }
-  }
-  return false
 }
 
 function CaptchaModal({
@@ -2775,8 +2727,33 @@ function App() {
   const [autoCompleteModalHw, setAutoCompleteModalHw] = useState<HomeworkItem | null>(null)
   const [autoCompletePermitToken, setAutoCompletePermitToken] = useState<string>('')
   const [autoCompleteTargetHw, setAutoCompleteTargetHw] = useState<HomeworkItem | null>(null)
+  const [autoCompleteReturnPage, setAutoCompleteReturnPage] = useState<'/' | '/history' | '/pk'>(() => {
+    try {
+      const stored = window.sessionStorage.getItem(STORAGE_KEY_AUTO_COMPLETE_RETURN_PAGE)
+      return stored === '/history' || stored === '/pk' ? stored : '/'
+    } catch {
+      return '/'
+    }
+  })
+
+  const autoCompleteReturnLabel = autoCompleteReturnPage === '/history'
+    ? '历史作业'
+    : autoCompleteReturnPage === '/pk'
+    ? '词汇 PK'
+    : '当前作业'
+
+  function rememberAutoCompleteReturnPage() {
+    const returnPage = activeTab === 'history' ? '/history' : activeTab === 'pk' ? '/pk' : '/'
+    setAutoCompleteReturnPage(returnPage)
+    try {
+      window.sessionStorage.setItem(STORAGE_KEY_AUTO_COMPLETE_RETURN_PAGE, returnPage)
+    } catch {
+      // Ignore session storage failures (private mode or blocked storage).
+    }
+  }
 
   function handleTriggerAutoComplete(hw: HomeworkItem) {
+    rememberAutoCompleteReturnPage()
     // If this exact homework is already running in background, jump directly to execution dashboard
     if (
       activeTask &&
@@ -2867,7 +2844,7 @@ function App() {
   // 编译器无法保留（react-hooks/preserve-manual-memoization）。
   function handleAutoCompleteBack() {
     setAutoCompletePermitToken('')
-    navigate(activeTab === 'history' ? '/history' : '/')
+    navigate(autoCompleteReturnPage)
   }
 
   const handleAutoCompleteCompleted = useCallback((res: AutoCompleteTaskResponse['result'] | undefined, hwId: string) => {
@@ -2892,33 +2869,16 @@ function App() {
 
   function handleManualReadList() {
     if (isFetchingHomeworksRef.current) return
-    if (shouldTriggerCaptchaDefense()) {
-      pendingRefreshRef.current = (token?: string) => {
-        void doFetchHomeworks(activeTab, token)
-      }
-      setShowCaptchaModal(true)
-      return
-    }
-    recordRefreshTimestamp()
     void doFetchHomeworks(activeTab)
   }
 
   function handleRequestRefresh() {
     if (isFetchingHomeworksRef.current) return
-    if (shouldTriggerCaptchaDefense()) {
-      pendingRefreshRef.current = (token?: string) => {
-        void refreshAccountAndHomeworks(token)
-      }
-      setShowCaptchaModal(true)
-      return
-    }
-    recordRefreshTimestamp()
     void refreshAccountAndHomeworks()
   }
 
   function handleCaptchaSuccess(token: string) {
     setShowCaptchaModal(false)
-    clearRefreshTimestamps()
     showToast('安全验证通过，正在同步作业数据...')
     if (pendingRefreshRef.current) {
       const fn = pendingRefreshRef.current
@@ -3526,6 +3486,7 @@ function App() {
                     permitToken={autoCompletePermitToken}
                     accessToken={session.accessToken}
                     activeTask={effectiveTask}
+                    returnLabel={autoCompleteReturnLabel}
                     onTaskChange={updateActiveTask}
                     onBack={handleAutoCompleteBack}
                     onCompleted={handleAutoCompleteCompleted}
