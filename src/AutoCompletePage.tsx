@@ -13,6 +13,18 @@ import {
 } from './api/autoComplete'
 import { getVoiceAudioUrl, getVoiceClonePreview, getVoices, type VoiceProfile } from './api/voice'
 import { getHomeworkDetail, startParseHomework, type HomeworkItem, type Paper } from './api/homework'
+import {
+  planQuestionAllocations,
+  toFiveScale,
+  type QuestionAllocation,
+} from './utils/scoreAllocation'
+import {
+  SCORE_TRACK_MARKS,
+  SLIDER_RESOLUTION,
+  ratioToTrack,
+  scoreToTrackValue,
+  trackValueToScore,
+} from './utils/scoreSlider'
 
 const DISCLAIMER_PHRASE = '作者不为使用此功能造成的一切后果负责'
 
@@ -66,6 +78,8 @@ type QuestionScoreItem = {
   maxScore: number
   allocatedScore: number
   manualScore: number
+  /** 加权随机分配的附加信息（是否满分 / 是否易失分的大分值题 / 相对扣分比例） */
+  allocation?: QuestionAllocation
 }
 
 export function AutoCompletePage({
@@ -767,52 +781,47 @@ export function AutoCompletePage({
   // Collapsible state for auto mode score breakdown
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false)
 
-  // Compute slot-based round-robin allocation matching backend & reference ise_helper.php
+  // 加权随机分配：与后端 auto_complete/scoring.py 同一套模型。
+  // 这里用固定 seed 做"示意预览"（每次运行后端会重新随机），
+  // 所以旁边提供"换一批"按钮重新抽样，让用户看到分配的波动范围。
+  const [allocationSeed, setAllocationSeed] = useState<number>(20250928)
+
   const allocatedQuestionScores = useMemo<QuestionScoreItem[]>(() => {
-    const graduation = 0.125
-    const totalMax = questions.reduce((sum, q) => sum + q.maxScore, 0)
-    const n = questions.length
-    if (n === 0) return []
+    if (questions.length === 0) return []
+    const plan = planQuestionAllocations(
+      questions.map((q) => q.maxScore),
+      autoTargetTotal,
+      allocationSeed
+    )
+    return questions.map((q, idx) => ({
+      order: q.order,
+      sectionCaption: q.sectionCaption,
+      typeName: q.typeName,
+      questionText: q.questionText,
+      answers: q.answers,
+      options: q.options,
+      maxScore: q.maxScore,
+      allocatedScore: plan[idx]?.allocatedScore ?? 0,
+      manualScore: manualScores[q.order] ?? 0,
+      allocation: plan[idx],
+    }))
+  }, [questions, autoTargetTotal, manualScores, allocationSeed])
 
-    const maxSlots = questions.map((q) => (graduation > 0 ? Math.ceil(Math.max(0, q.maxScore) / graduation) : 0))
-    const totalMaxSlots = maxSlots.reduce((a, b) => a + b, 0)
-    const targetTotal = Math.min(totalMax, Math.max(0, autoTargetTotal))
-    let targetSlots = graduation > 0 ? Math.round(targetTotal / graduation) : 0
-    targetSlots = Math.max(0, Math.min(totalMaxSlots, targetSlots))
-
-    const slots = [...maxSlots]
-    let delta = totalMaxSlots - targetSlots
-    let roundIdx = 0
-    while (delta > 0) {
-      let reduced = false
-      for (let i = 0; i < n; i++) {
-        if (delta <= 0) break
-        const j = (i + roundIdx) % n
-        if (slots[j] > 0) {
-          slots[j]--
-          delta--
-          reduced = true
-        }
-      }
-      if (!reduced) break
-      roundIdx++
+  // 计划满分题数 / 明显偏低的题数，用于面板上给出"本次形态"摘要
+  const allocationSummary = useMemo(() => {
+    const items = allocatedQuestionScores
+    const fullCount = items.filter((item) => item.allocation?.isFull).length
+    const lowCount = items.filter((item) => (item.allocation?.lossRatio ?? 0) >= 0.2).length
+    const plannedTotal = items.reduce((sum, item) => sum + item.allocatedScore, 0)
+    return {
+      fullCount,
+      lowCount,
+      plannedTotal: Number(plannedTotal.toFixed(2)),
+      lowestRatio: items.length
+        ? Math.max(...items.map((item) => item.allocation?.lossRatio ?? 0))
+        : 0,
     }
-
-    return questions.map((q, idx) => {
-      const allocated = Number((slots[idx] * graduation).toFixed(2))
-      return {
-        order: q.order,
-        sectionCaption: q.sectionCaption,
-        typeName: q.typeName,
-        questionText: q.questionText,
-        answers: q.answers,
-        options: q.options,
-        maxScore: q.maxScore,
-        allocatedScore: allocated,
-        manualScore: manualScores[q.order] ?? 0,
-      }
-    })
-  }, [questions, autoTargetTotal, manualScores])
+  }, [allocatedQuestionScores])
 
   // Manual mode validations:
   const manualTotalSum = useMemo(() => {
@@ -2310,16 +2319,46 @@ export function AutoCompletePage({
                     type="range"
                     className="fe-styled-slider"
                     min={0}
-                    max={maxAutoScore}
-                    step={0.1}
-                    value={autoTargetTotal}
-                    onChange={(e) => handleUpdateAutoTargetTotal(parseFloat(e.target.value) || 0)}
+                    max={SLIDER_RESOLUTION}
+                    step={1}
+                    value={scoreToTrackValue(autoTargetTotal, targetPaperTotal)}
+                    onChange={(e) =>
+                      handleUpdateAutoTargetTotal(
+                        trackValueToScore(parseFloat(e.target.value) || 0, targetPaperTotal)
+                      )
+                    }
                   />
-                  <div className="fe-slider-ticks">
-                    <span>0 分 (0%)</span>
-                    <span>推荐安全区: {(targetPaperTotal * 0.85).toFixed(1)} - {maxAutoScore} 分</span>
-                    <span style={{ color: '#dc2626', fontWeight: 600 }}>95% 上限 {maxAutoScore} 分</span>
+                  <div className="fe-slider-ticks is-tracked">
+                    {(
+                      [
+                        { ratio: 0, label: '0 分' },
+                        ...SCORE_TRACK_MARKS.slice(0, -1).map((ratio) => ({
+                          ratio,
+                          label: `${(targetPaperTotal * ratio).toFixed(1)} 分`,
+                        })),
+                        {
+                          ratio: 0.95,
+                          label: `95% 上限 ${maxAutoScore.toFixed(1)} 分`,
+                          highlight: true,
+                        },
+                      ] as { ratio: number; label: string; highlight?: boolean }[]
+                    ).map((mark) => (
+                      <span
+                        key={mark.ratio}
+                        className={mark.highlight ? 'is-cap' : undefined}
+                        style={{
+                          left: `${Math.min(99, ratioToTrack(mark.ratio) * 100).toFixed(2)}%`,
+                        }}
+                      >
+                        {mark.label}
+                      </span>
+                    ))}
                   </div>
+                  <p className="fe-slider-hint">
+                    <Icon name="speed" />
+                    滑块已按分数段非线性分布：<strong>90%~95%（{(targetPaperTotal * 0.9).toFixed(1)}~{maxAutoScore} 分）占约四成滑轨</strong>，
+                    低分段被压缩（想填低分请直接用右侧输入框）。30 分卷上 0~15 分只占约五分之一。
+                  </p>
                 </div>
               </div>
 
@@ -2332,17 +2371,54 @@ export function AutoCompletePage({
                 >
                   <div className="fe-breakdown-title">
                     <Icon name="account_tree" />
-                    <strong>各小题实际分数等比换算方案 ({totalQuestions} 题)</strong>
+                    <strong>各小题加权随机分配方案 ({totalQuestions} 题)</strong>
                     <span className="fe-balance-tag">
                       <Icon name="verified" />
-                      小题求和与设定总分绝对吻合 ({autoTargetTotal.toFixed(2)} 分)
+                      小题求和与设定总分绝对吻合 ({allocationSummary.plannedTotal.toFixed(2)} 分)
                     </span>
                   </div>
-                  <Icon name={isBreakdownOpen ? 'expand_less' : 'expand_more'} />
+                  <span className="fe-breakdown-head-actions">
+                    <button
+                      type="button"
+                      className="fe-reroll-btn"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setAllocationSeed((prev) => (prev * 1664525 + 1013904223) % 2147483647)
+                        onToast?.('已重新抽样一批分配方案（实际运行时后端会再随机一次）')
+                      }}
+                    >
+                      <Icon name="casino" />
+                      换一批
+                    </button>
+                    <Icon name={isBreakdownOpen ? 'expand_less' : 'expand_more'} />
+                  </span>
                 </button>
 
                 {isBreakdownOpen && (
                   <div className="fe-breakdown-list">
+                    <div className="fe-breakdown-note">
+                      <Icon name="info" />
+                      <span>
+                        分配规则：<strong>加权随机</strong>——少数题明显偏低（读错/漏读），其余题接近满分；
+                        大分值长句子几乎不给满分，小分值题经常满分；目标分越高，扣分越轻、满分题越多。
+                        每次运行的后端分配都会重新随机，本表是<b>同等形态的示意抽样</b>。
+                      </span>
+                    </div>
+                    <div className="fe-breakdown-summary">
+                      <span>本次示意：满分 <strong>{allocationSummary.fullCount}</strong> 题</span>
+                      <i />
+                      <span>明显偏低（扣 ≥20%）<strong>{allocationSummary.lowCount}</strong> 题</span>
+                      <i />
+                      <span>单题最大扣分 <strong>{(allocationSummary.lowestRatio * 100).toFixed(0)}%</strong></span>
+                      <i />
+                      <span>合计 <strong>{allocationSummary.plannedTotal.toFixed(2)}</strong> / {targetPaperTotal.toFixed(2)} 分</span>
+                      {Math.abs(allocationSummary.plannedTotal - autoTargetTotal) >= 0.001 ? (
+                        <span className="fe-breakdown-tip">
+                          （设定 {autoTargetTotal.toFixed(2)} → 按 0.125 分档位结算{' '}
+                          {allocationSummary.plannedTotal.toFixed(2)}）
+                        </span>
+                      ) : null}
+                    </div>
                     <div className="fe-breakdown-table-head">
                       <span>题号</span>
                       <span>题型</span>
@@ -2353,13 +2429,23 @@ export function AutoCompletePage({
                     {allocatedQuestionScores.map((item) => (
                       <div key={item.order} className="fe-breakdown-table-row">
                         <span className="fe-td-order">Q{item.order}</span>
-                        <span className="fe-td-type">{item.typeName}</span>
+                        <span className="fe-td-type">
+                          {item.typeName}
+                          {item.allocation?.isBigQuestion ? (
+                            <em className="fe-td-badge is-big" title="大分值题：长句子朗读几乎不会满分">易失分</em>
+                          ) : null}
+                        </span>
                         <span className="fe-td-max">{item.maxScore.toFixed(2)} 分</span>
                         <span className="fe-td-score">
                           <strong>{item.allocatedScore.toFixed(2)}</strong> 分 ({(item.maxScore > 0 ? (item.allocatedScore / item.maxScore) * 100 : 95).toFixed(0)}%)
+                          {item.allocation?.isFull ? (
+                            <em className="fe-td-badge is-full">满分</em>
+                          ) : (item.allocation?.lossRatio ?? 0) >= 0.2 ? (
+                            <em className="fe-td-badge is-low">偏低</em>
+                          ) : null}
                         </span>
                         <span className="fe-td-scale" style={{ fontSize: 11.5, color: 'var(--control-muted)', fontFamily: 'DM Mono, monospace' }}>
-                          {item.maxScore > 0 ? ((item.allocatedScore / item.maxScore) * 5.0).toFixed(2) : '5.00'} / 5.00
+                          {toFiveScale(item.allocatedScore, item.maxScore)} / 5.00
                         </span>
                       </div>
                     ))}
