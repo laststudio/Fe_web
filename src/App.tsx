@@ -413,6 +413,15 @@ const RATE_LIMIT_WINDOW_MS = 20000
 const MAX_REFRESH_PER_WINDOW = 3
 const MIN_REFRESH_INTERVAL_MS = 2500
 
+/**
+ * 会话是否已过期。
+ * 抽到模块作用域：React Compiler 的 react-hooks/purity 会把 effect 内的
+ * `Date.now()` 误判为渲染期调用，放到模块函数里即可绕开。
+ */
+function isSessionExpired(expiresAt: number | undefined | null): boolean {
+  return typeof expiresAt === 'number' && expiresAt <= Date.now()
+}
+
 function getRecentRefreshTimestamps(): number[] {
   try {
     const raw = sessionStorage.getItem(REFRESH_TIMESTAMPS_KEY)
@@ -1833,7 +1842,11 @@ function App() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const authorizationStarted = useRef(false)
   const sessionRef = useRef(session)
-  sessionRef.current = session
+  // 保持 sessionRef 为最新值供回调读取：渲染期直接写 ref 会触发 react-hooks/refs，
+  // 而两处读取（refreshSession / 401 处理器）都在回调里，effect 同步足够。
+  useEffect(() => {
+    sessionRef.current = session
+  }, [session])
   const refreshingPromise = useRef<Promise<AuthSession | null> | null>(null)
   const sessionAccessToken = session?.accessToken
   const sessionExpiresAt = session?.expiresAt
@@ -2850,10 +2863,12 @@ function App() {
     })
   }, [])
 
-  const handleAutoCompleteBack = useCallback(() => {
+  // 交给 React Compiler 自行记忆化：手写 useCallback 依赖 activeTab/navigate，
+  // 编译器无法保留（react-hooks/preserve-manual-memoization）。
+  function handleAutoCompleteBack() {
     setAutoCompletePermitToken('')
     navigate(activeTab === 'history' ? '/history' : '/')
-  }, [activeTab, navigate])
+  }
 
   const handleAutoCompleteCompleted = useCallback((res: AutoCompleteTaskResponse['result'] | undefined, hwId: string) => {
     const s = Number(res?.final_score ?? res?.score ?? 0)
@@ -2947,7 +2962,7 @@ function App() {
 
   // Global background polling for active task
   useEffect(() => {
-    if (!session?.accessToken || session.expiresAt <= Date.now() || !activeTask?.task_id) return
+    if (!session?.accessToken || isSessionExpired(session.expiresAt) || !activeTask?.task_id) return
     if (activeTask.status === 'COMPLETED' || activeTask.status === 'FAILED') return
 
     const taskId = activeTask.task_id
