@@ -2,9 +2,33 @@ import { apiRequest } from './auth'
 
 export type PlatformAccountInfo = {
   bound: boolean
+  /** 是否存在可用的 ETS100 会话（账号中心绑定或「讯飞登录」任一来源）。 */
+  session_ready?: boolean
+  /** 会话来源：binding（账号中心绑定）/ changyan（讯飞登录）。 */
+  source?: string
   account_display: string
   profile: Record<string, unknown> | null
   last_used_at: string | null
+}
+
+/** 畅言网页登录凭据，两种通路二选一。 */
+export type ChangyanCredentialPayload = {
+  login?: string
+  user_id?: string
+  suc_user_token?: string
+  service_ticket?: string
+  service?: string
+  preferred_account_id?: string
+}
+
+export type ChangyanLoginResponse = {
+  account_display: string
+  token: string
+  device_code: string
+  parent_account_id: string
+  selected_account: Record<string, unknown>
+  valid_accounts: Record<string, unknown>[]
+  source: string
 }
 
 export type HomeworkContentItem = {
@@ -61,6 +85,8 @@ export type Section = {
   typeName: string
   questions: Question[]
   originalContent?: unknown
+  /** 后端 ffprobe 实测的该大题题干音频时长（秒），用于推荐用时 */
+  audioDurationSeconds?: number
 }
 
 export type Paper = {
@@ -145,6 +171,22 @@ export function formatPaperAsText(paper: Paper): string {
 export function getPlatformAccount(accessToken: string, refresh?: boolean): Promise<PlatformAccountInfo> {
   const query = refresh ? '?refresh=1' : ''
   return apiRequest<PlatformAccountInfo>(`/homework/account${query}`, { accessToken })
+}
+
+/**
+ * 用畅言网页登录凭据建立 ETS100 云端会话（等价 Android 端「讯飞登录」）。
+ * 成功后 /homework/* 立即可用，无需账号中心绑定。
+ */
+export function changyanLogin(
+  accessToken: string,
+  credential: ChangyanCredentialPayload
+): Promise<ChangyanLoginResponse> {
+  return apiRequest<ChangyanLoginResponse>('/homework/changyan-login', {
+    accessToken,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(credential),
+  })
 }
 
 export function getHomeworkList(

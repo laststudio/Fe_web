@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSPrope
 import './App.css'
 import { ApiError, getCurrentUser, setUnauthorizedHandler, type User } from './api/auth'
 import {
+  changyanLogin,
   cleanAnswerText,
   formatPaperAsText,
   getHomeworkDetail,
@@ -12,6 +13,7 @@ import {
   getTaskStatus,
   startParseHomework,
   trackFeatureUsage,
+  type ChangyanCredentialPayload,
   type HomeworkItem,
   type Paper,
   type PlatformAccountInfo,
@@ -22,6 +24,7 @@ import {
 } from './api/homework'
 import AuthGate from './auth/AuthGate'
 import Callback from './auth/Callback'
+import ChangyanLoginModal from './auth/ChangyanLoginModal'
 import { oauthConfig } from './auth/config'
 import { refreshOAuthToken, startAuthorization } from './auth/oauth'
 import type { AuthSession } from './auth/types'
@@ -1158,6 +1161,7 @@ function HomeworkListView({
   onOpenHomework,
   onTriggerParse,
   onAutoComplete,
+  onChangyanLogin,
   activeTask,
 }: {
   activeTab: 'current' | 'history' | 'pk'
@@ -1179,9 +1183,12 @@ function HomeworkListView({
   onOpenHomework: (hw: HomeworkItem) => void
   onTriggerParse: (hw: HomeworkItem) => void
   onAutoComplete?: (hw: HomeworkItem) => void
+  onChangyanLogin?: () => void
   activeTask?: AutoCompleteTaskResponse | null
 }) {
   const [query, setQuery] = useState('')
+  // 账号中心绑定与「讯飞登录」都算可用；后者只写入云端会话缓存，没有绑定记录。
+  const etsReady = Boolean(accountInfo?.bound || accountInfo?.session_ready)
 
   const pkHomeworks = useMemo<HomeworkItem[]>(() => {
     const combined = [...homeworks, ...historyHomeworks]
@@ -1254,7 +1261,7 @@ function HomeworkListView({
 
         <div className="fe-list-toolbar__right">
           <span className="admin-pill-badge is-muted">
-            {accountInfo?.bound
+            {etsReady
               ? hasLoaded
                 ? `${categoryMeta.title} · 共 ${filtered.length} 份`
                 : '待手动读取'
@@ -1428,22 +1435,27 @@ function HomeworkListView({
             </div>
           )
         })()
-      ) : !accountInfo?.bound ? (
+      ) : !(accountInfo?.bound || accountInfo?.session_ready) ? (
         <div className="fe-empty-state">
           <div className="fe-empty-state__icon">
             <Icon name="no_accounts" />
           </div>
           <h2>未绑定 ETS100</h2>
-          <p>请先前往官网账号中心绑定您的 ETS100 手机号与密码。</p>
-          <a
-            href="https://lastudio.cc/account"
-            target="_blank"
-            rel="noreferrer"
-            className="control-primary"
-            style={{ textDecoration: 'none' }}
-          >
-            前往账号中心绑定
-          </a>
+          <p>请前往官网账号中心绑定手机号与密码，或直接使用讯飞登录。</p>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <a
+              href="https://lastudio.cc/account"
+              target="_blank"
+              rel="noreferrer"
+              className="control-primary"
+              style={{ textDecoration: 'none' }}
+            >
+              前往账号中心绑定
+            </a>
+            <button type="button" className="control-ghost" onClick={onChangyanLogin}>
+              讯飞登录
+            </button>
+          </div>
         </div>
       ) : !hasLoaded ? (
         <div className="fe-list-prompt-card">
@@ -1583,6 +1595,9 @@ function SettingsPage({
   getFeatureStatus?: (featureKey: string, defaultName?: string) => FeatureCheck
 }) {
   const [skipRisk, setSkipRisk] = useState(readStoredSkipRiskWarning)
+  // 账号中心绑定（binding）与「讯飞登录」（changyan）都视为已连接 ETS100。
+  const etsReady = Boolean(accountInfo?.bound || accountInfo?.session_ready)
+  const etsSource = accountInfo?.bound ? 'binding' : accountInfo?.session_ready ? 'changyan' : ''
 
   function toggleSkipRisk() {
     const next = !skipRisk
@@ -1677,12 +1692,12 @@ function SettingsPage({
             <strong>绑定状态</strong>
             <span>是否已在 LastStudio 账号中心绑定 ETS100 账号</span>
           </div>
-          <span className={`admin-pill-badge ${accountInfo?.bound ? 'is-success' : 'is-danger'}`}>
-            {accountInfo?.bound ? '已绑定' : '未绑定'}
+          <span className={`admin-pill-badge ${etsReady ? 'is-success' : 'is-danger'}`}>
+            {etsSource === 'binding' ? '已绑定' : etsSource === 'changyan' ? '讯飞登录' : '未绑定'}
           </span>
         </div>
 
-        {accountInfo?.bound && (
+        {accountInfo && etsReady && (
           <>
             <div className="admin-setting-switch-row">
               <div className="admin-setting-switch-info">
@@ -1887,6 +1902,12 @@ function App() {
 
   // ETS100 & Homework State
   const [accountInfo, setAccountInfo] = useState<PlatformAccountInfo | null>(null)
+  // 畅言网页登录（讯飞登录）
+  const [changyanOpen, setChangyanOpen] = useState(false)
+  const [changyanBusy, setChangyanBusy] = useState(false)
+  const [changyanError, setChangyanError] = useState<string | null>(null)
+  // 账号中心绑定或「讯飞登录」任一来源，ETS100 都算可用。
+  const etsReady = Boolean(accountInfo?.bound || accountInfo?.session_ready)
   const [homeworks, setHomeworks] = useState<HomeworkItem[]>([])
   const [historyHomeworks, setHistoryHomeworks] = useState<HomeworkItem[]>([])
   const [isLoadingHomeworks, setIsLoadingHomeworks] = useState(false)
@@ -2524,6 +2545,31 @@ function App() {
     return keywords.some((kw) => msg.includes(kw))
   }
 
+  /** 畅言网页登录成功后：后端兑换 ETS100 会话 → 刷新账号状态与作业列表。 */
+  async function handleChangyanCredential(credential: ChangyanCredentialPayload) {
+    const accessToken = session?.accessToken
+    if (!accessToken) {
+      setChangyanError('登录状态已失效，请重新登录统一账号')
+      return
+    }
+    setChangyanBusy(true)
+    setChangyanError(null)
+    try {
+      const result = await changyanLogin(accessToken, credential)
+      const account = await getPlatformAccount(accessToken)
+      setAccountInfo(account)
+      setChangyanOpen(false)
+      console.info('讯飞登录成功，ETS100 账号：', result.account_display)
+      // 注意：不能带 forceRefresh —— 那会清掉刚写入的畅言会话，
+      // 而未绑定账号中心的用户无法用密码重建会话。
+      await doFetchHomeworks(activeTab)
+    } catch (err) {
+      setChangyanError(err instanceof Error ? err.message : '讯飞登录失败，请重试')
+    } finally {
+      setChangyanBusy(false)
+    }
+  }
+
   async function doFetchHomeworks(
     tab: 'current' | 'history' | 'pk' = activeTab,
     capToken?: string,
@@ -3151,8 +3197,8 @@ function App() {
                 <div className="control-account-meta">
                   <strong>{currentUser?.name || '我的账号'}</strong>
                   <small>
-                    {accountInfo?.bound
-                      ? (accountInfo.account_display ? `ETS: ${accountInfo.account_display}` : 'ETS 已连接')
+                    {etsReady
+                      ? (accountInfo?.account_display ? `ETS: ${accountInfo.account_display}` : 'ETS 已连接')
                       : 'ETS 未绑定'}
                   </small>
                 </div>
@@ -3185,11 +3231,11 @@ function App() {
                           )}
                         </div>
                         <div className="control-user-dropdown-uid">UID #{currentUser?.id || '-'}</div>
-                        <div className={`control-user-dropdown-ets ${accountInfo?.bound ? 'is-bound' : 'is-unbound'}`}>
+                        <div className={`control-user-dropdown-ets ${etsReady ? 'is-bound' : 'is-unbound'}`}>
                           <span className="control-user-ets-dot" />
                           <span>
-                            {accountInfo?.bound
-                              ? (accountInfo.account_display ? `ETS: ${accountInfo.account_display}` : 'ETS 已连接')
+                            {etsReady
+                              ? (accountInfo?.account_display ? `ETS: ${accountInfo.account_display}` : 'ETS 已连接')
                               : 'ETS 未绑定'}
                           </span>
                         </div>
@@ -3380,9 +3426,9 @@ function App() {
           </nav>
 
           <footer>
-            <i style={{ background: accountInfo?.bound ? '#2f7a55' : '#94a3b8' }} />
+            <i style={{ background: etsReady ? '#2f7a55' : '#94a3b8' }} />
             <span className="admin-footer-label">
-              {accountInfo?.bound ? 'ETS100 已连接' : 'ETS100 未绑定'}
+              {etsReady ? 'ETS100 已连接' : 'ETS100 未绑定'}
             </span>
           </footer>
         </aside>
@@ -3598,11 +3644,28 @@ function App() {
               onOpenHomework={handleOpenHomework}
               onTriggerParse={handleTriggerParse}
               onAutoComplete={handleTriggerAutoComplete}
+              onChangyanLogin={() => {
+                setChangyanError(null)
+                setChangyanOpen(true)
+              }}
               activeTask={activeTask}
             />
           )}
         </section>
       </div>
+
+      {changyanOpen && (
+        <ChangyanLoginModal
+          busy={changyanBusy}
+          error={changyanError}
+          onClose={() => {
+            if (changyanBusy) return
+            setChangyanOpen(false)
+            setChangyanError(null)
+          }}
+          onCredential={handleChangyanCredential}
+        />
+      )}
     </main>
   )
 }

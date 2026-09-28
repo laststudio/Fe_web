@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>畅言登录回调</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #ffffff;
+      color: #475569;
+      font: 13px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+  </style>
+</head>
+<body>
+  <p>登录完成，正在返回…</p>
+  <script>
+    // 畅言登录成功后会把浏览器 302 到本页，并在查询串带上 CAS 票据（st / service）。
+    // 本页与主应用同源，父页面可直接读取 location；这里再补一次 postMessage 便于排查。
+    (function () {
+      var payload = { type: 'changyan-callback', search: window.location.search, href: window.location.href };
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage(payload, window.location.origin);
+        }
+      } catch (err) {
+        // 父页面跨域时忽略
+      }
+    })();
+  </script>
+</body>
+</html>
