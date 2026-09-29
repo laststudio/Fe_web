@@ -215,7 +215,7 @@ export function AutoCompletePage({
       .then((res) => {
         if (active && res) {
           setFetchedPaper(res)
-          // 推荐用时与快捷预设分尾数统一在"试卷指纹变化"的 effect 里重新随机
+          // 推荐用时的抖动统一在上面由 realismSeed 推导（纯计算，无副作用）
         }
       })
       .catch(async (err) => {
@@ -437,9 +437,9 @@ export function AutoCompletePage({
   }, [currentHw, activePaper])
 
   // ── 真实性随机量 ──────────────────────────────────────────────────
-  // 推荐用时抖动 + 快捷预设分尾数。不用 effect 同步 state（会触发级联渲染），
+  // 推荐用时的随机抖动。不用 effect 同步 state（会触发级联渲染），
   // 而是把"试卷指纹 + 会话盐 + 手动换尾数次数"揉成种子：
-  // 同一份卷数值稳定，切卷或点"换个尾数"就换一组零散尾数。
+  // 同一份卷数值稳定，切卷或点"换个尾数"就换一组零散用时。
   const [sessionSalt] = useState(() => Math.floor(Math.random() * 1e9))
   const [rerollNonce, setRerollNonce] = useState(0)
 
@@ -575,12 +575,6 @@ export function AutoCompletePage({
   }, [effectiveMinutes, effectiveSeconds])
 
   const selectedUseTimeSeconds = timeOption === 'recommended' ? recommendedTimeSeconds : customUseTimeSeconds
-
-  // 0.125 档位的分数最多三位小数，去掉无意义的尾随 0：26.625 / 27.5 / 28
-  const formatScore = (value: number) => {
-    const text = Number(value).toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
-    return text === '-0' ? '0' : text
-  }
 
   const formatSeconds = (sec: number) => {
     const mins = Math.floor(sec / 60)
@@ -832,39 +826,6 @@ export function AutoCompletePage({
       allocation: plan[idx],
     }))
   }, [questions, autoTargetTotal, manualScores, allocationSeed])
-
-  // 快捷预设：不再用 85%→25.5 / 92%→27.6 这种一眼看出是手填的整数，
-  // 而是在目标比例附近随机取一个"落在 0.125 分档位上的零散值"
-  // （例如 26.625 / 27.125 / 28.375），既真实又能被后端精确结算。
-  const scorePresets = useMemo(() => {
-    const defs = [
-      { key: 'safe', label: '稳妥', ratio: 0.85, hint: '留足余量，最不容易被盯上' },
-      { key: 'good', label: '良好', ratio: 0.9, hint: '常规偏上水平' },
-      { key: 'strong', label: '优异', ratio: 0.92, hint: '读得好的常态区间' },
-      { key: 'max', label: '最高上限', ratio: 0.95, hint: '95% 硬上限，不可再高' },
-    ]
-    const rng = createRng(realismSeed ^ 0x5bf03635)
-    return defs.map((def) => {
-      if (def.ratio >= 0.95 || targetPaperTotal <= 0) {
-        return { ...def, score: Number(maxAutoScore.toFixed(3)) }
-      }
-      const base = targetPaperTotal * def.ratio
-      // 抖动幅度取卷面总分的 1.3%（30 分卷 ≈ ±0.39 分），再对齐到 0.125 档位
-      const spread = targetPaperTotal * 0.013
-      const jittered = base + (rng() * 2 - 1) * spread
-      const snapped = Math.round(jittered / GRADUATION) * GRADUATION
-      const score = Math.min(maxAutoScore, Math.max(GRADUATION, snapped))
-      return { ...def, score: Number(score.toFixed(3)) }
-    })
-  }, [targetPaperTotal, maxAutoScore, realismSeed])
-
-  const applyPresetScore = (score: number) => {
-    setCustomAutoTargetTotal(Number(score.toFixed(3)))
-    if (targetPaperTotal > 0) {
-      setSelectedRatio(Number((score / targetPaperTotal).toFixed(4)))
-    }
-    onToast?.(`目标总分已设为 ${formatScore(score)} 分（0.125 档位精确值）`)
-  }
 
   // 计划满分题数 / 明显偏低的题数，用于面板上给出"本次形态"摘要
   const allocationSummary = useMemo(() => {
@@ -2350,42 +2311,6 @@ export function AutoCompletePage({
                   </div>
                 </div>
 
-                {/* Score Preset Buttons：分数带随机尾数（0.125 档位对齐），不再是整数 */}
-                <div className="fe-ratio-presets">
-                  <span style={{ fontSize: 12, color: 'var(--control-muted)', fontWeight: 600 }}>
-                    快捷预设:
-                  </span>
-                  {scorePresets.map((p) => {
-                    const isActive = Math.abs(autoTargetTotal - p.score) < 0.001
-                    return (
-                      <button
-                        key={p.key}
-                        type="button"
-                        title={`${p.hint}（约 ${(p.ratio * 100).toFixed(0)}% 得分率，本次随机尾数）`}
-                        className={`fe-ratio-preset-btn ${isActive ? 'is-active' : ''}`}
-                        onClick={() => applyPresetScore(p.score)}
-                      >
-                        {p.label} · <strong>{formatScore(p.score)}</strong> 分
-                        <em className="fe-preset-ratio">
-                          {p.ratio >= 0.95 ? '上限' : `≈${(p.ratio * 100).toFixed(0)}%`}
-                        </em>
-                      </button>
-                    )
-                  })}
-                  <button
-                    type="button"
-                    className="fe-reroll-btn is-inline"
-                    onClick={() => {
-                      setRerollNonce((prev) => prev + 1)
-                      onToast?.('已重新随机：快捷预设分尾数与推荐用时都换了一组')
-                    }}
-                    title="重新随机尾数（分数与推荐用时）"
-                  >
-                    <Icon name="casino" />
-                    换个尾数
-                  </button>
-                </div>
-
                 <div className="fe-range-container">
                   <input
                     type="range"
@@ -2759,6 +2684,19 @@ export function AutoCompletePage({
                 <strong>智能推荐耗时: {formatSeconds(recommendedTimeSeconds)}</strong>
                 <span className="admin-pill-badge is-success">算法推荐</span>
                 <span className="admin-pill-badge is-muted">含随机抖动</span>
+                <button
+                  type="button"
+                  className="fe-reroll-btn is-inline"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setRerollNonce((prev) => prev + 1)
+                    onToast?.('已重新随机推荐用时')
+                  }}
+                  title="换一组随机尾数（只是换一个估算值，不影响实际上报口径）"
+                >
+                  <Icon name="casino" />
+                  换个尾数
+                </button>
               </div>
               <p>
                 逐题累加推算：听题（参考录音共约 {formatSeconds(totalRefAudioSeconds)}）+ 准备 + 作答 + 单题开销 + 大题切换开销，
