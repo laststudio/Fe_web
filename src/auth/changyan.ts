@@ -74,18 +74,23 @@ export function resolveNextpageUrl(mode: ChangyanMode): string {
 }
 
 /**
- * 默认通路。
+ * 默认通路：固定 `ets100`（借助 loginCheck.html 的官方 postMessage 拿凭据）。
  *
- * `ets100`：已实测可用 —— 借助 loginCheck.html 的官方 postMessage 拿凭据。
- * `callback`：更安全（后端可用 CAS 票据自验身份），但需要畅言把 `st` 回跳到本站域名，
- *             尚未验证，因此暂不做默认。
+ * ⚠ 为什么不用 `callback`（更安全，后端可自验 CAS 票据）：
+ * 畅言只给「已登记为 SSO service」的地址发放票据。实测其第 3 跳结果：
+ *   https://www.ets100.com/loginCheck.html  -> 200（登录页）
+ *   https://lastudio.cc/changyan-callback.html -> 500
+ *   https://fe-web.lastudio.cc/...           -> 500
+ *   http://127.0.0.1:5173/...                -> 200
+ * 即 **HTTPS + 未登记域名直接 500**，浏览器里带着 SSO cookie 就表现为
+ * ERR_TOO_MANY_REDIRECTS。
  *
- * 现网验证时不必改代码：带 `?changyan_mode=callback` 打开站点即可切换。
+ * 因此 callback 通路需先由畅言把我们的域名登记为 service 才可用；代码保留
+ * （后端 /user/platform-account/changyan 的 service_ticket 分支已测试覆盖），
+ * 登记后把这里改回按 `?changyan_mode=callback` 切换即可。
  */
-export function resolveDefaultChangyanMode(search?: string): ChangyanMode {
-  const query = search ?? (typeof window === 'undefined' ? '' : window.location.search)
-  const value = new URLSearchParams(query).get('changyan_mode')
-  return value === 'callback' ? 'callback' : 'ets100'
+export function resolveDefaultChangyanMode(): ChangyanMode {
+  return 'ets100'
 }
 
 /** 判定 loginCheck.html 通过 postMessage 回传的载荷。 */
