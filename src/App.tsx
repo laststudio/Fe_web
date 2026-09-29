@@ -2664,7 +2664,8 @@ function App() {
     }
   }
 
-  async function refreshAccountAndHomeworks(capToken?: string, forceRefresh: boolean = true) {
+  // 普通手动刷新使用缓存友好的读取；只有令牌失效重试等明确场景才传 forceRefresh=true。
+  async function refreshAccountAndHomeworks(capToken?: string, forceRefresh: boolean = false) {
     if (!session) return
     setHomeworkError(null)
     try {
@@ -2934,7 +2935,8 @@ function App() {
           showToast('🎉 后台自动完成任务已圆满完成！')
           setHasLoadedCurrent(false)
           setHasLoadedHistory(false)
-          void doFetchHomeworks(activeTab, undefined, true)
+          // 作业完成后的列表同步不应被标记为高风险强制刷新。
+          void doFetchHomeworks(activeTab)
         } else if (updated.status === 'FAILED') {
           showToast(`❌ 自动完成任务执行失败: ${updated.error || '未知错误'}`)
         }
