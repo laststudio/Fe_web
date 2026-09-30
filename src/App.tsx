@@ -41,7 +41,7 @@ import {
   getLatestAutoCompleteTask,
   type AutoCompleteTaskResponse,
 } from './api/autoComplete'
-import { Button, Dialog } from './ui'
+import { Badge, Button, Dialog } from './ui'
 
 type Page = '/' | '/history' | '/pk' | '/settings' | '/auto-complete' | string
 
@@ -642,17 +642,22 @@ function PaperReaderView({
     <div className="fe-reader-view">
       <div className="fe-reader-header-card">
         <div className="fe-reader-top-nav">
-          <button className="control-secondary fe-back-btn" type="button" onClick={onBack}>
-            <Icon name="arrow_back" />
-            <span>返回作业列表</span>
-          </button>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="fe-back-btn"
+            onClick={onBack}
+            icon={<Icon name="arrow_back" />}
+          >
+            返回作业列表
+          </Button>
 
           <div className="fe-reader-actions">
             {paper && (
               <>
-                <button
-                  className="control-secondary"
-                  type="button"
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={onCopyAnswer}
                   title={
                     copyExportStatus === 'membership_required'
@@ -661,13 +666,13 @@ function PaperReaderView({
                       ? (copyExportDenyReason || '答案导出已停用')
                       : '复制整套答案文本到剪贴板'
                   }
+                  icon={<Icon name={copyExportStatus === 'membership_required' ? 'workspace_premium' : 'content_copy'} />}
                 >
-                  <Icon name={copyExportStatus === 'membership_required' ? 'workspace_premium' : 'content_copy'} />
-                  <span>{copyExportStatus === 'membership_required' ? '会员复制' : '复制答案'}</span>
-                </button>
-                <button
-                  className="control-secondary"
-                  type="button"
+                  {copyExportStatus === 'membership_required' ? '会员复制' : '复制答案'}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={onExportAnswer}
                   title={
                     copyExportStatus === 'membership_required'
@@ -676,10 +681,10 @@ function PaperReaderView({
                       ? (copyExportDenyReason || '答案导出已停用')
                       : '导出为本地 TXT 文本'
                   }
+                  icon={<Icon name={copyExportStatus === 'membership_required' ? 'workspace_premium' : 'download'} />}
                 >
-                  <Icon name={copyExportStatus === 'membership_required' ? 'workspace_premium' : 'download'} />
-                  <span>{copyExportStatus === 'membership_required' ? '会员导出' : '导出 TXT'}</span>
-                </button>
+                  {copyExportStatus === 'membership_required' ? '会员导出' : '导出 TXT'}
+                </Button>
               </>
             )}
             {onAutoComplete && (() => {
@@ -691,43 +696,37 @@ function PaperReaderView({
 
               if (isThisTaskRunning) {
                 return (
-                  <button
-                    className="control-primary fe-btn-auto-complete is-running"
-                    type="button"
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    loading
+                    loadingLabel={`执行中 (${activeTask.progress || 0}%)`}
                     style={{
                       background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                       borderColor: '#059669',
-                      color: '#ffffff',
-                      boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)',
                     }}
                     onClick={onAutoComplete}
                     title={`该作业正在后台自动答题中（进度 ${activeTask.progress || 0}%），点击查看实时执行看板`}
-                  >
-                    <Icon name="sync" className="fe-spin" />
-                    <span>执行中 ({activeTask.progress || 0}%)</span>
-                  </button>
+                  />
                 )
               }
 
               return (
-                <button
-                  className={`control-primary fe-btn-auto-complete ${!compat.supported ? 'control-disabled' : ''}`}
-                  type="button"
-                  style={{
-                    opacity: compat.supported ? 1 : 0.45,
-                    cursor: compat.supported ? 'pointer' : 'not-allowed',
-                  }}
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={!compat.supported}
                   onClick={onAutoComplete}
                   title={compat.supported ? '自动完成此试卷' : (compat.reason || '该试卷包含暂不支持的题型')}
+                  icon={<Icon name={compat.supported ? 'bolt' : 'block'} />}
                 >
-                  <Icon name={compat.supported ? 'bolt' : 'block'} />
-                  <span>{compat.supported ? '⚡ 自动完成此试卷' : '题型暂不支持'}</span>
-                </button>
+                  {compat.supported ? '⚡ 自动完成此试卷' : '题型暂不支持'}
+                </Button>
               )
             })()}
-            <button
-              className="control-secondary"
-              type="button"
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={onReParse}
               title={
                 answerParserStatus === 'membership_required'
@@ -736,18 +735,18 @@ function PaperReaderView({
                   ? (answerParserDenyReason || '答案解析已停用')
                   : '重新从云端读取或解析试卷'
               }
+              icon={<Icon name="refresh" />}
             >
-              <Icon name="refresh" />
-              <span>重新读取</span>
-            </button>
+              重新读取
+            </Button>
           </div>
         </div>
 
         <div className="fe-reader-title-area">
           <h2>{paper?.title || paper?.paperName || homework.name}</h2>
           <div className="fe-reader-meta-row">
-            <span className="fe-subject-tag">{homework.subject_name || '英语'}</span>
-            {paper && <span className="admin-pill-badge is-muted">共 {paper.totalQuestions} 题</span>}
+            <Badge tone="neutral">{homework.subject_name || '英语'}</Badge>
+            {paper && <Badge tone="accent">共 {paper.totalQuestions} 题</Badge>}
             <span className="fe-homework-meta">
               截止时间：{formatTime(homework.end_time || homework.create_time)}
             </span>
@@ -913,31 +912,21 @@ function HomeworkCard({
         <div className="fe-homework-info">
           <div className="fe-homework-title-row">
             <span className="fe-homework-name">{item.name}</span>
-            <span className="fe-subject-tag">{item.subject_name || '英语'}</span>
+            <Badge tone="neutral">{item.subject_name || '英语'}</Badge>
             {(item.pk === 1 || item.set_type === 6) && (
-              <span
-                className="fe-subject-tag fe-subject-tag--pk"
-                style={{
-                  background: 'var(--amber-light, #fef3c7)',
-                  color: 'var(--amber-dark, #b45309)',
-                  borderColor: 'var(--amber-border, #fde68a)',
-                  fontWeight: 600,
-                }}
-              >
-                词汇PK
-              </span>
+              <Badge tone="warning">词汇PK</Badge>
             )}
           </div>
           <div className="fe-homework-meta">
             <span>截止: {formatTime(item.end_time || item.create_time)}</span>
             {isParsing ? (
-              <span style={{ color: 'var(--control-blue)', fontWeight: 600 }}>正在解析试卷与答案...</span>
+              <Badge tone="accent">正在解析试卷与答案...</Badge>
             ) : item.parsed ? (
-              <span style={{ color: 'var(--control-green)', fontWeight: 600 }}>已就绪 · 点击查看答案</span>
+              <Badge tone="success">已就绪 · 点击查看答案</Badge>
             ) : parseError ? (
-              <span style={{ color: '#dc2626', fontWeight: 600 }}>解析失败: {parseError}</span>
+              <Badge tone="danger">解析失败: {parseError}</Badge>
             ) : (
-              <span>未解析</span>
+              <span style={{ color: 'var(--la-muted, #94a3b8)' }}>未解析</span>
             )}
           </div>
         </div>
@@ -954,88 +943,74 @@ function HomeworkCard({
 
           if (isThisTaskRunning) {
             return (
-              <button
-                className="control-primary fe-btn-auto-complete is-running"
-                type="button"
+              <Button
+                variant="primary"
+                size="sm"
+                loading
+                loadingLabel={`执行中 (${activeTask.progress || 0}%)`}
                 style={{
-                  padding: '7px 14px',
-                  fontSize: 12.5,
                   background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                   borderColor: '#059669',
-                  color: '#ffffff',
-                  boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)',
                 }}
                 onClick={(e) => {
                   e.stopPropagation()
                   onAutoComplete(item)
                 }}
                 title={`该作业正在后台自动答题中（进度 ${activeTask.progress || 0}%），点击查看实时执行看板`}
-              >
-                <Icon name="sync" className="fe-spin" />
-                <span>执行中 ({activeTask.progress || 0}%)</span>
-              </button>
+              />
             )
           }
 
           return (
-            <button
-              className={`control-secondary fe-btn-auto-complete ${!compat.supported ? 'control-disabled' : ''}`}
-              type="button"
-              style={{
-                padding: '7px 14px',
-                fontSize: 12.5,
-                opacity: compat.supported ? 1 : 0.45,
-                cursor: compat.supported ? 'pointer' : 'not-allowed',
-              }}
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!compat.supported}
               onClick={(e) => {
                 e.stopPropagation()
                 onAutoComplete(item)
               }}
               title={compat.supported ? (isDone ? '重新自动作答并更新此历史作业成绩' : '一键安全自动完成此作业') : (compat.reason || '该作业包含暂不支持的题型')}
+              icon={<Icon name={compat.supported ? (isDone ? 'replay' : 'bolt') : 'block'} />}
             >
-              <Icon name={compat.supported ? (isDone ? 'replay' : 'bolt') : 'block'} />
-              <span>{compat.supported ? (isDone ? '⚡ 重新作答' : '⚡ 自动完成') : '题型暂不支持'}</span>
-            </button>
+              {compat.supported ? (isDone ? '重新作答' : '自动完成') : '暂不支持'}
+            </Button>
           )
         })()}
         {isParsing ? (
-          <span className="status-pill status-pill--parsing">
-            <Icon name="sync" className="status-pill__spin" />
+          <Badge tone="accent" style={{ padding: '6px 12px', fontSize: 12 }}>
+            <Icon name="sync" className="status-pill__spin" style={{ marginRight: 4 }} />
             解析中
-          </span>
+          </Badge>
         ) : item.parsed ? (
-          <button
-            className="control-primary"
-            type="button"
-            style={{ padding: '7px 16px', fontSize: 13 }}
+          <Button
+            variant="primary"
+            size="sm"
             onClick={(e) => {
               e.stopPropagation()
               onOpen(item)
             }}
+            icon={<Icon name="visibility" />}
           >
-            <Icon name="visibility" />
-            <span>查看答案</span>
-          </button>
+            查看答案
+          </Button>
         ) : parseError ? (
-          <button
-            className="control-secondary"
-            type="button"
-            style={{ color: '#dc2626', borderColor: '#fca5a5', padding: '7px 14px', fontSize: 12.5 }}
+          <Button
+            variant="danger"
+            size="sm"
             onClick={(e) => {
               e.stopPropagation()
               onTriggerParse(item)
             }}
+            icon={<Icon name="refresh" />}
           >
-            <Icon name="refresh" />
-            <span>重试解析</span>
-          </button>
+            重试解析
+          </Button>
         ) : answerParserStatus === 'membership_required' ? (
-          <button
-            className="control-secondary"
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             style={{
-              padding: '7px 14px',
-              fontSize: 12.5,
               borderColor: '#f59e0b',
               color: '#d97706',
               background: '#fffbeb',
@@ -1045,38 +1020,32 @@ function HomeworkCard({
               e.stopPropagation()
               onTriggerParse(item)
             }}
+            icon={<Icon name="workspace_premium" />}
           >
-            <Icon name="workspace_premium" />
-            <span>需要会员</span>
-          </button>
+            需要会员
+          </Button>
         ) : answerParserStatus === 'feature_disabled' ? (
-          <button
-            className="control-secondary"
-            type="button"
-            style={{ padding: '7px 14px', fontSize: 12.5, opacity: 0.6 }}
+          <Button
+            variant="secondary"
+            size="sm"
             disabled
             title={answerParserDenyReason || '解析功能已由管理员停用'}
-            onClick={(e) => {
-              e.stopPropagation()
-              onTriggerParse(item)
-            }}
+            icon={<Icon name="block" />}
           >
-            <Icon name="block" />
-            <span>已停用</span>
-          </button>
+            已停用
+          </Button>
         ) : (
-          <button
-            className="control-secondary"
-            type="button"
-            style={{ padding: '7px 14px', fontSize: 12.5 }}
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={(e) => {
               e.stopPropagation()
               onTriggerParse(item)
             }}
+            icon={<Icon name="bolt" />}
           >
-            <Icon name="bolt" />
-            <span>开始解析</span>
-          </button>
+            开始解析
+          </Button>
         )}
       </div>
     </div>
@@ -1202,22 +1171,23 @@ function HomeworkListView({
         </div>
 
         <div className="fe-list-toolbar__right">
-          <span className="admin-pill-badge is-muted">
+          <Badge tone="neutral" style={{ padding: '6px 12px', fontSize: 12 }}>
             {etsReady
               ? hasLoaded
                 ? `${categoryMeta.title} · 共 ${filtered.length} 份`
                 : '待手动读取'
               : '未绑定 e听说'}
-          </span>
-          <button
-            className={`control-icon-button ${isLoading ? 'fe-spin' : ''}`}
+          </Badge>
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={hasLoaded ? onRefresh : onManualReadList}
             disabled={isLoading}
             title={hasLoaded ? '重新同步作业列表' : '手动读取作业列表'}
-            type="button"
+            icon={<Icon name="refresh" className={isLoading ? 'fe-spin' : ''} />}
           >
-            <Icon name="refresh" />
-          </button>
+            {isLoading ? '同步中' : '刷新同步'}
+          </Button>
         </div>
       </div>
 
@@ -1436,23 +1406,22 @@ function HomeworkListView({
             </p>
           </div>
 
-          <button
-            type="button"
-            className="control-primary fe-list-prompt-action"
+          <Button
+            variant="primary"
+            size="lg"
+            className="fe-list-prompt-action"
             onClick={onManualReadList}
-            disabled={isLoading}
+            loading={isLoading}
+            loadingLabel="正在同步作业列表中..."
+            icon={<Icon name="download" />}
+            style={{ width: '100%', minHeight: 46, fontSize: 14 }}
           >
-            <Icon name={isLoading ? 'sync' : 'download'} className={isLoading ? 'status-pill__spin' : ''} />
-            <span>
-              {isLoading
-                ? '正在同步作业列表中...'
-                : activeTab === 'current'
-                ? '确认安全，读取当前作业'
-                : activeTab === 'history'
-                ? '确认安全，读取历史作业'
-                : '确认安全，读取词汇PK'}
-            </span>
-          </button>
+            {activeTab === 'current'
+              ? '确认安全，读取当前作业'
+              : activeTab === 'history'
+              ? '确认安全，读取历史作业'
+              : '确认安全，读取词汇PK'}
+          </Button>
         </div>
       ) : isLoading && currentList.length === 0 ? (
         <div className="fe-empty-state" style={{ margin: '50px auto' }}>
@@ -3375,9 +3344,12 @@ function App() {
                         <span className="fe-nav-title-row">
                           <strong>{item.label}</strong>
                           {item.badge && (
-                            <span className={`fe-nav-badge ${item.badgeType || ''}`}>
+                            <Badge
+                              tone={item.badgeType === 'running' ? 'accent' : item.badgeType === 'success' ? 'success' : item.badgeType === 'failed' ? 'danger' : 'neutral'}
+                              className={`fe-nav-badge ${item.badgeType || ''}`}
+                            >
                               {item.badge}
-                            </span>
+                            </Badge>
                           )}
                         </span>
                         <small>{item.caption}</small>
