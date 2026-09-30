@@ -1,7 +1,7 @@
 import { apiRequest } from './auth'
 
 export type AutoCompleteMode = 'auto' | 'manual'
-export type AutoCompleteVoiceMode = 'clone' | 'edge' | 'none'
+export type AutoCompleteVoiceMode = 'clone' | 'none'
 
 export type AutoCompletePermitResponse = {
   permit_token: string

@@ -1149,11 +1149,7 @@ export function AutoCompletePage({
               <h2>{task.homework_name || '作业自动完成任务'}</h2>
               <p>
                 音色模式:{' '}
-                {task.voice_mode === 'clone'
-                  ? '专属声音'
-                  : task.voice_mode === 'edge'
-                  ? '标准声音'
-                  : '无录音'}
+                {task.voice_mode === 'clone' ? '专属声音' : '不上传声音'}
                 {completedAt ? ` · 完成时间: ${completedAt}` : ''}
               </p>
             </div>
@@ -1621,11 +1617,7 @@ export function AutoCompletePage({
                           <Icon name="mic" style={{ fontSize: 13 }} /> 音色配置:
                         </span>
                         <span className="fe-kanban-setting-val">
-                          {t.voice_mode === 'clone'
-                            ? '专属声音克隆'
-                            : t.voice_mode === 'edge'
-                            ? '标准声音'
-                            : '原声回放'}
+                          {t.voice_mode === 'clone' ? '专属声音克隆' : '不上传声音'}
                         </span>
                       </div>
                       <div className="fe-kanban-setting-row">
@@ -1916,7 +1908,7 @@ export function AutoCompletePage({
                         当前作答题干 (第 {currentTask?.current_question_index || 1} / {currentTask?.total_questions || totalQuestions} 题)：
                       </small>
                       <span className="admin-pill-badge is-muted" style={{ fontSize: 11 }}>
-                        {voiceMode === 'clone' ? '专属声音生成中' : voiceMode === 'edge' ? '标准声音生成中' : '静音模式'}
+                        {voiceMode === 'clone' ? '专属声音生成中' : '不上传声音模式'}
                       </span>
                     </div>
                     <p className="fe-stem-text">
@@ -1928,11 +1920,7 @@ export function AutoCompletePage({
                     <div className="fe-exec-tile">
                       <small>音色模式</small>
                       <span>
-                        {voiceMode === 'clone'
-                          ? '专属声音'
-                          : voiceMode === 'edge'
-                          ? '标准声音'
-                          : '不上传声音'}
+                        {voiceMode === 'clone' ? '专属声音' : '不上传声音'}
                       </span>
                     </div>
                     <div className="fe-exec-tile">
@@ -1999,7 +1987,7 @@ export function AutoCompletePage({
   // Trigger Risk Modal
   const handleOpenRiskModal = () => {
     if (voiceMode === 'clone' && (!selectedVoiceId || voices.length === 0)) {
-      onToast?.('您尚未录制专属声音，请先录制声音或切换至标准声音')
+      onToast?.('您尚未录制专属声音，请先录制声音，或选择不上传声音')
       return
     }
     setIsRiskModalOpen(true)
@@ -2549,7 +2537,7 @@ export function AutoCompletePage({
                                 </span>
                               ) : (
                                 <span className="admin-pill-badge is-muted" style={{ fontSize: 11 }}>
-                                  默认合成 ({voiceMode === 'clone' ? '专属声音' : voiceMode === 'edge' ? '标准声音' : '无声音'})
+                                  默认合成 ({voiceMode === 'clone' ? '专属声音' : '不上传声音'})
                                 </span>
                               )}
                             </div>
@@ -2818,23 +2806,6 @@ export function AutoCompletePage({
                 <span className="admin-pill-badge is-success">推荐</span>
               </div>
               <p>使用您录制的声音生成朗读音频。</p>
-            </div>
-          </div>
-
-          {/* Option 2: standard voice */}
-          <div
-            className={`fe-voice-option-card ${voiceMode === 'edge' ? 'is-active' : ''}`}
-            onClick={() => setVoiceMode('edge')}
-          >
-            <div className="fe-voice-card-radio">
-              <span className={`fe-radio-circle ${voiceMode === 'edge' ? 'is-checked' : ''}`} />
-            </div>
-            <div className="fe-voice-card-content">
-              <div className="fe-voice-card-title">
-                <strong>标准声音</strong>
-                <span className="admin-pill-badge is-muted">标准发音</span>
-              </div>
-              <p>标准英语发音，适合普通朗读。</p>
             </div>
           </div>
 
@@ -3148,7 +3119,7 @@ export function AutoCompletePage({
                     <div>题目数：<strong>{totalQuestions} 道</strong> · 卷面由小题满分累加：<strong>{targetPaperTotal.toFixed(2)} 分</strong></div>
                     <div>上报做题用时：<strong>{formatSeconds(selectedUseTimeSeconds)}</strong></div>
                     <div>题目总数：<strong>{totalQuestions} 道</strong></div>
-                    <div>语音录音模式：<strong>{voiceMode === 'clone' ? '专属声音' : (voiceMode === 'edge' ? '标准声音' : '无需录音 / 快速完成')}</strong></div>
+                    <div>语音录音模式：<strong>{voiceMode === 'clone' ? '专属声音' : '无需录音 / 快速完成'}</strong></div>
                   </div>
                 </div>
 
