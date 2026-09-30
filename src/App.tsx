@@ -2581,7 +2581,7 @@ function App() {
           isFetchingHomeworksRef.current = false
           return doFetchHomeworks(tab, capToken, true)
         }
-        if (err instanceof ApiError && (err.captchaRequired || err.status === 429)) {
+        if (err instanceof ApiError && err.captchaRequired) {
           pendingRefreshRef.current = (token?: string) => {
             void doFetchHomeworks(tab, token, forceRefresh)
           }
@@ -2636,7 +2636,7 @@ function App() {
           isFetchingHomeworksRef.current = false
           return doFetchHomeworks('history', capToken, true)
         }
-        if (err instanceof ApiError && (err.captchaRequired || err.status === 429)) {
+        if (err instanceof ApiError && err.captchaRequired) {
           pendingRefreshRef.current = (token?: string) => {
             void doFetchHomeworks('history', token, forceRefresh)
           }
@@ -2689,7 +2689,7 @@ function App() {
         await doFetchHomeworks(activeTab, capToken, forceRefresh)
       }
     } catch (err) {
-      if (err instanceof ApiError && (err.captchaRequired || err.status === 429)) {
+      if (err instanceof ApiError && err.captchaRequired) {
         pendingRefreshRef.current = (token?: string) => {
           void refreshAccountAndHomeworks(token, forceRefresh)
         }

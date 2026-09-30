@@ -157,9 +157,6 @@ export async function executeApiRequest(path: string, { accessToken, ...init }: 
     }
 
     if (response.status === 401) unauthorizedHandler?.()
-    if (response.status === 429 && !captchaRequired) {
-      captchaRequired = true
-    }
 
     throw new ApiError(message, response.status, {
       captchaRequired,
