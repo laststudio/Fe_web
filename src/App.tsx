@@ -1403,8 +1403,16 @@ function HomeworkListView({
             <Icon name="no_accounts" />
           </div>
           <h2>未绑定 e听说</h2>
-          <p>请前往官网账号中心绑定手机号与密码，或直接使用讯飞登录。</p>
+          <p>手机号 + 密码，或讯飞登录，二选一即可绑定。</p>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <button
+              type="button"
+              className="control-ghost"
+              onClick={onChangyanLogin}
+              disabled={!onChangyanLogin}
+            >
+              讯飞登录
+            </button>
             <a
               href="https://lastudio.cc/account"
               target="_blank"
@@ -1412,11 +1420,8 @@ function HomeworkListView({
               className="control-primary"
               style={{ textDecoration: 'none' }}
             >
-              前往账号中心绑定
+              手机号绑定
             </a>
-            <button type="button" className="control-ghost" onClick={onChangyanLogin}>
-              讯飞登录
-            </button>
           </div>
         </div>
       ) : !hasLoaded ? (
@@ -1623,7 +1628,11 @@ function SettingsPage({
         <div className="admin-setting-switch-row">
           <div className="admin-setting-switch-info">
             <strong>绑定状态</strong>
-            <span>是否已在 LastStudio 账号中心绑定 e听说账号</span>
+            <span>
+              {etsReady
+                ? '已在 LastStudio 账号中心完成绑定'
+                : '手机号 + 密码，或讯飞登录，二选一即可绑定'}
+            </span>
           </div>
           <span className={`admin-pill-badge ${etsReady ? 'is-success' : 'is-danger'}`}>
             {etsSource === 'changyan' ? '讯飞登录' : etsSource === 'phone' ? '已绑定' : etsReady ? '已连接' : '未绑定'}
@@ -1634,8 +1643,8 @@ function SettingsPage({
           <>
             <div className="admin-setting-switch-row">
               <div className="admin-setting-switch-info">
-                <strong>e听说手机号</strong>
-                <span>已授权关联的手机号</span>
+                <strong>e听说账号</strong>
+                <span>已授权关联的账号</span>
               </div>
               <strong>{accountInfo.account_display || '未知'}</strong>
             </div>
@@ -1682,25 +1691,30 @@ function SettingsPage({
         <div className="admin-setting-switch-row" style={{ background: '#fafbfc' }}>
           <div className="admin-setting-switch-info">
             <strong>账号管理操作</strong>
-            <span>解绑、换绑或重新同步账号信息</span>
+            <span>
+              {etsReady
+                ? '在账号中心解绑或换绑，也可直接用讯飞登录换绑'
+                : '两种登录方式任选其一：手机号 + 密码，或讯飞登录'}
+            </span>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <a
-              href="https://lastudio.cc/account"
-              target="_blank"
-              rel="noreferrer"
-              className="control-secondary"
-            >
-              <Icon name="open_in_new" /> 账号中心管理
-            </a>
-            <button className="control-secondary" type="button" onClick={onRefreshSession}>
-              <Icon name="refresh" /> 重新检测绑定
-            </button>
             {onChangyanLogin && (
               <button className="control-secondary" type="button" onClick={onChangyanLogin}>
                 <Icon name="login" /> 讯飞登录
               </button>
             )}
+            <a
+              href="https://lastudio.cc/account"
+              target="_blank"
+              rel="noreferrer"
+              className={etsReady ? 'control-secondary' : 'control-primary'}
+              style={{ textDecoration: 'none' }}
+            >
+              <Icon name="open_in_new" /> {etsReady ? '管理绑定' : '手机号绑定'}
+            </a>
+            <button className="control-secondary" type="button" onClick={onRefreshSession}>
+              <Icon name="refresh" /> 重新检测
+            </button>
           </div>
         </div>
       </section>
