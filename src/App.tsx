@@ -418,6 +418,14 @@ function isSessionExpired(expiresAt: number | undefined | null): boolean {
   return typeof expiresAt === 'number' && expiresAt <= Date.now()
 }
 
+function isCapTokenExpired(expiresAt: number): boolean {
+  return expiresAt <= Date.now()
+}
+
+function capTokenExpiry(): number {
+  return Date.now() + 5 * 60 * 1000
+}
+
 function CaptchaModal({
   title = '安全人机验证',
   subtitle = '为保护 e听说账号安全并防御接口频繁请求，请完成下方人机验证以继续。',
@@ -2582,6 +2590,7 @@ function App() {
           return doFetchHomeworks(tab, capToken, true)
         }
         if (err instanceof ApiError && err.captchaRequired) {
+          reusableCapTokenRef.current = null
           pendingRefreshRef.current = (token?: string) => {
             void doFetchHomeworks(tab, token, forceRefresh)
           }
@@ -2637,6 +2646,7 @@ function App() {
           return doFetchHomeworks('history', capToken, true)
         }
         if (err instanceof ApiError && err.captchaRequired) {
+          reusableCapTokenRef.current = null
           pendingRefreshRef.current = (token?: string) => {
             void doFetchHomeworks('history', token, forceRefresh)
           }
@@ -2690,6 +2700,7 @@ function App() {
       }
     } catch (err) {
       if (err instanceof ApiError && err.captchaRequired) {
+        reusableCapTokenRef.current = null
         pendingRefreshRef.current = (token?: string) => {
           void refreshAccountAndHomeworks(token, forceRefresh)
         }
@@ -2737,6 +2748,16 @@ function App() {
 
   const [showCaptchaModal, setShowCaptchaModal] = useState(false)
   const pendingRefreshRef = useRef<((token?: string) => void) | null>(null)
+  const reusableCapTokenRef = useRef<{ token: string; expiresAt: number } | null>(null)
+
+  function getReusableCapToken(): string | undefined {
+    const cached = reusableCapTokenRef.current
+    if (!cached || isCapTokenExpired(cached.expiresAt)) {
+      reusableCapTokenRef.current = null
+      return undefined
+    }
+    return cached.token
+  }
 
   // Auto Complete states
   const [autoCompleteModalHw, setAutoCompleteModalHw] = useState<HomeworkItem | null>(null)
@@ -2884,16 +2905,19 @@ function App() {
 
   function handleManualReadList() {
     if (isFetchingHomeworksRef.current) return
-    void doFetchHomeworks(activeTab)
+    void doFetchHomeworks(activeTab, getReusableCapToken())
   }
 
   function handleRequestRefresh() {
     if (isFetchingHomeworksRef.current) return
-    void refreshAccountAndHomeworks()
+    void refreshAccountAndHomeworks(getReusableCapToken())
   }
 
   function handleCaptchaSuccess(token: string) {
     setShowCaptchaModal(false)
+    // Cap tokens are short-lived proofs; keep one in memory for normal list
+    // reads during this session instead of making the user solve repeatedly.
+    reusableCapTokenRef.current = { token, expiresAt: capTokenExpiry() }
     showToast('安全验证通过，正在同步作业数据...')
     if (pendingRefreshRef.current) {
       const fn = pendingRefreshRef.current
