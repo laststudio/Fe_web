@@ -1,0 +1,153 @@
+:root {
+  /* Core brand & ink */
+  --la-ink: #171b24;
+  --la-muted: #626b7a;
+  --la-faint: #8f98a8;
+  --la-line: #dfe2e8;
+  --la-surface: #ffffff;
+  --la-canvas: #f6f8fb;
+  --la-soft: #f2f3f5;
+
+  /* Extended semantic layers (Light) */
+  --la-surface-0: #f6f8fb;
+  --la-surface-1: #ffffff;
+  --la-surface-2: #ffffff;
+  --la-surface-subtle: #f8fafc;
+  --la-surface-hover: #f1f4f9;
+
+  --la-line-subtle: #eef1f6;
+  --la-line-default: #dfe2e8;
+  --la-line-strong: #c2c9d6;
+
+  --la-text-primary: #171b24;
+  --la-text-secondary: #4b5565;
+  --la-text-tertiary: #6b7280;
+  --la-text-muted: #94a3b8;
+  --la-text-on-accent: #ffffff;
+
+  /* Accent & theme */
+  --la-accent: #4f6ff6;
+  --la-accent-strong: #3b5bdb;
+  --la-accent-bright: #748ffc;
+  --la-accent-soft: #edf2ff;
+  --la-accent-border: #bac8ff;
+  --la-focus: #4f6ff6;
+  --la-focus-ring: 0 0 0 3px rgba(79, 111, 246, 0.22);
+
+  /* Status Colors */
+  --la-success: #12b886;
+  --la-success-strong: #0ca678;
+  --la-success-soft: #ebfbee;
+  --la-success-border: #b2f2bb;
+
+  --la-danger: #fa5252;
+  --la-danger-strong: #e03131;
+  --la-danger-soft: #fff5f5;
+  --la-danger-border: #ffc9c9;
+
+  --la-warning: #f59f00;
+  --la-warning-strong: #f08c00;
+  --la-warning-soft: #fff9db;
+  --la-warning-border: #ffec99;
+
+  --la-info: #228be6;
+  --la-info-soft: #e7f5ff;
+  --la-info-border: #a5d8ff;
+
+  --la-mint: #7ee0b4;
+
+  /* Radii */
+  --la-radius-xs: 4px;
+  --la-radius-sm: 6px;
+  --la-radius-md: 10px;
+  --la-radius-lg: 14px;
+  --la-radius-xl: 18px;
+  --la-radius-full: 9999px;
+
+  /* Spacings */
+  --la-space-0: 0px;
+  --la-space-1: 4px;
+  --la-space-2: 8px;
+  --la-space-3: 12px;
+  --la-space-4: 16px;
+  --la-space-5: 24px;
+  --la-space-6: 32px;
+  --la-space-7: 48px;
+  --la-space-8: 64px;
+
+  /* Shadows */
+  --la-shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
+  --la-shadow-md: 0 4px 14px rgba(15, 23, 42, 0.07);
+  --la-shadow-lg: 0 10px 28px rgba(15, 23, 42, 0.1);
+  --la-shadow-panel: 0 15px 38px rgba(15, 23, 42, 0.055);
+  --la-shadow-overlay: 0 24px 60px rgba(15, 23, 42, 0.22);
+  --la-shadow-popover: 0 10px 30px -4px rgba(15, 23, 42, 0.14), 0 0 1px 1px rgba(0, 0, 0, 0.05);
+
+  /* Motion Tokens (Unified Curves & Timings) */
+  --la-ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.1);
+  --la-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --la-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --la-duration-instant: 100ms;
+  --la-duration-fast: 150ms;
+  --la-duration-normal: 220ms;
+  --la-duration-slow: 320ms;
+
+  /* Night Palette (Dark mode reference) */
+  --la-night: #0a0d14;
+  --la-night-soft: #111622;
+  --la-night-line: rgba(255, 255, 255, 0.1);
+
+  /* Compatibility aliases while application styles move to shared tokens. */
+  --ink: var(--la-ink);
+  --muted: var(--la-muted);
+  --faint: var(--la-faint);
+  --line: var(--la-line);
+  --surface: var(--la-surface);
+  --soft: var(--la-soft);
+  --night: var(--la-night);
+  --night-soft: var(--la-night-soft);
+  --night-line: var(--la-night-line);
+  --accent: var(--la-accent);
+  --accent-bright: var(--la-accent-bright);
+  --accent-soft: var(--la-accent-soft);
+  --mint: var(--la-mint);
+}
+
+/* Dark mode theme variables */
+.dark,
+[data-theme="dark"] {
+  --la-ink: #f8fafc;
+  --la-muted: #94a3b8;
+  --la-faint: #64748b;
+  --la-line: rgba(255, 255, 255, 0.1);
+  --la-surface: #111622;
+  --la-canvas: #0a0d14;
+  --la-soft: #171d2b;
+
+  --la-surface-0: #0a0d14;
+  --la-surface-1: #111622;
+  --la-surface-2: #182030;
+  --la-surface-subtle: #141a27;
+  --la-surface-hover: #1c2436;
+
+  --la-line-subtle: rgba(255, 255, 255, 0.07);
+  --la-line-default: rgba(255, 255, 255, 0.12);
+  --la-line-strong: rgba(255, 255, 255, 0.2);
+
+  --la-text-primary: #f8fafc;
+  --la-text-secondary: #cbd5e1;
+  --la-text-tertiary: #94a3b8;
+  --la-text-muted: #64748b;
+
+  --la-accent: #5c7cfa;
+  --la-accent-strong: #748ffc;
+  --la-accent-soft: rgba(92, 124, 250, 0.15);
+  --la-accent-border: rgba(92, 124, 250, 0.35);
+
+  --la-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.5);
+  --la-shadow-md: 0 4px 14px rgba(0, 0, 0, 0.5);
+  --la-shadow-lg: 0 10px 28px rgba(0, 0, 0, 0.6);
+  --la-shadow-panel: 0 15px 38px rgba(0, 0, 0, 0.5);
+  --la-shadow-overlay: 0 24px 60px rgba(0, 0, 0, 0.7);
+  --la-shadow-popover: 0 10px 30px -4px rgba(0, 0, 0, 0.6), 0 0 1px 1px rgba(255, 255, 255, 0.08);
+}

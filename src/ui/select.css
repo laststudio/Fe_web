@@ -1,0 +1,191 @@
+.la-select-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--la-ink);
+  background-color: var(--la-surface);
+  border: 1px solid var(--la-line-default);
+  border-radius: var(--la-radius-md);
+  padding: 0 14px;
+  cursor: pointer;
+  outline: none;
+  gap: 8px;
+  transition: border-color var(--la-duration-fast) var(--la-ease-out),
+              box-shadow var(--la-duration-fast) var(--la-ease-out);
+}
+
+.la-select-trigger--sm {
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-radius: var(--la-radius-sm);
+}
+
+.la-select-trigger--md {
+  height: 40px;
+}
+
+.la-select-trigger--lg {
+  height: 48px;
+  font-size: 14px;
+  border-radius: var(--la-radius-lg);
+}
+
+.la-select-trigger:hover:not(:disabled) {
+  border-color: var(--la-line-strong);
+}
+
+.la-select-trigger:focus,
+.la-select-trigger[data-state="open"] {
+  border-color: var(--la-focus);
+  box-shadow: var(--la-focus-ring);
+}
+
+.la-select-trigger:disabled {
+  background-color: var(--la-soft);
+  color: var(--la-text-muted);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.la-select-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--la-muted);
+  transition: transform var(--la-duration-fast) var(--la-ease-out);
+  flex-shrink: 0;
+}
+
+.la-select-trigger[data-state="open"] .la-select-icon {
+  transform: rotate(180deg);
+}
+
+/* Floating content */
+.la-select-content {
+  position: relative;
+  z-index: 1050;
+  min-width: 8rem;
+  overflow: hidden;
+  border-radius: var(--la-radius-md);
+  border: 1px solid var(--la-line-default);
+  background-color: var(--la-surface-1);
+  color: var(--la-ink);
+  box-shadow: var(--la-shadow-popover);
+  transform-origin: var(--radix-select-content-transform-origin);
+  animation-duration: var(--la-duration-fast);
+  animation-timing-function: var(--la-ease-out);
+}
+
+.la-select-content[data-state="open"] {
+  animation-name: la-select-in;
+}
+
+.la-select-content[data-state="closed"] {
+  animation-name: la-select-out;
+}
+
+.la-select-viewport {
+  padding: 5px;
+}
+
+.la-select-viewport--popper {
+  height: var(--radix-select-trigger-height);
+  width: 100%;
+  min-width: var(--radix-select-trigger-width);
+}
+
+.la-select-item {
+  position: relative;
+  display: flex;
+  width: 100%;
+  cursor: pointer;
+  user-select: none;
+  align-items: center;
+  border-radius: var(--la-radius-sm);
+  padding: 7px 10px 7px 28px;
+  font-size: 13px;
+  color: var(--la-ink);
+  outline: none;
+  transition: background-color var(--la-duration-fast) var(--la-ease-out),
+              color var(--la-duration-fast) var(--la-ease-out);
+}
+
+.la-select-item[data-highlighted] {
+  background-color: var(--la-accent-soft);
+  color: var(--la-accent-strong);
+}
+
+.la-select-item[data-disabled] {
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.la-select-item-indicator-container {
+  position: absolute;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.la-select-check-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--la-accent);
+}
+
+.la-select-label {
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--la-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.la-select-separator {
+  height: 1px;
+  background-color: var(--la-line-subtle);
+  margin: 4px -5px;
+}
+
+.la-select-scroll-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  background-color: var(--la-surface-1);
+  color: var(--la-muted);
+  cursor: default;
+}
+
+.la-select-scroll-icon {
+  width: 14px;
+  height: 14px;
+}
+
+@keyframes la-select-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes la-select-out {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+}

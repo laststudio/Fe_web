@@ -1,0 +1,19 @@
+.admin-toast-viewport { position: fixed; z-index: 200; top: 88px; right: 22px; display: grid; gap: 8px; width: min(430px, calc(100vw - 30px)); list-style: none; margin: 0; padding: 0; transition: top .18s ease; }
+.control-shell.has-message ~ .admin-toast-viewport { top: 164px; }
+.la-toast { min-height: 48px; padding: var(--la-space-3); border: 1px solid; border-radius: 9px; box-shadow: 0 13px 35px rgba(22,29,40,.16); background: #fff; display: flex; align-items: flex-start; gap: var(--la-space-2); font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 12px; animation: la-toast-in .24s cubic-bezier(.16,1,.3,1) both; }
+.la-toast[data-state="closed"] { opacity: 0; transition: opacity .15s ease; }
+.la-toast.is-success { color: #1b6d53; border-color: #9fd0bd; background: #f2faf6; }
+.la-toast.is-error { color: #923442; border-color: #e6adb5; background: #fff0f2; }
+.la-toast.is-info { color: #33415c; border-color: #c7d2e4; background: #f4f7fc; }
+.admin-toast-icon { margin-top: 1px; }
+.admin-toast-body { min-width: 0; display: grid; gap: 2px; }
+.admin-toast-body > div:first-child { color: inherit; font-weight: 720; }
+.admin-toast-body > div:not(:first-child) { color: inherit; opacity: .95; font-size: 11px; font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
+.la-toast > button { margin-left: auto; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; color: inherit; background: transparent; display: grid; place-items: center; }
+.la-toast > button:hover { background: rgba(23,32,51,.07); }
+@keyframes la-toast-in { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: translateX(0); } }
+@media (max-width: 860px) {
+  .admin-toast-viewport { top: calc(78px + env(safe-area-inset-top)); right: 10px; left: 10px; width: auto; }
+  .control-shell.has-message ~ .admin-toast-viewport { top: calc(166px + env(safe-area-inset-top)); }
+}
+@media (prefers-reduced-motion: reduce) { .la-toast { animation: none; transition: none; } }

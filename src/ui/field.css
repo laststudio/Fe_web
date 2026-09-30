@@ -1,0 +1,72 @@
+.la-field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--la-space-2);
+  color: var(--la-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.la-field__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.la-field__required {
+  color: var(--la-danger);
+  font-weight: bold;
+}
+
+.la-textarea {
+  min-height: 88px;
+  padding: 10px 12px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.la-field__hint,
+.la-field__error {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+  animation: la-field-message-in var(--la-duration-fast) var(--la-ease-out);
+}
+
+.la-field__hint {
+  color: var(--la-text-tertiary);
+}
+
+.la-field__error {
+  color: var(--la-danger);
+}
+
+.la-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--la-text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.la-checkbox input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--la-accent);
+  cursor: pointer;
+}
+
+@keyframes la-field-message-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

@@ -1,0 +1,10 @@
+.la-loading, .la-empty { min-height: 240px; display: flex; align-items: center; justify-content: center; color: var(--la-faint); }
+.control-loading.la-loading, .control-empty.la-empty { min-height: 360px; }
+.la-loading { gap: var(--la-space-2); font: 11px "SFMono-Regular", Consolas, monospace; }
+.la-empty { flex-direction: column; gap: var(--la-space-2); padding: var(--la-space-5); text-align: center; }
+.la-empty svg { margin-bottom: var(--la-space-1); color: var(--la-muted); }
+.la-empty strong { color: #465267; font-size: 14px; }
+.la-empty span { font-size: 11px; }
+.la-spinner { animation: la-spin .8s linear infinite; }
+@keyframes la-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .la-spinner { animation-duration: 1.6s; } }

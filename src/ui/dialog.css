@@ -1,0 +1,195 @@
+.la-dialog-overlay.control-dialog-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  background: rgba(8, 11, 18, 0.52);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: la-overlay-in var(--la-duration-fast) var(--la-ease-out) both;
+}
+
+.la-dialog.control-dialog {
+  position: fixed;
+  z-index: 151;
+  top: 50%;
+  left: 50%;
+  width: min(var(--la-dialog-width, 540px), calc(100vw - 40px));
+  max-height: calc(100svh - 40px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--la-line-default);
+  border-radius: var(--la-radius-lg);
+  color: var(--la-ink);
+  background: var(--la-surface-1);
+  box-shadow: var(--la-shadow-overlay);
+  font-family: inherit;
+  transform: translate(-50%, -50%);
+  animation: la-dialog-in var(--la-duration-normal) var(--la-ease-out) both;
+}
+
+.la-dialog-overlay.control-dialog-layer.account-dialog-layer {
+  z-index: 200;
+}
+
+.la-dialog.control-dialog.account-dialog {
+  z-index: 201;
+  border-radius: var(--la-radius-xl);
+}
+
+.la-dialog button,
+.la-dialog input,
+.la-dialog select,
+.la-dialog textarea {
+  font: inherit;
+}
+
+.la-dialog:focus {
+  outline: none;
+}
+
+.la-dialog__header {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  min-height: 60px;
+  padding: 0 var(--la-space-4) 0 var(--la-space-5);
+  border-bottom: 1px solid var(--la-line-subtle);
+  background: var(--la-surface-1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--la-space-4);
+}
+
+.la-dialog__header h2 {
+  margin: 0;
+  color: var(--la-ink);
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+
+.la-dialog__close {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--la-radius-sm);
+  color: var(--la-muted);
+  background: transparent;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all var(--la-duration-fast) var(--la-ease-out);
+}
+
+.la-dialog__close:hover {
+  color: var(--la-ink);
+  background: var(--la-surface-hover);
+}
+
+.la-dialog :is(button, input, select, textarea, a):focus-visible {
+  outline: 2px solid var(--la-focus);
+  outline-offset: 2px;
+}
+
+.la-dialog :is(h1, h2, h3, p, label, code, td, th, strong, span) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.la-dialog__actions {
+  position: sticky;
+  bottom: 0;
+  margin: var(--la-space-1) calc(var(--la-space-5) * -1) calc(var(--la-space-5) * -1);
+  padding: var(--la-space-4) var(--la-space-5);
+  border-top: 1px solid var(--la-line-subtle);
+  background: var(--la-surface-subtle);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--la-space-2);
+}
+
+@keyframes la-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes la-dialog-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes la-dialog-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 720px) {
+  .la-dialog.control-dialog {
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    max-height: calc(100svh - 10px);
+    border-radius: var(--la-radius-lg) var(--la-radius-lg) 0 0;
+    transform: none;
+    animation-name: la-dialog-sheet-in;
+    animation-duration: var(--la-duration-normal);
+  }
+
+  .la-dialog__actions.control-dialog-actions {
+    margin: var(--la-space-1) -16px calc(-16px - env(safe-area-inset-bottom));
+    padding: var(--la-space-4) 16px calc(16px + env(safe-area-inset-bottom));
+  }
+
+  .la-dialog.control-dialog.account-dialog {
+    top: 50%;
+    right: auto;
+    bottom: auto;
+    left: 50%;
+    width: min(var(--la-dialog-width, 480px), calc(100vw - 40px));
+    max-height: calc(100svh - 40px);
+    border-radius: var(--la-radius-lg);
+    transform: translate(-50%, -50%);
+    animation-name: la-dialog-in;
+  }
+}
+
+@media (max-width: 560px) {
+  .la-dialog.control-dialog.account-dialog {
+    top: auto;
+    right: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    left: 10px;
+    width: auto;
+    max-height: calc(100svh - 20px - env(safe-area-inset-bottom));
+    transform: none;
+    animation-name: la-dialog-sheet-in;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .la-dialog-overlay,
+  .la-dialog {
+    animation: none;
+  }
+}

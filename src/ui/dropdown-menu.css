@@ -1,0 +1,106 @@
+.la-dropdown-content {
+  position: relative;
+  z-index: 1050;
+  min-width: 10rem;
+  overflow: hidden;
+  border-radius: var(--la-radius-md);
+  border: 1px solid var(--la-line-default);
+  background-color: var(--la-surface-1);
+  padding: 6px;
+  color: var(--la-ink);
+  box-shadow: var(--la-shadow-popover);
+  transform-origin: var(--radix-dropdown-menu-content-transform-origin);
+  animation-duration: var(--la-duration-fast);
+  animation-timing-function: var(--la-ease-out);
+}
+
+.la-dropdown-content[data-state="open"] {
+  animation-name: la-dropdown-in;
+}
+
+.la-dropdown-content[data-state="closed"] {
+  animation-name: la-dropdown-out;
+}
+
+.la-dropdown-item {
+  position: relative;
+  display: flex;
+  cursor: pointer;
+  user-select: none;
+  align-items: center;
+  border-radius: var(--la-radius-sm);
+  padding: 8px 10px;
+  font-size: 13px;
+  outline: none;
+  transition: background-color var(--la-duration-fast) var(--la-ease-out),
+              color var(--la-duration-fast) var(--la-ease-out);
+}
+
+.la-dropdown-item:hover,
+.la-dropdown-item[data-highlighted] {
+  background-color: var(--la-surface-hover);
+  color: var(--la-ink);
+}
+
+.la-dropdown-item--danger {
+  color: var(--la-danger);
+}
+
+.la-dropdown-item--danger:hover,
+.la-dropdown-item--danger[data-highlighted] {
+  background-color: var(--la-danger-soft);
+  color: var(--la-danger-strong);
+}
+
+.la-dropdown-item[data-disabled] {
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.la-dropdown-item--inset {
+  padding-left: 28px;
+}
+
+.la-dropdown-label {
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--la-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.la-dropdown-separator {
+  height: 1px;
+  background-color: var(--la-line-subtle);
+  margin: 4px -6px;
+}
+
+.la-dropdown-shortcut {
+  margin-left: auto;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--la-muted);
+}
+
+@keyframes la-dropdown-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes la-dropdown-out {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+}

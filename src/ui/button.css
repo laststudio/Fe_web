@@ -1,0 +1,139 @@
+.la-button {
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: var(--la-radius-md);
+  color: var(--la-ink);
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--la-space-2);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: color var(--la-duration-fast) var(--la-ease-out),
+              border-color var(--la-duration-fast) var(--la-ease-out),
+              background-color var(--la-duration-fast) var(--la-ease-out),
+              box-shadow var(--la-duration-fast) var(--la-ease-out),
+              transform var(--la-duration-fast) var(--la-ease-out),
+              opacity var(--la-duration-fast) var(--la-ease-out);
+}
+
+.la-button:active:not(:disabled) {
+  transform: scale(0.98);
+  opacity: 0.9;
+}
+
+.la-button:focus-visible {
+  outline: 2px solid var(--la-focus);
+  outline-offset: 2px;
+}
+
+.la-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none !important;
+}
+
+.la-button svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.la-button--primary {
+  color: #ffffff;
+  border-color: var(--la-accent);
+  background-color: var(--la-accent);
+  box-shadow: 0 2px 8px rgba(79, 111, 246, 0.25);
+}
+
+.la-button--primary:hover:not(:disabled) {
+  border-color: var(--la-accent-strong);
+  background-color: var(--la-accent-strong);
+}
+
+.la-button--secondary {
+  border-color: var(--la-line-default);
+  color: var(--la-text-primary);
+  background-color: var(--la-surface-1);
+}
+
+.la-button--secondary:hover:not(:disabled) {
+  color: var(--la-accent-strong);
+  border-color: var(--la-accent-border);
+  background-color: var(--la-accent-soft);
+}
+
+.la-button--ghost {
+  color: var(--la-text-secondary);
+  background-color: transparent;
+}
+
+.la-button--ghost:hover:not(:disabled) {
+  color: var(--la-text-primary);
+  background-color: var(--la-surface-hover);
+}
+
+.la-button--danger {
+  color: #ffffff;
+  border-color: var(--la-danger);
+  background-color: var(--la-danger);
+}
+
+.la-button--danger:hover:not(:disabled) {
+  border-color: var(--la-danger-strong);
+  background-color: var(--la-danger-strong);
+}
+
+.la-button--link {
+  min-height: auto;
+  padding: 0 2px;
+  color: var(--la-accent);
+}
+
+.la-button--link:hover:not(:disabled) {
+  color: var(--la-accent-strong);
+  text-decoration: underline;
+  transform: none;
+}
+
+.la-button--sm {
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: var(--la-radius-sm);
+  font-size: 12px;
+}
+
+.la-button--lg {
+  min-height: 48px;
+  padding: 0 24px;
+  font-size: 14px;
+  border-radius: var(--la-radius-lg);
+}
+
+.la-spinner {
+  animation: la-spin 1s linear infinite;
+}
+
+@keyframes la-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .la-button {
+    transition: none;
+  }
+}

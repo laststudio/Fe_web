@@ -1,0 +1,70 @@
+.la-table-container {
+  position: relative;
+  width: 100%;
+  overflow-x: auto;
+  border-radius: var(--la-radius-md);
+  border: 1px solid var(--la-line-default);
+  background-color: var(--la-surface-1);
+}
+
+.la-table {
+  width: 100%;
+  caption-side: bottom;
+  border-collapse: collapse;
+  font-size: 13px;
+  text-align: left;
+}
+
+.la-table-header {
+  border-bottom: 1px solid var(--la-line-default);
+  background-color: var(--la-surface-subtle);
+}
+
+.la-table-head {
+  height: 40px;
+  padding: 0 16px;
+  font-weight: 600;
+  color: var(--la-text-secondary);
+  white-space: nowrap;
+}
+
+.la-table-body .la-table-row {
+  border-bottom: 1px solid var(--la-line-subtle);
+  transition: background-color var(--la-duration-fast) var(--la-ease-out);
+}
+
+.la-table-body .la-table-row:last-child {
+  border-bottom: none;
+}
+
+.la-table-body .la-table-row:hover {
+  background-color: var(--la-surface-hover);
+}
+
+.la-table-cell {
+  padding: 12px 16px;
+  vertical-align: middle;
+  color: var(--la-ink);
+}
+
+.la-table-footer {
+  border-top: 1px solid var(--la-line-default);
+  background-color: var(--la-surface-subtle);
+  font-weight: 500;
+}
+
+.la-table-caption {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--la-muted);
+}
+
+.la-table-row--empty:hover {
+  background-color: transparent !important;
+}
+
+.la-table-cell--empty {
+  text-align: center;
+  padding: 48px 16px;
+  color: var(--la-muted);
+}

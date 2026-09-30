@@ -1,0 +1,114 @@
+.la-tabs-list {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  box-sizing: border-box;
+}
+
+/* Pill variant */
+.la-tabs-list--pill {
+  padding: 4px;
+  background-color: var(--la-soft);
+  border-radius: var(--la-radius-md);
+  gap: 2px;
+}
+
+.la-tabs-list--pill .la-tabs-trigger {
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--la-muted);
+  border-radius: var(--la-radius-sm);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  outline: none;
+  transition: all var(--la-duration-fast) var(--la-ease-out);
+}
+
+.la-tabs-list--pill .la-tabs-trigger:hover:not(:disabled) {
+  color: var(--la-ink);
+}
+
+.la-tabs-list--pill .la-tabs-trigger[data-state="active"] {
+  background-color: var(--la-surface);
+  color: var(--la-ink);
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+/* Line variant */
+.la-tabs-list--line {
+  border-bottom: 1px solid var(--la-line-default);
+  gap: 24px;
+  width: 100%;
+}
+
+.la-tabs-list--line .la-tabs-trigger {
+  position: relative;
+  padding: 10px 4px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--la-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  outline: none;
+  transition: color var(--la-duration-fast) var(--la-ease-out);
+}
+
+.la-tabs-list--line .la-tabs-trigger::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: var(--la-accent);
+  opacity: 0;
+  transform: scaleX(0.6);
+  transition: opacity var(--la-duration-fast) var(--la-ease-out),
+              transform var(--la-duration-fast) var(--la-ease-out);
+}
+
+.la-tabs-list--line .la-tabs-trigger:hover:not(:disabled) {
+  color: var(--la-ink);
+}
+
+.la-tabs-list--line .la-tabs-trigger[data-state="active"] {
+  color: var(--la-accent-strong);
+  font-weight: 600;
+}
+
+.la-tabs-list--line .la-tabs-trigger[data-state="active"]::after {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+.la-tabs-trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.la-tabs-trigger:focus-visible {
+  outline: 2px solid var(--la-focus);
+  outline-offset: 2px;
+}
+
+/* Content Area with smooth fade in */
+.la-tabs-content {
+  margin-top: 14px;
+  outline: none;
+  animation: la-tabs-fade-in var(--la-duration-normal) var(--la-ease-out);
+}
+
+@keyframes la-tabs-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

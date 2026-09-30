@@ -1,0 +1,5 @@
+.la-badge { min-height: 25px; padding: 4px 8px; border: 1px solid transparent; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; color: #626e7f; background: var(--la-soft); font: 9px "SFMono-Regular", Consolas, monospace; }
+.la-badge--accent { color: #37558d; background: #eaf0fb; }
+.la-badge--success { color: var(--la-success); background: #e9f5ef; }
+.la-badge--warning { color: var(--la-warning); background: #fff4d9; }
+.la-badge--danger { color: #943746; background: #fcecee; }

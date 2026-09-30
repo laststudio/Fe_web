@@ -1,0 +1,37 @@
+.la-tooltip-content {
+  z-index: 1060;
+  overflow: hidden;
+  border-radius: var(--la-radius-sm);
+  background-color: var(--la-ink);
+  padding: 5px 10px;
+  font-size: 12px;
+  color: #ffffff;
+  box-shadow: var(--la-shadow-md);
+  animation-duration: var(--la-duration-fast);
+  animation-timing-function: var(--la-ease-out);
+  max-width: 260px;
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+.dark .la-tooltip-content,
+[data-theme="dark"] .la-tooltip-content {
+  background-color: var(--la-surface-2);
+  border: 1px solid var(--la-line-strong);
+  color: var(--la-text-primary);
+}
+
+.la-tooltip-content[data-state="delayed-open"] {
+  animation-name: la-tooltip-fade-in;
+}
+
+@keyframes la-tooltip-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

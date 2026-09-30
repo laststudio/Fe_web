@@ -41,6 +41,7 @@ import {
   getLatestAutoCompleteTask,
   type AutoCompleteTaskResponse,
 } from './api/autoComplete'
+import { Button, Dialog } from './ui'
 
 type Page = '/' | '/history' | '/pk' | '/settings' | '/auto-complete' | string
 
@@ -249,46 +250,38 @@ function AnnouncementModal({
   onClose: () => void
 }) {
   return (
-    <div className="risk-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="announcement-modal-title">
-      <div className="risk-modal-card" style={{ maxWidth: 540 }}>
-        <div className="risk-modal-head" style={{ background: '#eff6ff', borderBottom: '1px solid #bfdbfe' }}>
-          <div className="risk-icon-wrap" style={{ background: '#dbeafe', color: '#1d4ed8' }}>
-            <Icon name="campaign" filled />
-          </div>
-          <div>
-            <h2 id="announcement-modal-title" style={{ color: '#1e40af' }}>
-              {config.announcementTitle || '系统公告'}
-            </h2>
-            {config.announcementUpdatedAt && (
-              <p className="risk-modal-subtitle" style={{ color: '#3b82f6' }}>
-                更新时间：{config.announcementUpdatedAt}
-              </p>
-            )}
-          </div>
-        </div>
-        <div className="risk-modal-body">
-          <p style={{ whiteSpace: 'pre-line', lineHeight: 1.7, fontSize: 14, color: '#1e293b' }}>
-            {config.announcementMessage || '暂无公告内容'}
+    <Dialog
+      onClose={onClose}
+      title={config.announcementTitle || '系统公告'}
+      width={540}
+    >
+      <div className="risk-modal-body" style={{ padding: '8px 0' }}>
+        {config.announcementUpdatedAt && (
+          <p className="risk-modal-subtitle" style={{ color: '#3b82f6', marginBottom: 12 }}>
+            更新时间：{config.announcementUpdatedAt}
           </p>
-        </div>
-        <div className="risk-modal-actions">
-          {config.announcementUrl && (
-            <a
-              href={config.announcementUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="control-secondary"
-              style={{ marginRight: 'auto', textDecoration: 'none' }}
-            >
-              <Icon name="open_in_new" /> 查看详情
-            </a>
-          )}
-          <button className="control-primary" type="button" onClick={onClose}>
-            我知道了
-          </button>
-        </div>
+        )}
+        <p style={{ whiteSpace: 'pre-line', lineHeight: 1.7, fontSize: 14, color: '#1e293b' }}>
+          {config.announcementMessage || '暂无公告内容'}
+        </p>
       </div>
-    </div>
+      <div className="risk-modal-actions" style={{ marginTop: 20 }}>
+        {config.announcementUrl && (
+          <a
+            href={config.announcementUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="control-secondary"
+            style={{ marginRight: 'auto', textDecoration: 'none' }}
+          >
+            <Icon name="open_in_new" /> 查看详情
+          </a>
+        )}
+        <Button variant="primary" onClick={onClose} type="button">
+          我知道了
+        </Button>
+      </div>
+    </Dialog>
   )
 }
 
@@ -297,57 +290,50 @@ function LegalConsentModal({ onAccept }: { onAccept: () => void }) {
   const checkboxId = useId()
 
   return (
-    <div className="risk-modal-backdrop legal-consent-backdrop" role="dialog" aria-modal="true" aria-labelledby="legal-consent-title">
-      <div className="risk-modal-card legal-consent-card">
-        <div className="risk-modal-head legal-consent-head">
-          <div className="risk-icon-wrap legal-consent-icon">
-            <Icon name="verified_user" filled />
-          </div>
-          <div>
-            <h2 id="legal-consent-title">首次使用前，请阅读服务说明</h2>
-            <p className="risk-modal-subtitle">Fe Web · LA Studio 服务</p>
-          </div>
+    <Dialog
+      onClose={() => {}}
+      title="首次使用前，请阅读服务说明"
+      width={560}
+    >
+      <div className="risk-modal-body legal-consent-body" style={{ padding: '8px 0' }}>
+        <p>
+          使用作业同步、解析、语音和第三方账号绑定功能前，请先阅读并理解以下文件。不同意时无法继续使用 Fe Web。
+        </p>
+        <div className="legal-consent-links" aria-label="服务文件" style={{ margin: '14px 0' }}>
+          <a href="https://lastudio.cc/terms#section-1" target="_blank" rel="noreferrer">
+            <Icon name="description" /> 服务协议
+            <Icon name="open_in_new" />
+          </a>
+          <a href="https://lastudio.cc/terms#section-3" target="_blank" rel="noreferrer">
+            <Icon name="lock" /> 隐私政策
+            <Icon name="open_in_new" />
+          </a>
+          <a href="https://lastudio.cc/terms#section-4" target="_blank" rel="noreferrer">
+            <Icon name="warning" /> 免责声明
+            <Icon name="open_in_new" />
+          </a>
         </div>
-        <div className="risk-modal-body legal-consent-body">
-          <p>
-            使用作业同步、解析、语音和第三方账号绑定功能前，请先阅读并理解以下文件。不同意时无法继续使用 Fe Web。
-          </p>
-          <div className="legal-consent-links" aria-label="服务文件">
-            <a href="https://lastudio.cc/terms#section-1" target="_blank" rel="noreferrer">
-              <Icon name="description" /> 服务协议
-              <Icon name="open_in_new" />
-            </a>
-            <a href="https://lastudio.cc/terms#section-3" target="_blank" rel="noreferrer">
-              <Icon name="lock" /> 隐私政策
-              <Icon name="open_in_new" />
-            </a>
-            <a href="https://lastudio.cc/terms#section-4" target="_blank" rel="noreferrer">
-              <Icon name="warning" /> 免责声明
-              <Icon name="open_in_new" />
-            </a>
-          </div>
-          <div className="legal-consent-note">
-            <strong>重点提示</strong>
-            <span>第三方账号凭据、作业内容和语音数据只会在你主动使用对应功能时处理；解析结果仅供课后学习参考，禁止用于考试作弊。</span>
-          </div>
-          <label className="risk-modal-checkbox legal-consent-checkbox" htmlFor={checkboxId}>
-            <input
-              id={checkboxId}
-              type="checkbox"
-              checked={checked}
-              onChange={(event) => setChecked(event.target.checked)}
-            />
-            <span>我已阅读并同意《服务协议》《隐私政策》和《免责声明》</span>
-          </label>
+        <div className="legal-consent-note" style={{ margin: '14px 0' }}>
+          <strong>重点提示</strong>
+          <span>第三方账号凭据、作业内容和语音数据只会在你主动使用对应功能时处理；解析结果仅供课后学习参考，禁止用于考试作弊。</span>
         </div>
-        <div className="risk-modal-actions legal-consent-actions">
-          <span>协议版本：2026-09-25</span>
-          <button className="control-primary" type="button" disabled={!checked} onClick={onAccept}>
-            同意并继续
-          </button>
-        </div>
+        <label className="risk-modal-checkbox legal-consent-checkbox" htmlFor={checkboxId}>
+          <input
+            id={checkboxId}
+            type="checkbox"
+            checked={checked}
+            onChange={(event) => setChecked(event.target.checked)}
+          />
+          <span>我已阅读并同意《服务协议》《隐私政策》和《免责声明》</span>
+        </label>
       </div>
-    </div>
+      <div className="risk-modal-actions legal-consent-actions" style={{ marginTop: 20 }}>
+        <span>协议版本：2026-09-25</span>
+        <Button variant="primary" disabled={!checked} onClick={onAccept} type="button">
+          同意并继续
+        </Button>
+      </div>
+    </Dialog>
   )
 }
 
@@ -364,48 +350,41 @@ function RiskWarningModal({
   const rememberId = useId()
 
   return (
-    <div className="risk-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="risk-modal-title">
-      <div className="risk-modal-card">
-        <div className="risk-modal-head">
-          <div className="risk-icon-wrap">
-            <Icon name="warning" filled />
-          </div>
-          <div>
-            <h2 id="risk-modal-title">顶号与答题提示</h2>
-            <p className="risk-modal-subtitle">作业：{homework.name}</p>
-          </div>
+    <Dialog
+      onClose={onCancel}
+      title={`顶号与答题提示 · ${homework.name}`}
+      width={520}
+    >
+      <div className="risk-modal-body" style={{ padding: '8px 0' }}>
+        <p>
+          如果您的手机或平板端 e听说 <strong>当前正在答题或录音</strong>，解析可能导致移动端被挤下线。
+        </p>
+        <div className="risk-alert-box" style={{ margin: '14px 0' }}>
+          <strong>建议：</strong>
+          <ul>
+            <li>建议在<strong>移动端完成作答后</strong>，再在网页端进行作业解析与答案查阅。</li>
+            <li>如未在移动端进行考试或答题，可放心继续。</li>
+          </ul>
         </div>
-        <div className="risk-modal-body">
-          <p>
-            如果您的手机或平板端 e听说 <strong>当前正在答题或录音</strong>，解析可能导致移动端被挤下线。
-          </p>
-          <div className="risk-alert-box">
-            <strong>建议：</strong>
-            <ul>
-              <li>建议在<strong>移动端完成作答后</strong>，再在网页端进行作业解析与答案查阅。</li>
-              <li>如未在移动端进行考试或答题，可放心继续。</li>
-            </ul>
-          </div>
-          <label className="risk-modal-checkbox" htmlFor={rememberId}>
-            <input
-              id={rememberId}
-              type="checkbox"
-              checked={remember}
-              onChange={(e) => setRemember(e.target.checked)}
-            />
-            <span>记住选择（不再弹出此提示）</span>
-          </label>
-        </div>
-        <div className="risk-modal-actions">
-          <button className="control-secondary" type="button" onClick={onCancel}>
-            取消
-          </button>
-          <button className="control-primary" type="button" onClick={() => onConfirm(remember)}>
-            我已了解，开始解析
-          </button>
-        </div>
+        <label className="risk-modal-checkbox" htmlFor={rememberId}>
+          <input
+            id={rememberId}
+            type="checkbox"
+            checked={remember}
+            onChange={(e) => setRemember(e.target.checked)}
+          />
+          <span>记住选择（不再弹出此提示）</span>
+        </label>
       </div>
-    </div>
+      <div className="risk-modal-actions" style={{ marginTop: 20 }}>
+        <Button variant="secondary" onClick={onCancel} type="button">
+          取消
+        </Button>
+        <Button variant="primary" onClick={() => onConfirm(remember)} type="button">
+          我已了解，开始解析
+        </Button>
+      </div>
+    </Dialog>
   )
 }
 
@@ -447,38 +426,31 @@ function CaptchaModal({
   }
 
   return (
-    <div className="risk-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="captcha-modal-title">
-      <div className="risk-modal-card fe-captcha-modal-card">
-        <div className="fe-captcha-head">
-          <div className="risk-icon-wrap">
-            <Icon name="verified_user" filled />
+    <Dialog
+      onClose={onCancel}
+      title={title}
+      width={480}
+    >
+      <div className="fe-cap-modal-body" style={{ padding: '8px 0' }}>
+        {subtitle && <p style={{ color: 'var(--la-text-secondary)', marginBottom: 12 }}>{subtitle}</p>}
+        <CapVerification
+          onError={(msg) => setError(msg)}
+          onToken={handleToken}
+        />
+        {error && (
+          <div className="fe-captcha-error" role="alert" style={{ marginTop: 12 }}>
+            <Icon name="error" />
+            <span>{error}</span>
           </div>
-          <div>
-            <h2 id="captcha-modal-title">{title}</h2>
-            <p>{subtitle}</p>
-          </div>
-        </div>
-
-        <div className="fe-cap-modal-body" style={{ padding: '20px 24px' }}>
-          <CapVerification
-            onError={(msg) => setError(msg)}
-            onToken={handleToken}
-          />
-          {error && (
-            <div className="fe-captcha-error" role="alert">
-              <Icon name="error" />
-              <span>{error}</span>
-            </div>
-          )}
-        </div>
-
-        <div className="risk-modal-actions" style={{ padding: '16px 24px 20px', borderTop: '1px solid var(--control-line)' }}>
-          <button className="control-secondary" type="button" onClick={onCancel}>
-            取消
-          </button>
-        </div>
+        )}
       </div>
-    </div>
+
+      <div className="risk-modal-actions" style={{ marginTop: 20 }}>
+        <Button variant="secondary" onClick={onCancel} type="button">
+          取消
+        </Button>
+      </div>
+    </Dialog>
   )
 }
 
