@@ -148,7 +148,7 @@ export default function ChangyanLoginModal({
             <span className="fe-changyan-title-icon">{symbol('verified_user')}</span>
             <div>
               <h2>讯飞登录</h2>
-              <p>在下方完成 e听说账号登录，凭据将直接用于建立云端会话</p>
+              <p>在下方完成 ETS100 账号登录，凭据将直接用于建立云端会话</p>
             </div>
           </div>
           <button
