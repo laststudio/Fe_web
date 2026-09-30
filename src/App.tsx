@@ -377,7 +377,7 @@ function RiskWarningModal({
         </div>
         <div className="risk-modal-body">
           <p>
-            如果您的手机或平板端 ETS100 <strong>当前正在答题或录音</strong>，解析可能导致移动端被挤下线。
+            如果您的手机或平板端 e听说 <strong>当前正在答题或录音</strong>，解析可能导致移动端被挤下线。
           </p>
           <div className="risk-alert-box">
             <strong>建议：</strong>
@@ -420,7 +420,7 @@ function isSessionExpired(expiresAt: number | undefined | null): boolean {
 
 function CaptchaModal({
   title = '安全人机验证',
-  subtitle = '为保护 ETS 账号安全并防御接口频繁请求，请完成下方人机验证以继续。',
+  subtitle = '为保护 e听说账号安全并防御接口频繁请求，请完成下方人机验证以继续。',
   onSuccess,
   onCancel,
 }: {
@@ -1227,7 +1227,7 @@ function HomeworkListView({
               ? hasLoaded
                 ? `${categoryMeta.title} · 共 ${filtered.length} 份`
                 : '待手动读取'
-              : '未绑定 ETS100'}
+              : '未绑定 e听说'}
           </span>
           <button
             className={`control-icon-button ${isLoading ? 'fe-spin' : ''}`}
@@ -1431,7 +1431,7 @@ function HomeworkListView({
           </div>
           <div className="fe-list-prompt-account-pill">
             <span className="admin-status-dot is-online" />
-            <span>ETS100 账号：{accountInfo.account_display || '已关联'}</span>
+            <span>e听说账号：{accountInfo.account_display || '已关联'}</span>
           </div>
           <h3>
             {activeTab === 'current'
@@ -1480,7 +1480,7 @@ function HomeworkListView({
             <Icon name="sync" />
           </div>
           <h2>正在同步{categoryMeta.title}列表...</h2>
-          <p style={{ color: 'var(--control-muted)', fontSize: 13 }}>正在从 ETS100 云端拉取最新作业，请稍候...</p>
+          <p style={{ color: 'var(--control-muted)', fontSize: 13 }}>正在从 e听说云端拉取最新作业，请稍候...</p>
         </div>
       ) : filtered.length === 0 ? (
         <div className="fe-empty-state" style={{ margin: '50px auto' }}>
@@ -1560,7 +1560,7 @@ function SettingsPage({
   getFeatureStatus?: (featureKey: string, defaultName?: string) => FeatureCheck
 }) {
   const [skipRisk, setSkipRisk] = useState(readStoredSkipRiskWarning)
-  // 账号中心绑定与「讯飞登录」都视为已连接 ETS100。
+  // 账号中心绑定与「讯飞登录」都视为已连接 e听说。
   const etsReady = Boolean(accountInfo?.bound || accountInfo?.session_ready)
   // 后端 source：phone（手机号体系绑定）/ changyan（讯飞·畅言体系绑定）
   const etsSource = etsReady ? accountInfo?.source || '' : ''
@@ -1620,7 +1620,7 @@ function SettingsPage({
         <div className="admin-policy-card-head">
           <Icon name="account_box" />
           <div>
-            <h3>ETS100 平台账号状态</h3>
+            <h3>e听说平台账号状态</h3>
             <p>用于读取作业的 E听说账号</p>
           </div>
         </div>
@@ -1862,7 +1862,7 @@ function App() {
   const [changyanOpen, setChangyanOpen] = useState(false)
   const [changyanBusy, setChangyanBusy] = useState(false)
   const [changyanError, setChangyanError] = useState<string | null>(null)
-  // 账号中心绑定或「讯飞登录」任一来源，ETS100 都算可用。
+  // 账号中心绑定或「讯飞登录」任一来源，e听说都算可用。
   const etsReady = Boolean(accountInfo?.bound || accountInfo?.session_ready)
   const [homeworks, setHomeworks] = useState<HomeworkItem[]>([])
   const [historyHomeworks, setHistoryHomeworks] = useState<HomeworkItem[]>([])
@@ -2508,7 +2508,7 @@ function App() {
     return keywords.some((kw) => msg.includes(kw))
   }
 
-  /** 畅言网页登录成功后：后端兑换 ETS100 会话 → 刷新账号状态与作业列表。 */
+  /** 畅言网页登录成功后：后端兑换 e听说会话 → 刷新账号状态与作业列表。 */
   async function handleChangyanCredential(credential: ChangyanCredentialPayload) {
     const accessToken = session?.accessToken
     if (!accessToken) {
@@ -2522,7 +2522,7 @@ function App() {
       const account = await getPlatformAccount(accessToken)
       setAccountInfo(account)
       setChangyanOpen(false)
-      console.info('讯飞登录成功，ETS100 账号：', result.account_display)
+      console.info('讯飞登录成功，e听说账号：', result.account_display)
       // 注意：不能带 forceRefresh —— 那会清掉刚写入的畅言会话，
       // 而未绑定账号中心的用户无法用密码重建会话。
       await doFetchHomeworks(activeTab)
@@ -3012,7 +3012,7 @@ function App() {
       {
         label: '系统与服务',
         items: [
-          { icon: 'settings', label: '设置与账号', caption: 'ETS 账号与功能设置', page: '/settings' },
+          { icon: 'settings', label: '设置与账号', caption: 'e听说账号与功能设置', page: '/settings' },
         ],
       },
     ]
@@ -3186,8 +3186,8 @@ function App() {
                   <strong>{currentUser?.name || '我的账号'}</strong>
                   <small>
                     {etsReady
-                      ? (accountInfo?.account_display ? `ETS: ${accountInfo.account_display}` : 'ETS 已连接')
-                      : 'ETS 未绑定'}
+                      ? (accountInfo?.account_display ? `e听说: ${accountInfo.account_display}` : 'e听说已连接')
+                      : 'e听说未绑定'}
                   </small>
                 </div>
                 <Icon name="expand_more" className={`control-account-caret ${userMenuOpen ? 'is-open' : ''}`} />
@@ -3223,8 +3223,8 @@ function App() {
                           <span className="control-user-ets-dot" />
                           <span>
                             {etsReady
-                              ? (accountInfo?.account_display ? `ETS: ${accountInfo.account_display}` : 'ETS 已连接')
-                              : 'ETS 未绑定'}
+                              ? (accountInfo?.account_display ? `e听说: ${accountInfo.account_display}` : 'e听说已连接')
+                              : 'e听说未绑定'}
                           </span>
                         </div>
                       </div>
@@ -3245,7 +3245,7 @@ function App() {
                         </div>
                         <div className="control-user-dropdown-text">
                           <strong>工作台设置</strong>
-                          <small>ETS 账号连接与功能偏好</small>
+                          <small>e听说账号连接与功能偏好</small>
                         </div>
                         <Icon name="chevron_right" className="control-user-dropdown-arrow" />
                       </button>
@@ -3263,7 +3263,7 @@ function App() {
                         </div>
                         <div className="control-user-dropdown-text">
                           <strong>通行证中心</strong>
-                          <small>个人信息、ETS 绑定与安全管理</small>
+                          <small>个人信息、e听说绑定与安全管理</small>
                         </div>
                         <Icon name="open_in_new" className="control-user-dropdown-arrow" />
                       </a>
@@ -3396,7 +3396,7 @@ function App() {
           <footer>
             <i style={{ background: etsReady ? '#2f7a55' : '#94a3b8' }} />
             <span className="admin-footer-label">
-              {etsReady ? 'ETS100 已连接' : 'ETS100 未绑定'}
+              {etsReady ? 'e听说已连接' : 'e听说未绑定'}
             </span>
           </footer>
         </aside>
