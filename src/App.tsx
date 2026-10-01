@@ -1497,14 +1497,12 @@ function SettingsPage({
   accessToken,
   onToast,
   onRefreshSession,
-  onChangyanLogin,
 }: {
   currentUser: User | null
   accountInfo: PlatformAccountInfo | null
   accessToken: string
   onToast?: (msg: string) => void
   onRefreshSession: () => void
-  onChangyanLogin?: () => void
 }) {
   const [skipRisk, setSkipRisk] = useState(readStoredSkipRiskWarning)
   // 账号中心绑定与「讯飞登录」都视为已连接 e听说。
@@ -1640,16 +1638,11 @@ function SettingsPage({
             <strong>账号管理操作</strong>
             <span>
               {etsReady
-                ? '在账号中心解绑或换绑，也可直接用讯飞登录换绑'
+                ? '在账号中心更新数据或解绑；解绑后可在账号中心重新选择登录方式绑定'
                 : '两种登录方式任选其一：手机号 + 密码，或讯飞登录'}
             </span>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {onChangyanLogin && (
-              <button className="control-secondary" type="button" onClick={onChangyanLogin}>
-                <Icon name="login" /> 讯飞登录
-              </button>
-            )}
             <a
               href="https://lastudio.cc/account"
               target="_blank"
@@ -3503,10 +3496,6 @@ function App() {
               accessToken={session.accessToken}
               onToast={showToast}
               onRefreshSession={handleRequestRefresh}
-              onChangyanLogin={() => {
-                setChangyanError(null)
-                setChangyanOpen(true)
-              }}
             />
           ) : viewingPaper ? (
             <PaperReaderView
