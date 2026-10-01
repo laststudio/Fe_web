@@ -2759,7 +2759,28 @@ function App() {
       showToast(compat.reason || '该作业包含暂不支持自动完成的题型，暂未开放')
       return
     }
-    setAutoCompleteModalHw(hw)
+    // 低频启动直接申请准入令牌；仅当后端频控返回 captcha_required 时才弹人机验证
+    void requestAutoCompletePermit(hw)
+  }
+
+  async function requestAutoCompletePermit(hw: HomeworkItem, capToken?: string) {
+    if (!session) return
+    try {
+      const res = await getAutoCompletePermit(session.accessToken, hw.id, capToken)
+      setAutoCompletePermitToken(res.permit_token)
+      setAutoCompleteTargetHw(hw)
+      const nextPath = `/homework/${hw.id}/auto-complete`
+      transitionRoute(() => {
+        window.history.pushState(null, '', nextPath)
+        setPathname(nextPath)
+      })
+    } catch (err: unknown) {
+      if (err instanceof ApiError && err.captchaRequired) {
+        setAutoCompleteModalHw(hw)
+        return
+      }
+      showToast(err instanceof Error ? err.message : '申请自动完成准入令牌失败')
+    }
   }
 
   async function handleAutoCompleteCaptchaSuccess(capToken: string) {
@@ -2776,19 +2797,7 @@ function App() {
     }
 
     showToast('安全人机验证通过，正在申请自动完成准入令牌...')
-    try {
-      const res = await getAutoCompletePermit(session.accessToken, hw.id, capToken)
-      setAutoCompletePermitToken(res.permit_token)
-      setAutoCompleteTargetHw(hw)
-      const nextPath = `/homework/${hw.id}/auto-complete`
-      transitionRoute(() => {
-        window.history.pushState(null, '', nextPath)
-        setPathname(nextPath)
-      })
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : '申请自动完成准入令牌失败'
-      showToast(msg)
-    }
+    await requestAutoCompletePermit(hw, capToken)
   }
 
   const navigate = useCallback((nextPage: Page) => {
