@@ -46,6 +46,20 @@ function friendlyTaskStage(stage: string | null | undefined, fallback = '任务�
   return cleaned || fallback
 }
 
+/** 排队中的文案：后端给出队位，前端只说人话 */
+function queueHint(task: AutoCompleteTaskResponse | null | undefined): string {
+  const position = Number(task?.queue_position || 0)
+  const size = Number(task?.queue_size || 0)
+  if (!position) return '排队中，稍后自动开始'
+  if (position <= 1) return '排队中：下一个就是你，会自动开始'
+  const suffix = size > 0 ? `（共 ${size} 个等待）` : ''
+  return `排队中：前面还有 ${position - 1} 个任务${suffix}`
+}
+
+function isTaskQueued(task: AutoCompleteTaskResponse | null | undefined): boolean {
+  return task?.status === 'QUEUED'
+}
+
 export type AutoCompletePageProps = {
   homework?: HomeworkItem | null
   paper?: Paper | null
@@ -1675,8 +1689,16 @@ export function AutoCompletePage({
           >
             <div className="fe-capsule-spinner">
               <Icon
-                name={currentTask?.status === 'COMPLETED' ? 'check_circle' : 'sync'}
-                className={currentTask?.status === 'COMPLETED' ? '' : 'fe-spin'}
+                name={
+                  currentTask?.status === 'COMPLETED'
+                    ? 'check_circle'
+                    : isTaskQueued(currentTask)
+                    ? 'schedule'
+                    : 'sync'
+                }
+                className={
+                  currentTask?.status === 'COMPLETED' || isTaskQueued(currentTask) ? '' : 'fe-spin'
+                }
               />
             </div>
             <div className="fe-capsule-info">
@@ -1685,9 +1707,15 @@ export function AutoCompletePage({
                   ? '已完成自动做题'
                   : currentTask?.status === 'FAILED'
                   ? '任务执行中断'
+                  : isTaskQueued(currentTask)
+                  ? '任务排队中'
                   : `正在自动完成 (${currentTask?.progress || 10}%)`}
               </strong>
-              <small>{friendlyTaskStage(currentTask?.stage_label || currentTask?.stage_text)}</small>
+              <small>
+                {isTaskQueued(currentTask)
+                  ? queueHint(currentTask)
+                  : friendlyTaskStage(currentTask?.stage_label || currentTask?.stage_text)}
+              </small>
             </div>
             <button
               type="button"
@@ -1868,19 +1896,53 @@ export function AutoCompletePage({
                 <div className="fe-exec-progress-track">
                   <div
                     className="fe-exec-progress-bar"
-                    style={{ width: `${Math.max(6, currentTask?.progress || 10)}%` }}
+                    style={{
+                      width: isTaskQueued(currentTask)
+                        ? '6%'
+                        : `${Math.max(6, currentTask?.progress || 10)}%`,
+                    }}
                   />
                 </div>
 
                 <div className="fe-exec-progress-meta">
                   <span className="fe-exec-stage-text">
-                    <Icon name="sync" className="fe-spin" />
-                    {friendlyTaskStage(currentTask?.stage_label || currentTask?.stage_text, '正在准备作业...')}
+                    <Icon
+                      name={isTaskQueued(currentTask) ? 'schedule' : 'sync'}
+                      className={isTaskQueued(currentTask) ? '' : 'fe-spin'}
+                    />
+                    {isTaskQueued(currentTask)
+                      ? queueHint(currentTask)
+                      : friendlyTaskStage(
+                          currentTask?.stage_label || currentTask?.stage_text,
+                          '正在准备作业...'
+                        )}
                   </span>
                   <strong className="fe-exec-percentage">
-                    {currentTask?.progress || 10}%
+                    {isTaskQueued(currentTask) ? '排队' : `${currentTask?.progress || 10}%`}
                   </strong>
                 </div>
+
+                {isTaskQueued(currentTask) ? (
+                  <p
+                    style={{
+                      margin: '0 0 10px',
+                      padding: '8px 12px',
+                      background: '#fef9c3',
+                      border: '1px solid #fde68a',
+                      borderRadius: 8,
+                      fontSize: 12.5,
+                      color: '#92400e',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <Icon name="info" style={{ fontSize: 15 }} />
+                    <span>
+                      当前并发已满，任务在排队。排到会自动开始，无需留在本页；关闭页面不影响排队。
+                    </span>
+                  </p>
+                ) : null}
 
                 <div className="fe-exec-content-row">
                   {/* Question Stem preview with fade in */}
@@ -2038,18 +2100,35 @@ export function AutoCompletePage({
       setIsMinimized(false)
       setViewMode('execution')
       // Immediate visual feedback so user sees the pipeline active
-      const initialTask: AutoCompleteTaskResponse = {
-        task_id: res.task_id,
-        status: 'PREPARING',
-        progress: 10,
-        stage_label: '[1/8] 正在准备登录状态...',
-        stage_text: '[1/8] 正在准备登录状态...',
-        homework_id: currentHw.id,
-        homework_name: currentHw.name,
-      }
+      const queued = res.status === 'QUEUED'
+      const initialTask: AutoCompleteTaskResponse = queued
+        ? {
+            task_id: res.task_id,
+            status: 'QUEUED',
+            progress: 0,
+            stage_label: '',
+            stage_text: '',
+            queue_position: res.queue_position || 1,
+            queue_size: res.queue_size || 0,
+            homework_id: currentHw.id,
+            homework_name: currentHw.name,
+          }
+        : {
+            task_id: res.task_id,
+            status: 'PREPARING',
+            progress: 10,
+            stage_label: '[1/8] 正在准备登录状态...',
+            stage_text: '[1/8] 正在准备登录状态...',
+            homework_id: currentHw.id,
+            homework_name: currentHw.name,
+          }
       setLocalTaskStatus(initialTask)
       onTaskChange?.(initialTask)
-      onToast?.('自动完成任务已发起，正在为您执行！')
+      onToast?.(
+        queued
+          ? `当前并发已满，任务已排队（${queueHint(initialTask)}），排到会自动开始`
+          : '自动完成任务已发起，正在为您执行！'
+      )
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '发起任务失败'
       onToast?.(msg)
@@ -2113,13 +2192,21 @@ export function AutoCompletePage({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <Icon name="sync" className="fe-spin" style={{ fontSize: 24, color: '#059669', flexShrink: 0 }} />
+            <Icon
+              name={isTaskQueued(currentTask) ? 'schedule' : 'sync'}
+              className={isTaskQueued(currentTask) ? '' : 'fe-spin'}
+              style={{ fontSize: 24, color: isTaskQueued(currentTask) ? '#b45309' : '#059669', flexShrink: 0 }}
+            />
             <div>
-              <strong style={{ color: '#065f46', fontSize: 14.5, display: 'block', marginBottom: 2 }}>
-                该作业正在自动完成（进度 {currentTask.progress || 0}%）
+              <strong style={{ color: isTaskQueued(currentTask) ? '#92400e' : '#065f46', fontSize: 14.5, display: 'block', marginBottom: 2 }}>
+                {isTaskQueued(currentTask)
+                  ? `该作业已提交，正在排队`
+                  : `该作业正在自动完成（进度 ${currentTask.progress || 0}%）`}
               </strong>
-              <span style={{ color: '#047857', fontSize: 13 }}>
-                {friendlyTaskStage(currentTask.stage_label || currentTask.stage_text, '任务处理中，无需重复配置')}
+              <span style={{ color: isTaskQueued(currentTask) ? '#b45309' : '#047857', fontSize: 13 }}>
+                {isTaskQueued(currentTask)
+                  ? `${queueHint(currentTask)}，排到会自动开始，无需重复提交`
+                  : friendlyTaskStage(currentTask.stage_label || currentTask.stage_text, '任务处理中，无需重复配置')}
               </span>
             </div>
           </div>
@@ -2992,11 +3079,22 @@ export function AutoCompletePage({
           title="点击展开实时任务执行看板"
         >
           <div className="fe-capsule-spinner">
-            <Icon name="sync" className="fe-spin" />
+            <Icon
+              name={isTaskQueued(currentTask) ? 'schedule' : 'sync'}
+              className={isTaskQueued(currentTask) ? '' : 'fe-spin'}
+            />
           </div>
           <div className="fe-capsule-info">
-            <strong>正在自动完成 ({currentTask?.progress || 10}%)</strong>
-            <small>{friendlyTaskStage(currentTask?.stage_label || currentTask?.stage_text)}</small>
+            <strong>
+              {isTaskQueued(currentTask)
+                ? '任务排队中'
+                : `正在自动完成 (${currentTask?.progress || 10}%)`}
+            </strong>
+            <small>
+              {isTaskQueued(currentTask)
+                ? queueHint(currentTask)
+                : friendlyTaskStage(currentTask?.stage_label || currentTask?.stage_text)}
+            </small>
           </div>
           <button
             type="button"

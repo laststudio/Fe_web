@@ -49,6 +49,7 @@ export type StartAutoCompletePayload = {
 
 export type AutoCompleteTaskStatus =
   | 'PENDING'
+  | 'QUEUED'
   | 'PREPARING'
   | 'EXTRACTING'
   | 'SYNTHESIZING'
@@ -108,6 +109,10 @@ export type AutoCompleteTaskResponse = {
   error?: string | null
   target_use_time?: number
   current_elapsed_seconds?: number
+  /** 排队位置（1 = 下一个就是它）；不在队列里为 0 或缺省 */
+  queue_position?: number
+  /** 当前等待队列总长度 */
+  queue_size?: number
 }
 
 export function getAutoCompletePermit(
@@ -129,11 +134,19 @@ export function getAutoCompletePermit(
   })
 }
 
+export type StartAutoCompleteResponse = {
+  task_id: string
+  /** 并发已满时会直接是 QUEUED（此时任务还没开始跑） */
+  status?: AutoCompleteTaskStatus
+  queue_position?: number
+  queue_size?: number
+}
+
 export function startAutoComplete(
   accessToken: string,
   payload: StartAutoCompletePayload
-): Promise<{ task_id: string }> {
-  return apiRequest<{ task_id: string }>('/homework/auto-complete', {
+): Promise<StartAutoCompleteResponse> {
+  return apiRequest<StartAutoCompleteResponse>('/homework/auto-complete', {
     accessToken,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
