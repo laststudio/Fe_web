@@ -22,50 +22,12 @@ export type FeatureCheck = {
   minMemberTier?: string
 }
 
-export type CloneModelId = 'pocket-tts' | 'ming-omni-tts' | 'moss-tts-nano'
-
-const AUDITION_MODELS: Array<{
-  id: CloneModelId
-  name: string
-  featureKey: string
-  badge: string
-  desc: string
-  latency: string
-}> = [
-  {
-    id: 'pocket-tts',
-    name: 'Pocket TTS',
-    featureKey: 'tts_model_pocket_tts',
-    badge: '快速·推荐',
-    desc: '响应快，适合普通朗读',
-    latency: '~2s',
-  },
-  {
-    id: 'ming-omni-tts',
-    name: 'Ming-Omni',
-    featureKey: 'tts_model_ming_omni_tts',
-    badge: '自然',
-    desc: '声音更接近自然口语，等待时间较长',
-    latency: '60~120s',
-  },
-  {
-    id: 'moss-tts-nano',
-    name: 'MOSS Nano',
-    featureKey: 'tts_model_moss_tts_nano',
-    badge: '平稳',
-    desc: '声音自然平稳，适合口语朗读',
-    latency: '~2s',
-  },
-]
-
 export function VoiceManager({
   accessToken,
   onToast,
-  getFeatureStatus,
 }: {
   accessToken: string
   onToast?: (msg: string) => void
-  getFeatureStatus?: (featureKey: string, defaultName?: string) => FeatureCheck
 }) {
   const [voices, setVoices] = useState<VoiceProfile[]>([])
   const [loading, setLoading] = useState(false)
@@ -76,10 +38,8 @@ export function VoiceManager({
   const previewAudioRef = useRef<HTMLAudioElement | null>(null)
 
   // Cloned voice preview state & model
-  const [selectedAuditionModel, setSelectedAuditionModel] = useState<CloneModelId>('pocket-tts')
   const [cloningVoiceId, setCloningVoiceId] = useState<string | null>(null)
   const [playingClonedId, setPlayingClonedId] = useState<string | null>(null)
-  const [playingClonedModel, setPlayingClonedModel] = useState<CloneModelId | null>(null)
   const cloneAudioRef = useRef<HTMLAudioElement | null>(null)
 
   // Studio tabs: 'mic' | 'upload'
@@ -220,27 +180,14 @@ export function VoiceManager({
     })
   }
 
-  const handleToggleClonePreview = async (
-    voice: VoiceProfile,
-    targetModel: CloneModelId = selectedAuditionModel
-  ) => {
-    if (playingClonedId === voice.id && playingClonedModel === targetModel) {
+  // 试听：用该录音做参考音合成一小段。引擎由后台「TTS 提供商」决定，客户端不选模型。
+  const handleToggleClonePreview = async (voice: VoiceProfile) => {
+    if (playingClonedId === voice.id) {
       if (cloneAudioRef.current) {
         cloneAudioRef.current.pause()
       }
       setPlayingClonedId(null)
-      setPlayingClonedModel(null)
       return
-    }
-
-    if (getFeatureStatus) {
-      const modelMeta = AUDITION_MODELS.find((m) => m.id === targetModel)
-      const featKey = modelMeta?.featureKey || `tts_model_${targetModel.replace(/-/g, '_')}`
-      const feat = getFeatureStatus(featKey, modelMeta?.name || '该模型')
-      if (feat.status === 'feature_disabled' || feat.status === 'kill_switch') {
-        onToast?.(feat.reason || '该 TTS 模型当前已被管理员停用')
-        return
-      }
     }
 
     if (cloneAudioRef.current) {
@@ -253,9 +200,8 @@ export function VoiceManager({
     }
 
     setCloningVoiceId(voice.id)
-    setPlayingClonedModel(targetModel)
     try {
-      const blob = await getVoiceClonePreview(accessToken, voice.id, undefined, targetModel)
+      const blob = await getVoiceClonePreview(accessToken, voice.id)
       const url = URL.createObjectURL(blob)
       const audio = new Audio(url)
       cloneAudioRef.current = audio
@@ -263,18 +209,15 @@ export function VoiceManager({
 
       audio.onended = () => {
         setPlayingClonedId(null)
-        setPlayingClonedModel(null)
         URL.revokeObjectURL(url)
       }
       audio.onerror = () => {
         setPlayingClonedId(null)
-        setPlayingClonedModel(null)
         URL.revokeObjectURL(url)
         onToast?.('克隆试听播放失败')
       }
       await audio.play()
     } catch (err: unknown) {
-      setPlayingClonedModel(null)
       const msg = err instanceof Error ? err.message : '声音克隆试听生成失败'
       onToast?.(msg)
     } finally {
@@ -619,88 +562,6 @@ export function VoiceManager({
           </div>
         )}
 
-        {voices.length > 0 && (
-          <div
-            className="fe-voice-audition-bar"
-            style={{
-              margin: '0 20px 12px',
-              padding: '10px 14px',
-              background: '#f8fafc',
-              borderRadius: 8,
-              border: '1px solid var(--control-line)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--control-ink)' }}>
-                <Icon name="psychology" style={{ fontSize: 17, color: '#7c3aed' }} />
-                <span>克隆试听驱动模型：</span>
-              </div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {AUDITION_MODELS.map((m) => {
-                  const isSel = selectedAuditionModel === m.id
-                  const feat: FeatureCheck = getFeatureStatus
-                    ? getFeatureStatus(m.featureKey, m.name)
-                    : { enabled: true, status: 'enabled', reason: '' }
-                  const isRestricted = feat.status === 'membership_required'
-                  const isDisabled = feat.status === 'feature_disabled'
-                  return (
-                    <button
-                      key={m.id}
-                      type="button"
-                      className={`fe-voice-audition-pill ${isSel ? 'is-active' : ''} ${isDisabled ? 'is-disabled' : ''}`}
-                      onClick={() => {
-                        if (isDisabled) {
-                          onToast?.(feat.reason || `${m.name} 已被停用`)
-                          return
-                        }
-                        if (isRestricted) {
-                          onToast?.(feat.reason || `${m.name} 需要 ${feat.minMemberTier === 'ultra' ? 'SVIP' : 'VIP'} 会员权限`)
-                        }
-                        setSelectedAuditionModel(m.id)
-                      }}
-                      title={`${m.name}: ${m.desc} (耗时 ${m.latency})`}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        padding: '4px 10px',
-                        borderRadius: 6,
-                        border: isSel ? '1px solid #7c3aed' : '1px solid var(--control-line)',
-                        background: isSel ? '#f5f3ff' : '#ffffff',
-                        color: isSel ? '#6d28d9' : 'var(--control-ink)',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        cursor: isDisabled ? 'not-allowed' : 'pointer',
-                        opacity: isDisabled ? 0.6 : 1,
-                        transition: 'all 0.15s ease',
-                      }}
-                    >
-                      <span>{m.name}</span>
-                      {isDisabled ? (
-                        <span style={{ fontSize: 10, background: '#fee2e2', color: '#b91c1c', padding: '1px 5px', borderRadius: 4 }}>已停用</span>
-                      ) : isRestricted ? (
-                        <span style={{ fontSize: 10, background: '#fef3c7', color: '#b45309', padding: '1px 5px', borderRadius: 4 }}>
-                          {feat.minMemberTier === 'ultra' ? 'SVIP 专享' : 'VIP 专享'}
-                        </span>
-                      ) : (
-                        <span style={{ fontSize: 10, background: isSel ? '#ede9fe' : '#f1f5f9', color: isSel ? '#7c3aed' : '#64748b', padding: '1px 5px', borderRadius: 4 }}>
-                          {m.badge}
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-            <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--control-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Icon name="info" style={{ fontSize: 14 }} />
-              <span>
-                {AUDITION_MODELS.find((m) => m.id === selectedAuditionModel)?.desc}（生成耗时{' '}
-                {AUDITION_MODELS.find((m) => m.id === selectedAuditionModel)?.latency}）
-              </span>
-            </div>
-          </div>
-        )}
 
         <div className="fe-voice-list">
           {loading && voices.length === 0 ? (
@@ -747,9 +608,9 @@ export function VoiceManager({
                     <button
                       type="button"
                       className="control-secondary fe-voice-action-btn"
-                      onClick={() => handleToggleClonePreview(voice, selectedAuditionModel)}
+                      onClick={() => handleToggleClonePreview(voice)}
                       disabled={cloningVoiceId === voice.id}
-                      title={`使用 ${AUDITION_MODELS.find((m) => m.id === selectedAuditionModel)?.name} 试听基于此录音克隆出的朗读发音效果`}
+                      title="试听基于此录音克隆出的朗读发音效果"
                       style={
                         playingClonedId === voice.id
                           ? {
@@ -772,10 +633,10 @@ export function VoiceManager({
                       />
                       <span>
                         {cloningVoiceId === voice.id
-                          ? `正在合成 (${AUDITION_MODELS.find((m) => m.id === selectedAuditionModel)?.name})...`
+                          ? '正在合成...'
                           : playingClonedId === voice.id
                           ? '暂停克隆'
-                          : `试听 [${AUDITION_MODELS.find((m) => m.id === selectedAuditionModel)?.name}]`}
+                          : '试听克隆效果'}
                       </span>
                     </button>
                     {!voice.is_default && (

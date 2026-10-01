@@ -46,14 +46,6 @@ function friendlyTaskStage(stage: string | null | undefined, fallback = '任务�
   return cleaned || fallback
 }
 
-export type FeatureCheck = {
-  enabled: boolean
-  status: 'enabled' | 'membership_required' | 'feature_disabled' | 'kill_switch'
-  reason: string
-  minMemberLevel?: number
-  minMemberTier?: string
-}
-
 export type AutoCompletePageProps = {
   homework?: HomeworkItem | null
   paper?: Paper | null
@@ -68,7 +60,6 @@ export type AutoCompletePageProps = {
   activeTask?: AutoCompleteTaskResponse | null
   onTaskChange?: (task: AutoCompleteTaskResponse | null) => void
   isHubRoute?: boolean
-  getFeatureStatus?: (featureKey: string, defaultName?: string) => FeatureCheck
 }
 
 type QuestionScoreItem = {
@@ -99,7 +90,6 @@ export function AutoCompletePage({
   activeTask,
   onTaskChange,
   isHubRoute,
-  getFeatureStatus,
 }: AutoCompletePageProps) {
   // Current active homework fallback
   const currentHw = useMemo<HomeworkItem>(() => {
@@ -192,7 +182,6 @@ export function AutoCompletePage({
 
   // Voice selection
   const [voiceMode, setVoiceMode] = useState<AutoCompleteVoiceMode>('clone')
-  const [cloneModel, setCloneModel] = useState<'pocket-tts' | 'ming-omni-tts' | 'moss-tts-nano'>('pocket-tts')
   const [voices, setVoices] = useState<VoiceProfile[]>([])
   const [selectedVoiceId, setSelectedVoiceId] = useState<string>('')
   const [isPlayingPreview, setIsPlayingPreview] = useState(false)
@@ -898,7 +887,9 @@ export function AutoCompletePage({
   const [isPlayingClonePreview, setIsPlayingClonePreview] = useState(false)
   const cloneAudioRef = useRef<HTMLAudioElement | null>(null)
 
-  const handleToggleClonePreview = async (modelToUse = cloneModel) => {
+  // 试听：用所选声音做一条真实的克隆音频。合成引擎由后台「TTS 提供商」决定，
+  // 客户端不再选模型（试听与实际任务走同一条链路）。
+  const handleToggleClonePreview = async () => {
     if (!selectedVoiceId) {
       onToast?.('请先在上方选择或录制专属声音')
       return
@@ -907,15 +898,6 @@ export function AutoCompletePage({
       if (cloneAudioRef.current) cloneAudioRef.current.pause()
       setIsPlayingClonePreview(false)
       return
-    }
-
-    if (getFeatureStatus) {
-      const featKey = `tts_model_${modelToUse.replace(/-/g, '_')}`
-      const feat = getFeatureStatus(featKey, modelToUse)
-      if (feat.status === 'feature_disabled' || feat.status === 'kill_switch') {
-        onToast?.(feat.reason || '该 TTS 模型当前已被管理员停用')
-        return
-      }
     }
 
     if (cloneAudioRef.current) {
@@ -929,7 +911,7 @@ export function AutoCompletePage({
 
     setIsCloningPreview(true)
     try {
-      const blob = await getVoiceClonePreview(accessToken, selectedVoiceId, undefined, modelToUse)
+      const blob = await getVoiceClonePreview(accessToken, selectedVoiceId)
       const url = URL.createObjectURL(blob)
       const audio = new Audio(url)
       cloneAudioRef.current = audio
@@ -2034,7 +2016,6 @@ export function AutoCompletePage({
         use_time: selectedUseTimeSeconds,
         voice_mode: voiceMode,
         voice_id: voiceMode === 'clone' ? (selectedVoiceId || undefined) : undefined,
-        clone_model: voiceMode === 'clone' ? cloneModel : undefined,
         per_question_scores: perQuestionScoresPayload,
         per_question_audio: mode === 'manual' && Object.keys(manualQuestionAudios).length > 0 ? manualQuestionAudios : undefined,
         permit_token: permitToken || '',
@@ -2049,16 +2030,6 @@ export function AutoCompletePage({
         onToast?.('当前作业已有正在运行的任务，无需重复发起')
         setIsRiskModalOpen(false)
         return
-      }
-
-      if (voiceMode === 'clone' && getFeatureStatus) {
-        const featKey = `tts_model_${cloneModel.replace(/-/g, '_')}`
-        const feat = getFeatureStatus(featKey, cloneModel)
-        if (!feat.enabled) {
-          onToast?.(feat.reason || '当前所选 TTS 模型不可用')
-          setIsRiskModalOpen(false)
-          return
-        }
       }
 
       const res = await startAutoComplete(accessToken, payload)
@@ -2870,184 +2841,29 @@ export function AutoCompletePage({
               </div>
             )}
 
-            <div className="fe-voice-model-picker">
-              <div className="fe-voice-model-header">
-                <div className="fe-voice-model-title-wrap">
-                  <Icon name="psychology" style={{ fontSize: 16, color: 'var(--control-blue)' }} />
-                  <span>AI 克隆驱动模型：</span>
-                </div>
-                <span className="fe-voice-model-tag-free">按会员权限解锁</span>
-              </div>
-
-              <div className="fe-voice-model-tabs">
-                {[
-                  {
-                    id: 'pocket-tts',
-                    name: 'Pocket TTS',
-                    badge: '快速·默认',
-                    isMaintenance: false,
-                  },
-                  {
-                    id: 'ming-omni-tts',
-                    name: 'Ming-Omni',
-                    badge: '自然·较慢',
-                    isMaintenance: false,
-                  },
-                  {
-                    id: 'moss-tts-nano',
-                    name: 'MOSS Nano',
-                    badge: '平稳',
-                    isMaintenance: false,
-                  },
-                ].map((m) => {
-                  const isSel = cloneModel === m.id
-                  const featKey = `tts_model_${m.id.replace(/-/g, '_')}`
-                  const feat: FeatureCheck = getFeatureStatus
-                    ? getFeatureStatus(featKey, m.name)
-                    : { enabled: true, status: 'enabled', reason: '' }
-                  const isRestricted = feat.status === 'membership_required'
-                  const isDisabled = m.isMaintenance || feat.status === 'feature_disabled'
-
-                  return (
-                    <button
-                      key={m.id}
-                      type="button"
-                      className={`fe-voice-model-tab-btn ${isSel ? 'is-active' : ''} ${isDisabled ? 'is-disabled' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        if (m.isMaintenance) {
-                          onToast?.('Ming-Omni 上游服务维护中，请使用推荐的 Pocket TTS 或 MOSS Nano')
-                          return
-                        }
-                        if (isDisabled) {
-                          onToast?.(feat.reason || `${m.name} 已被停用`)
-                          return
-                        }
-                        if (isRestricted) {
-                          onToast?.(feat.reason || `${m.name} 需要 ${feat.minMemberTier === 'ultra' ? 'SVIP' : 'VIP'} 会员权限`)
-                        }
-                        setCloneModel(m.id as 'pocket-tts' | 'ming-omni-tts' | 'moss-tts-nano')
-                      }}
-                    >
-                      <span className="fe-voice-model-tab-name">{m.name}</span>
-                      {isDisabled ? (
-                        <span className="fe-voice-model-tab-badge" style={{ background: '#fee2e2', color: '#b91c1c' }}>已停用</span>
-                      ) : isRestricted ? (
-                        <span className="fe-voice-model-tab-badge" style={{ background: '#fef3c7', color: '#b45309' }}>
-                          {feat.minMemberTier === 'ultra' ? 'SVIP' : 'VIP'}
-                        </span>
-                      ) : (
-                        <span className="fe-voice-model-tab-badge">{m.badge}</span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-
-              <div className="fe-voice-model-detail-card">
-                {cloneModel === 'pocket-tts' && (
-                  <div>
-                    <div className="fe-voice-model-detail-title">
-                      <strong>Pocket TTS · 推荐</strong>
-                      <span>耗时 ~2s · 推荐</span>
-                    </div>
-                    <p>响应快，适合普通朗读。</p>
-                  </div>
-                )}
-                {cloneModel === 'ming-omni-tts' && (
-                  <div>
-                    <div className="fe-voice-model-detail-title">
-                      <strong>Ming-Omni</strong>
-                      <span style={{ color: '#d97706', fontWeight: 600 }}>预计等待 60~120 秒</span>
-                    </div>
-                    <p>声音更接近自然口语，预计等待 60~120 秒。</p>
-                  </div>
-                )}
-                {cloneModel === 'moss-tts-nano' && (
-                  <div>
-                    <div className="fe-voice-model-detail-title">
-                      <strong>MOSS TTS Nano</strong>
-                      <span>耗时 ~2s · 自然平稳</span>
-                    </div>
-                    <p>声音自然平稳，适合口语朗读。</p>
-                  </div>
-                )}
-
-                {(() => {
-                  const currentFeatKey = `tts_model_${cloneModel.replace(/-/g, '_')}`
-                  const currentFeat = getFeatureStatus ? getFeatureStatus(currentFeatKey, cloneModel) : null
-                  if (!currentFeat || currentFeat.enabled) return null
-                  return (
-                    <div
-                      style={{
-                        marginTop: 8,
-                        padding: '6px 10px',
-                        borderRadius: 6,
-                        background: currentFeat.status === 'feature_disabled' ? '#fee2e2' : '#fef3c7',
-                        color: currentFeat.status === 'feature_disabled' ? '#991b1b' : '#92400e',
-                        fontSize: 11.5,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6,
-                      }}
-                    >
-                      <Icon name="warning" style={{ fontSize: 14 }} />
-                      <span>{currentFeat.reason}</span>
-                    </div>
-                  )
-                })()}
-
-                <div
-                  style={{
-                    marginTop: 10,
-                    paddingTop: 8,
-                    borderTop: '1px dashed var(--control-line)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    gap: 8,
-                  }}
-                >
-                  <button
-                    type="button"
-                    className="control-secondary fe-btn-sm"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleToggleClonePreview(cloneModel)
-                    }}
-                    disabled={isCloningPreview || !selectedVoiceId}
-                    title={!selectedVoiceId ? '请先选择声音' : '试听当前模型声音克隆效果'}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      fontSize: 12,
-                      padding: '4px 12px',
-                      borderRadius: 6,
-                      borderColor: isPlayingClonePreview ? '#8b5cf6' : undefined,
-                      color: isPlayingClonePreview ? '#7c3aed' : undefined,
-                      background: isPlayingClonePreview ? '#f5f3ff' : undefined,
-                    }}
-                  >
-                    <Icon
-                      name={isCloningPreview ? 'sync' : isPlayingClonePreview ? 'pause' : 'auto_awesome'}
-                      className={isCloningPreview ? 'fe-spin' : ''}
-                      style={{ fontSize: 15 }}
-                    />
-                    <span>
-                      {isCloningPreview
-                        ? '正在合成音频...'
-                        : isPlayingClonePreview
-                        ? '暂停试听'
-                        : '试听此模型发音效果'}
-                    </span>
-                  </button>
-                  <span style={{ fontSize: 11, color: 'var(--control-muted)' }}>
-                    {selectedVoiceId ? '基于当前选中的声音样本' : '需在上方选择声音样本'}
-                  </span>
-                </div>
-              </div>
+            <div className="fe-voice-clone-preview-row">
+              <button
+                type="button"
+                className="control-secondary fe-btn-sm"
+                onClick={() => void handleToggleClonePreview()}
+                disabled={isCloningPreview || !selectedVoiceId}
+                title={!selectedVoiceId ? '请先选择声音' : '试听克隆后的效果'}
+              >
+                <Icon
+                  name={isCloningPreview ? 'sync' : isPlayingClonePreview ? 'pause' : 'auto_awesome'}
+                  className={isCloningPreview ? 'fe-spin' : ''}
+                />
+                <span>
+                  {isCloningPreview
+                    ? '正在合成音频...'
+                    : isPlayingClonePreview
+                    ? '暂停试听'
+                    : '试听克隆效果'}
+                </span>
+              </button>
+              <span className="fe-voice-preview-hint">
+                {selectedVoiceId ? '基于当前选中的声音样本' : '需在上方选择声音样本'}
+              </span>
             </div>
           </div>
         )}

@@ -39,8 +39,8 @@ export type StartAutoCompletePayload = {
   allow_over_max: boolean
   use_time: number
   voice_mode: AutoCompleteVoiceMode
+  /** 仅 voice_mode==='clone' 时有意义：用哪个声音样本做参考音 */
   voice_id?: string
-  clone_model?: 'pocket-tts' | 'ming-omni-tts' | 'moss-tts-nano'
   per_question_scores?: Record<number, number | { total: number }>
   per_question_audio?: Record<string | number, string>
   permit_token: string

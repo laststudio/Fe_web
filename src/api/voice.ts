@@ -47,11 +47,16 @@ export function getVoiceAudioUrl(voiceId: string, accessToken?: string): string 
   return accessToken ? `${base}?token=${encodeURIComponent(accessToken)}` : base
 }
 
+/**
+ * 试听：用该声音样本做参考音合成一小段音频。
+ *
+ * 不再传 model —— 合成引擎由后台「TTS 提供商」的默认项决定，试听与正式任务
+ * 走同一条链路（含 failover），所以试听结果就代表实际效果。
+ */
 export function getVoiceClonePreview(
   accessToken: string,
   voiceId: string,
-  text?: string,
-  model?: string
+  text?: string
 ): Promise<Blob> {
   return apiBlobRequest(`/user/voices/${encodeURIComponent(voiceId)}/clone-preview`, {
     accessToken,
@@ -61,7 +66,6 @@ export function getVoiceClonePreview(
     },
     body: JSON.stringify({
       text: text || undefined,
-      model: model || undefined,
     }),
   })
 }

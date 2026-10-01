@@ -1498,7 +1498,6 @@ function SettingsPage({
   onToast,
   onRefreshSession,
   onChangyanLogin,
-  getFeatureStatus,
 }: {
   currentUser: User | null
   accountInfo: PlatformAccountInfo | null
@@ -1506,7 +1505,6 @@ function SettingsPage({
   onToast?: (msg: string) => void
   onRefreshSession: () => void
   onChangyanLogin?: () => void
-  getFeatureStatus?: (featureKey: string, defaultName?: string) => FeatureCheck
 }) {
   const [skipRisk, setSkipRisk] = useState(readStoredSkipRiskWarning)
   // 账号中心绑定与「讯飞登录」都视为已连接 e听说。
@@ -1525,7 +1523,7 @@ function SettingsPage({
   return (
     <div className="fe-settings-container">
       {/* Voice Clone & Online Studio Management */}
-      <VoiceManager accessToken={accessToken} onToast={onToast} getFeatureStatus={getFeatureStatus} />
+      <VoiceManager accessToken={accessToken} onToast={onToast} />
 
       {/* Current User Profile Card */}
       <section className="admin-policy-card">
@@ -3493,7 +3491,6 @@ function App() {
                       navigate('/settings')
                     }}
                     isHubRoute={pathname === '/auto-complete'}
-                    getFeatureStatus={getFeatureStatus}
                     onToast={showToast}
                   />
                 )
@@ -3510,7 +3507,6 @@ function App() {
                 setChangyanError(null)
                 setChangyanOpen(true)
               }}
-              getFeatureStatus={getFeatureStatus}
             />
           ) : viewingPaper ? (
             <PaperReaderView
