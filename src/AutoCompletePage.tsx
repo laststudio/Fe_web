@@ -17,6 +17,7 @@ import {
   GRADUATION,
   createRng,
   planQuestionAllocations,
+  isObjectiveQuestion,
   toFiveScale,
   type QuestionAllocation,
 } from './utils/scoreAllocation'
@@ -814,7 +815,9 @@ export function AutoCompletePage({
     const plan = planQuestionAllocations(
       questions.map((q) => q.maxScore),
       autoTargetTotal,
-      allocationSeed
+      allocationSeed,
+      // 客观题（选择题/填空题）官方只会给 0 或满分，预览也必须按全对全错展示
+      questions.map((q) => isObjectiveQuestion(q))
     )
     return questions.map((q, idx) => ({
       order: q.order,

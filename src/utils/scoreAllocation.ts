@@ -231,10 +231,53 @@ function allocateLossSlots(
  * 生成一份"示意分配"：Σ 计划得分 ≡ 设定总分，形态与后端一致。
  * 前端预览用固定 seed 保证渲染稳定，点"换一批"换 seed 即可重新抽样。
  */
+/**
+ * 客观题判定：与后端 auto_complete/runner.py 的 _classify_question_type 保持一致。
+ *
+ * 官方对客观题（选择题/填空题）只会给 0 或满分，**不存在部分分**。
+ * 所以分配时必须把这类题做成"全对全错"，否则预览与实际都会出现 1.38 这种分数。
+ * 口语题严格优先（听选信息这种名字里带"选"的其实是口语题）。
+ */
+const ORAL_CATEGORIES = [
+  'role',
+  'read_sentence',
+  'dialogue',
+  'picture',
+  '3q5a',
+  'repeat_essay',
+  'repeat_dialogue',
+  'word_read',
+]
+const ORAL_KEYWORDS = [
+  '听选信息', '模仿朗读', '信息转述', '三问五答', '回答问题',
+  '短文复述', '跟读', '口语', '朗读', '角色扮演', '提问', '询问', '看图说',
+]
+const CHOICE_CATEGORIES = ['choose', 'select', 'choice', 'fill']
+const CHOICE_KEYWORDS = ['听后选择', '选择', '单选', '多选', '词汇选择', '填空', '记录']
+
+export function isObjectiveQuestion(question: {
+  typeName?: string
+  category?: string
+  options?: string[]
+}): boolean {
+  const category = String(question?.category || '').toLowerCase()
+  const typeName = String(question?.typeName || '').toLowerCase()
+  const isOral =
+    ORAL_CATEGORIES.includes(category) ||
+    ORAL_KEYWORDS.some((keyword) => typeName.includes(keyword))
+  if (isOral) return false
+  return (
+    CHOICE_CATEGORIES.includes(category) ||
+    CHOICE_KEYWORDS.some((keyword) => typeName.includes(keyword)) ||
+    Boolean(question?.options && question.options.length > 0)
+  )
+}
+
 export function planQuestionAllocations(
   fullPoints: number[],
   targetTotal: number,
-  seed = 20250928
+  seed = 20250928,
+  objectiveFlags: boolean[] = []
 ): QuestionAllocation[] {
   const n = fullPoints.length
   if (n === 0) return []
@@ -258,25 +301,96 @@ export function planQuestionAllocations(
   targetSlots = Math.max(0, Math.min(totalMaxSlots, targetSlots))
 
   const rng = createRng(seed)
-  const loss = allocateLossSlots(
-    fullPoints,
-    totalMaxSlots - targetSlots,
-    maxSlots,
-    rate,
-    rng
-  )
+  const flags = fullPoints.map((_, index) => Boolean(objectiveFlags[index]))
+  const binaryIndices = flags
+    .map((flag, index) => (flag && fullPoints[index] > 0 ? index : -1))
+    .filter((index) => index >= 0)
+  const contIndices = fullPoints
+    .map((_, index) => index)
+    .filter((index) => !binaryIndices.includes(index))
+  const targetTotalValue = (totalFull * rate) / 100
+
+  const allocated = fullPoints.map(() => 0)
+
+  if (binaryIndices.length === 0) {
+    const loss = allocateLossSlots(
+      fullPoints,
+      totalMaxSlots - targetSlots,
+      maxSlots,
+      rate,
+      rng
+    )
+    fullPoints.forEach((point, index) => {
+      const slots = Math.max(0, maxSlots[index] - loss[index])
+      // 档位上限用 ceil(F/g)，直接乘会超过满分（2.67 → 2.75），满分必须封顶
+      allocated[index] = Math.min(Number(point.toFixed(2)), Number((slots * GRADUATION).toFixed(2)))
+    })
+  } else {
+    const contFull = contIndices.reduce((sum, index) => sum + Math.max(0, fullPoints[index]), 0)
+    const binaryFloor = Math.max(0, targetTotalValue - contFull)
+
+    // 客观题：按分值权重随机决定判对，能不超目标就先判对
+    const order = [...binaryIndices].sort(
+      (a, b) => Math.max(0, fullPoints[b]) ** 0.9 * (0.5 + rng()) - Math.max(0, fullPoints[a]) ** 0.9 * (0.5 + rng())
+    )
+    const binaryFull = new Set<number>()
+    let binaryAwarded = 0
+    for (const index of order) {
+      const point = Math.max(0, fullPoints[index])
+      if (binaryAwarded + point <= targetTotalValue + 1e-9) {
+        binaryFull.add(index)
+        binaryAwarded += point
+      }
+    }
+    for (const index of [...order].sort((a, b) => fullPoints[b] - fullPoints[a])) {
+      if (binaryAwarded >= binaryFloor - 1e-9) break
+      if (binaryFull.has(index)) continue
+      binaryFull.add(index)
+      binaryAwarded += Math.max(0, fullPoints[index])
+    }
+    for (const index of [...binaryFull].sort((a, b) => fullPoints[b] - fullPoints[a])) {
+      if (binaryAwarded <= targetTotalValue + 1e-9) break
+      binaryFull.delete(index)
+      binaryAwarded -= Math.max(0, fullPoints[index])
+    }
+    for (const index of binaryIndices) {
+      allocated[index] = binaryFull.has(index) ? Number(fullPoints[index].toFixed(2)) : 0
+    }
+
+    if (contIndices.length) {
+      const contPoints = contIndices.map((index) => fullPoints[index])
+      const contMaxSlots = contIndices.map((index) => maxSlots[index])
+      const contTotalMaxSlots = contMaxSlots.reduce((sum, slot) => sum + slot, 0)
+      const contTarget = Math.max(0, Math.min(contFull, targetTotalValue - binaryAwarded))
+      let contTargetSlots = Math.round(contTarget / GRADUATION)
+      contTargetSlots = Math.max(0, Math.min(contTotalMaxSlots, contTargetSlots))
+      const contLoss = allocateLossSlots(
+        contPoints,
+        contTotalMaxSlots - contTargetSlots,
+        contMaxSlots,
+        rate,
+        rng
+      )
+      contIndices.forEach((index, position) => {
+        const slots = Math.max(0, contMaxSlots[position] - contLoss[position])
+        allocated[index] = Math.min(
+          Number(fullPoints[index].toFixed(2)),
+          Number((slots * GRADUATION).toFixed(2))
+        )
+      })
+    }
+  }
 
   return fullPoints.map((point, index) => {
-    const slots = Math.max(0, maxSlots[index] - loss[index])
-    const allocated = Number((slots * GRADUATION).toFixed(2))
     const full = Number(point.toFixed(2))
+    const value = Number(allocated[index].toFixed(2))
     return {
       maxScore: full,
-      allocatedScore: allocated,
-      isFull: Math.abs(allocated - full) < 1e-9,
+      allocatedScore: value,
+      isFull: Math.abs(value - full) < 1e-9,
       isBigQuestion: totalFull > 0 && point / totalFull >= BIG_QUESTION_SHARE,
-      lossSlots: loss[index],
-      lossRatio: full > 0 ? Math.max(0, 1 - allocated / full) : 0,
+      lossSlots: Math.round((full - value) / GRADUATION),
+      lossRatio: full > 0 ? Math.max(0, 1 - value / full) : 0,
     }
   })
 }
