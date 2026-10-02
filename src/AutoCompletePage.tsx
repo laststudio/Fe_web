@@ -1822,9 +1822,50 @@ export function AutoCompletePage({
                   <Icon name="error" />
                 </div>
                 <h2>任务执行遇到问题</h2>
+                {currentTask.error_code ? (
+                  <div
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      marginTop: 8,
+                      padding: '3px 10px',
+                      borderRadius: 999,
+                      background: '#fef2f2',
+                      border: '1px solid #fecaca',
+                      color: '#b91c1c',
+                      fontSize: 12,
+                      fontWeight: 600,
+                    }}
+                  >
+                    <Icon name="error" style={{ fontSize: 14 }} />
+                    <span>
+                      官方错误 {currentTask.error_code}
+                      {currentTask.error_label ? ` · ${currentTask.error_label}` : ''}
+                    </span>
+                  </div>
+                ) : null}
                 <p style={{ maxWidth: 520, margin: '8px auto 0', color: '#b91c1c', wordBreak: 'break-word', whiteSpace: 'pre-line' }}>
                   {currentTask.error || friendlyTaskStage(currentTask.stage_label, '任务执行失败，请稍后重试。')}
                 </p>
+                {currentTask.error_suggestion ? (
+                  <p
+                    style={{
+                      maxWidth: 520,
+                      margin: '10px auto 0',
+                      padding: '8px 12px',
+                      background: '#fffbeb',
+                      border: '1px solid #fde68a',
+                      borderRadius: 8,
+                      color: '#92400e',
+                      fontSize: 12.5,
+                      textAlign: 'left',
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    建议：{currentTask.error_suggestion}
+                  </p>
+                ) : null}
                 <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 20 }}>
                   <button
                     type="button"

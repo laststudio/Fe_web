@@ -109,6 +109,14 @@ export type AutoCompleteTaskResponse = {
   error?: string | null
   target_use_time?: number
   current_elapsed_seconds?: number
+  /** 官方错误码（已识别的会带分类与处置建议） */
+  error_code?: number | null
+  /** 错误码的简短分类，如「作业已完成或已封存」 */
+  error_label?: string | null
+  /** 处置建议（给用户看的下一步） */
+  error_suggestion?: string | null
+  /** 错误类别：auth / session / binding / homework / upstream / unknown */
+  error_kind?: string | null
   /** 排队位置（1 = 下一个就是它）；不在队列里为 0 或缺省 */
   queue_position?: number
   /** 当前等待队列总长度 */
