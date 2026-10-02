@@ -688,7 +688,6 @@ function PaperReaderView({
               </>
             )}
             {onAutoComplete && (() => {
-              const compat = checkHomeworkCompatibility(homework, paper)
               const isThisTaskRunning =
                 activeTask &&
                 String(activeTask.homework_id) === String(homework.id) &&
@@ -711,6 +710,22 @@ function PaperReaderView({
                 )
               }
 
+              // 只有试卷已解析并读取出内容后，才允许发起自动完成
+              if (isLoadingPaper || !paper) {
+                return (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled
+                    title="请先解析并读取试卷与答案后，再使用自动完成"
+                    icon={<Icon name="bolt" />}
+                  >
+                    请先解析试卷
+                  </Button>
+                )
+              }
+
+              const compat = checkHomeworkCompatibility(homework, paper)
               return (
                 <Button
                   variant="primary"
@@ -865,8 +880,6 @@ function HomeworkCard({
   answerParserDenyReason,
   onOpen,
   onTriggerParse,
-  onAutoComplete,
-  activeTask,
 }: {
   item: HomeworkItem
   index: number
@@ -876,8 +889,6 @@ function HomeworkCard({
   answerParserDenyReason?: string
   onOpen: (hw: HomeworkItem) => void
   onTriggerParse: (hw: HomeworkItem) => void
-  onAutoComplete?: (hw: HomeworkItem) => void
-  activeTask?: AutoCompleteTaskResponse | null
 }) {
   return (
     <div
@@ -933,50 +944,6 @@ function HomeworkCard({
       </div>
 
       <div className="fe-homework-card__right">
-        {onAutoComplete && (() => {
-          const isDone = item.status === 2 || item.status === '2'
-          const compat = checkHomeworkCompatibility(item)
-          const isThisTaskRunning =
-            activeTask &&
-            String(activeTask.homework_id) === String(item.id) &&
-            !['COMPLETED', 'FAILED'].includes(activeTask.status)
-
-          if (isThisTaskRunning) {
-            return (
-              <Button
-                variant="primary"
-                size="sm"
-                loading
-                loadingLabel={`执行中 (${activeTask.progress || 0}%)`}
-                style={{
-                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                  borderColor: '#059669',
-                }}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onAutoComplete(item)
-                }}
-                title={`该作业正在后台自动答题中（进度 ${activeTask.progress || 0}%），点击查看实时执行看板`}
-              />
-            )
-          }
-
-          return (
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={!compat.supported}
-              onClick={(e) => {
-                e.stopPropagation()
-                onAutoComplete(item)
-              }}
-              title={compat.supported ? (isDone ? '重新自动作答并更新此历史作业成绩' : '一键安全自动完成此作业') : (compat.reason || '该作业包含暂不支持的题型')}
-              icon={<Icon name={compat.supported ? (isDone ? 'replay' : 'bolt') : 'block'} />}
-            >
-              {compat.supported ? (isDone ? '重新作答' : '自动完成') : '暂不支持'}
-            </Button>
-          )
-        })()}
         {isParsing ? (
           <Badge tone="accent" style={{ padding: '6px 12px', fontSize: 12 }}>
             <Icon name="sync" className="status-pill__spin" style={{ marginRight: 4 }} />
@@ -1071,9 +1038,7 @@ function HomeworkListView({
   onManualReadList,
   onOpenHomework,
   onTriggerParse,
-  onAutoComplete,
   onChangyanLogin,
-  activeTask,
 }: {
   activeTab: 'current' | 'history' | 'pk'
   hasLoaded: boolean
@@ -1093,9 +1058,7 @@ function HomeworkListView({
   onManualReadList: () => void
   onOpenHomework: (hw: HomeworkItem) => void
   onTriggerParse: (hw: HomeworkItem) => void
-  onAutoComplete?: (hw: HomeworkItem) => void
   onChangyanLogin?: () => void
-  activeTask?: AutoCompleteTaskResponse | null
 }) {
   const [query, setQuery] = useState('')
   // 账号中心绑定与「讯飞登录」都算可用；后者只写入云端会话缓存，没有绑定记录。
@@ -1481,8 +1444,6 @@ function HomeworkListView({
               answerParserDenyReason={answerParserDenyReason}
               onOpen={onOpenHomework}
               onTriggerParse={onTriggerParse}
-              onAutoComplete={onAutoComplete}
-              activeTask={activeTask}
             />
           ))}
         </div>
@@ -3549,12 +3510,10 @@ function App() {
               onManualReadList={handleManualReadList}
               onOpenHomework={handleOpenHomework}
               onTriggerParse={handleTriggerParse}
-              onAutoComplete={handleTriggerAutoComplete}
               onChangyanLogin={() => {
                 setChangyanError(null)
                 setChangyanOpen(true)
               }}
-              activeTask={activeTask}
             />
           )}
         </section>
