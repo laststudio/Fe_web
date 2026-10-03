@@ -1670,7 +1670,7 @@ function SettingsPage({
         </div>
         <div className="admin-setting-switch-row">
           <div className="admin-setting-switch-info">
-            <strong>LA Studio 法务与合规说明</strong>
+            <strong>LastStudio 法务与合规说明</strong>
             <span>协议更新时会在首次启动时再次请求确认</span>
           </div>
           <a
@@ -3207,7 +3207,7 @@ function App() {
                         </div>
                         <div className="control-user-dropdown-text">
                           <strong>管理中心</strong>
-                          <small>LaStudio 控制台后台</small>
+                          <small>LastStudio 控制台后台</small>
                         </div>
                         <Icon name="open_in_new" className="control-user-dropdown-arrow" />
                       </a>
