@@ -407,6 +407,14 @@ function capTokenExpiry(): number {
   return Date.now() + 20 * 60 * 1000
 }
 
+// 验证凭证相关错误：429 频控要求验证，或 400「人机验证无效或已过期」等。
+// 命中后统一走"清掉旧凭证 -> 重新验证 -> 自动重试"的恢复路径，不让用户卡死刷新
+function isCaptchaError(err: unknown): boolean {
+  return err instanceof ApiError && (
+    err.captchaRequired || /人机验证|验证码/.test(err.message || '')
+  )
+}
+
 function CaptchaModal({
   title = '安全人机验证',
   subtitle = '为保护 e听说账号安全并防御接口频繁请求，请完成下方人机验证以继续。',
@@ -2484,7 +2492,7 @@ function App() {
           isFetchingHomeworksRef.current = false
           return doFetchHomeworks(tab, capToken, true)
         }
-        if (err instanceof ApiError && err.captchaRequired) {
+        if (isCaptchaError(err)) {
           reusableCapTokenRef.current = null
           pendingRefreshRef.current = (token?: string) => {
             void doFetchHomeworks(tab, token, forceRefresh)
@@ -2540,10 +2548,10 @@ function App() {
           isFetchingHomeworksRef.current = false
           return doFetchHomeworks('history', capToken, true)
         }
-        if (err instanceof ApiError && err.captchaRequired) {
+        if (isCaptchaError(err)) {
           reusableCapTokenRef.current = null
           pendingRefreshRef.current = (token?: string) => {
-            void doFetchHomeworks('history', token, forceRefresh)
+            void doFetchHomeworks('history', token, true)
           }
           setShowCaptchaModal(true)
           return
@@ -2594,7 +2602,7 @@ function App() {
         await doFetchHomeworks(activeTab, capToken, forceRefresh)
       }
     } catch (err) {
-      if (err instanceof ApiError && err.captchaRequired) {
+      if (isCaptchaError(err)) {
         reusableCapTokenRef.current = null
         pendingRefreshRef.current = (token?: string) => {
           void refreshAccountAndHomeworks(token, forceRefresh)
@@ -2738,11 +2746,33 @@ function App() {
         setPathname(nextPath)
       })
     } catch (err: unknown) {
-      if (err instanceof ApiError && err.captchaRequired) {
+      if (isCaptchaError(err)) {
+        // 携带的验证凭证已失效或触发频控：清掉旧凭证重新验证一次
+        reusableCapTokenRef.current = null
         setAutoCompleteModalHw(hw)
         return
       }
       showToast(err instanceof Error ? err.message : '申请自动完成准入令牌失败')
+    }
+  }
+
+  // 提交任务时准入令牌过期（120 秒单次有效）的自动恢复：
+  // 静默重申一份新准入（通常命中宽限期，无需再次人机验证），返回新令牌
+  async function refreshAutoCompletePermit(): Promise<string | null> {
+    const hw = autoCompleteTargetHw
+    if (!hw || !session) return null
+    try {
+      const res = await getAutoCompletePermit(session.accessToken, hw.id, getReusableCapToken())
+      setAutoCompletePermitToken(res.permit_token)
+      return res.permit_token
+    } catch (err: unknown) {
+      if (isCaptchaError(err)) {
+        reusableCapTokenRef.current = null
+        setAutoCompleteModalHw(hw)
+      } else {
+        showToast(err instanceof Error ? err.message : '重新申请自动完成准入令牌失败')
+      }
+      return null
     }
   }
 
@@ -3431,6 +3461,7 @@ function App() {
                         : null)
                     }
                     permitToken={autoCompletePermitToken}
+                    onRefreshPermit={refreshAutoCompletePermit}
                     accessToken={session.accessToken}
                     activeTask={effectiveTask}
                     returnLabel={autoCompleteReturnLabel}

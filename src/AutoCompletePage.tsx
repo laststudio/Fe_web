@@ -75,6 +75,8 @@ export type AutoCompletePageProps = {
   activeTask?: AutoCompleteTaskResponse | null
   onTaskChange?: (task: AutoCompleteTaskResponse | null) => void
   isHubRoute?: boolean
+  /** 准入令牌过期时由父级静默重申一份新令牌；返回 null 表示需要用户重新验证 */
+  onRefreshPermit?: () => Promise<string | null>
 }
 
 type QuestionScoreItem = {
@@ -105,6 +107,7 @@ export function AutoCompletePage({
   activeTask,
   onTaskChange,
   isHubRoute,
+  onRefreshPermit,
 }: AutoCompletePageProps) {
   // Current active homework fallback
   const currentHw = useMemo<HomeworkItem>(() => {
@@ -2138,7 +2141,25 @@ export function AutoCompletePage({
         return
       }
 
-      const res = await startAutoComplete(accessToken, payload)
+      // permit 单次有效且 120 秒过期：过期时自动重申准入后重试一次，无需刷新页面
+      let res: Awaited<ReturnType<typeof startAutoComplete>>
+      try {
+        res = await startAutoComplete(accessToken, payload)
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : ''
+        if (!onRefreshPermit || !/人机验证凭证/.test(msg)) {
+          onToast?.(msg || '发起任务失败')
+          setIsRiskModalOpen(false)
+          return
+        }
+        onToast?.('安全准入已过期，正在自动重新验证...')
+        const newToken = await onRefreshPermit()
+        if (!newToken) {
+          setIsRiskModalOpen(false)
+          return
+        }
+        res = await startAutoComplete(accessToken, { ...payload, permit_token: newToken })
+      }
       setIsRiskModalOpen(false)
       setLocalTaskId(res.task_id)
       setIsMinimized(false)
@@ -2174,8 +2195,8 @@ export function AutoCompletePage({
           : '自动完成任务已发起，正在为您执行！'
       )
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : '发起任务失败'
-      onToast?.(msg)
+      onToast?.(err instanceof Error ? err.message : '发起任务失败')
+      setIsRiskModalOpen(false)
     } finally {
       setIsStartingTask(false)
     }
