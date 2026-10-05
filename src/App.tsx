@@ -402,7 +402,9 @@ function isCapTokenExpired(expiresAt: number): boolean {
 }
 
 function capTokenExpiry(): number {
-  return Date.now() + 5 * 60 * 1000
+  // 与后端 CAP_TOKEN_REUSE_SECONDS（20 分钟）对齐：验证一次后，
+  // token 在有效期内跨列表扫描 / 自动完成复用，不再重复弹验证
+  return Date.now() + 20 * 60 * 1000
 }
 
 function CaptchaModal({
