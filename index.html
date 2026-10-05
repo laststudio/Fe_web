@@ -2,16 +2,71 @@
 <html class="navigation-loading navigation-entering" lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/png" href="/fe_logo.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="preload" href="/fonts/material-symbols-outlined.woff2" as="font" type="font/woff2" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Noto+Serif+SC:wght@600;700;900&display=swap" rel="stylesheet" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Fuck ets100</title>
+
+    <!-- SEO 核心 TDK 标签 -->
+    <title>Fe Web · 科大讯飞 e听说网页版在线答案提取与作业辅助平台 | LastStudio</title>
+    <meta name="keywords" content="e听说网页版, e听说在线, e听说答案, 讯飞e听说, 科大讯飞e听说, e听说中学, 易听说, e听说自动完成, Fuck_ets100, Fe, ets100, LastStudio" />
+    <meta name="description" content="Fe Web (Fuck_ets100 网页版) 是专为科大讯飞 e听说 (ETS100) 打造的现代化在线作业辅助与答案提取平台。无需安装手机 App，在电脑或手机浏览器中直接登录畅言/e听说账号，即可在线快速查看试卷题目、答案解析并支持自动化辅助。" />
+    <link rel="canonical" href="https://fe-web.lastudio.cc/" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+
+    <!-- Open Graph 社交卡片 -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://fe-web.lastudio.cc/" />
+    <meta property="og:title" content="Fe Web · 科大讯飞 e听说网页版在线答案提取与作业辅助平台" />
+    <meta property="og:description" content="无需安装 App，浏览器直接登录畅言与 e听说 账号，在线提取试卷答案与作业自动化辅助。" />
+    <meta property="og:image" content="https://lastudio.cc/icon-512.png" />
+    <meta property="og:site_name" content="LastStudio" />
+
+    <!-- Schema.org 结构化数据 (JSON-LD) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Fe Web",
+      "alternateName": ["e听说网页版", "Fuck_ets100 在线版", "e听说在线答案提取"],
+      "url": "https://fe-web.lastudio.cc/",
+      "applicationCategory": "EducationalApplication",
+      "operatingSystem": "All Web Browsers",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "CNY"
+      },
+      "description": "科大讯飞 e听说网页版在线作业辅助平台，免安装客户端，直接在线提取试卷试题与官方答案解析。"
+    }
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- 搜索引擎爬虫降级语义骨架（React 挂载后自动接管） -->
+    <div id="root">
+      <main style="max-width: 860px; margin: 40px auto; padding: 24px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1e293b; line-height: 1.6;">
+        <header>
+          <h1 style="font-size: 26px; font-weight: 700; margin-bottom: 12px; color: #0f172a;">Fe Web · 科大讯飞 e听说网页版在线答案提取与作业辅助平台</h1>
+          <p style="color: #64748b; font-size: 15px;">Fe Web (Fuck_ets100 网页版) 是由 LastStudio 打造的现代化在线版 e听说 作业提取平台。无需在手机上安装任何未知 APK 或配置复杂权限，仅需在现代浏览器中登录您的畅言/e听说账号，即可云端同步并提取作业与模考答案。</p>
+        </header>
+
+        <section style="margin-top: 28px;">
+          <h2 style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">主要功能特色</h2>
+          <ul style="color: #475569; padding-left: 20px; line-height: 1.8;">
+            <li><strong>跨平台免安装</strong>：支持 Windows、Mac、iPad、Android 及 iOS 设备浏览器，即开即用；</li>
+            <li><strong>完整题型支持</strong>：涵盖听说信息、回答问题、信息转述、短文朗读及口语考试试卷解析；</li>
+            <li><strong>安全云端同步</strong>：采用官方接口直连解析，支持自动化完成与答案一键复制；</li>
+            <li><strong>手机 App 配合</strong>：如需手机本地离线读取，请访问 <a href="https://lastudio.cc/download?app=fe" style="color: #2563eb; text-decoration: underline;">Fe 官方高速下载通道</a> 获取 Android 客户端。</li>
+          </ul>
+        </section>
+
+        <footer style="margin-top: 36px; border-top: 1px solid #e2e8f0; padding-top: 16px; color: #94a3b8; font-size: 13px;">
+          <p>由 <a href="https://lastudio.cc" style="color: #64748b; text-decoration: underline;">LastStudio</a> 提供技术支持 · 纯净免登录 · 高速服务</p>
+        </footer>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

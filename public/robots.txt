@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /changyan-callback.html
+
+Sitemap: https://fe-web.lastudio.cc/sitemap.xml
