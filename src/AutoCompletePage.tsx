@@ -853,9 +853,18 @@ export function AutoCompletePage({
   }, [allocatedQuestionScores])
 
   // Manual mode validations:
+  // 自定义控分的总分必须与"真正提交上去的逐题分数"完全一致：
+  // 提交时每条题目的取值是 manualScores[q.order] ?? q.maxScore（未手改的题按满分算），
+  // 所以这里用同一套口径求和。曾经只对 manualScores 里出现过的键求和，
+  // 结果界面上写着 27.60、实际逐题之和只有 25.00，官方抄到了 25.00，
+  // 看起来就像"上报分和官方回读分对不上"。
   const manualTotalSum = useMemo(() => {
-    return Number(Object.values(manualScores).reduce((acc, cur) => acc + (Number(cur) || 0), 0).toFixed(2))
-  }, [manualScores])
+    const total = questions.reduce(
+      (acc, q) => acc + (Number(manualScores[q.order] ?? q.maxScore) || 0),
+      0
+    )
+    return Number(total.toFixed(2))
+  }, [questions, manualScores])
 
   const manualOverMaxQuestions = useMemo(() => {
     return questions.filter((q) => (manualScores[q.order] || 0) > q.maxScore)
@@ -2103,6 +2112,14 @@ export function AutoCompletePage({
         })
       }
 
+      // 上报总分就取这份 payload 的和 —— 与逐题分数同源，不可能再对不上
+      const payloadPerQuestionTotal = Number(
+        Object.values(perQuestionScoresPayload ?? {}).reduce(
+          (acc, value) => acc + (Number(value) || 0),
+          0
+        ).toFixed(2)
+      )
+
       const payload: StartAutoCompletePayload = {
         homework_id: currentHw.id,
         homework_name: currentHw.name,
@@ -2120,7 +2137,7 @@ export function AutoCompletePage({
           return acc
         }, {}),
         mode,
-        target_total: mode === 'auto' ? autoTargetTotal : Number(manualTotalSum.toFixed(2)),
+        target_total: mode === 'auto' ? autoTargetTotal : payloadPerQuestionTotal,
         allow_over_max: mode === 'manual' ? isManualTotalOverMax || manualOverMaxQuestions.length > 0 : false,
         use_time: selectedUseTimeSeconds,
         voice_mode: voiceMode,
