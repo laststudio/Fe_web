@@ -934,6 +934,8 @@ function HomeworkCard({
           <div className="fe-homework-title-row">
             <span className="fe-homework-name">{item.name}</span>
             <Badge tone="neutral">{item.subject_name || '英语'}</Badge>
+            {/* 「待补交」：对齐官方 App 首页的角标（后端 status=4 分组的条目带 overtime） */}
+            {item.overtime && <Badge tone="danger">待补交</Badge>}
             {(item.pk === 1 || item.set_type === 6) && (
               <Badge tone="warning">词汇PK</Badge>
             )}
@@ -2481,7 +2483,25 @@ function App() {
       setIsLoadingHomeworks(true)
       try {
         const res = await getHomeworkList(session.accessToken, '1', capToken, forceRefresh)
-        setHomeworks(res.homeworks || [])
+        // 「待补交」（status=4）：老师最近布置、已过截止但还能补交的那批 —— 官方 App 首页
+        // 单独标出来的就是它们（用户反馈："老师布置的习题集读取不了"，实际是这批没被展示）。
+        // 两个列表可能有重叠，按 id 去重后合并，`overtime` 标记留给 UI 打「待补交」角标。
+        let todoList: HomeworkItem[] = []
+        try {
+          const todo = await getHomeworkList(session.accessToken, '4', capToken, forceRefresh)
+          todoList = todo.homeworks || []
+        } catch (todoErr) {
+          console.warn('待补交列表获取失败（不影响当前作业）:', todoErr)
+        }
+        const merged = [...(res.homeworks || [])]
+        const seenIds = new Set(merged.map((hw) => hw.id))
+        for (const hw of todoList) {
+          if (!seenIds.has(hw.id)) {
+            seenIds.add(hw.id)
+            merged.push(hw)
+          }
+        }
+        setHomeworks(merged)
         setHasLoadedCurrent(true)
         setHomeworkError(null)
         showToast(tab === 'pk' ? '已同步作业与词汇PK' : '已同步当前作业列表')

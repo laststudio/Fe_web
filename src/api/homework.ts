@@ -44,6 +44,13 @@ export type HomeworkItem = {
   start_time?: string
   end_time?: string
   create_time?: string
+  /** 官方 `begin`（epoch 秒）→ 后端转成带时区的 ISO 字符串 */
+  begin_time?: string
+  /** 「待补交」：官方 App 首页会把它单独标出来（后端 status=4 分组） */
+  overtime?: boolean
+  /** 允许补交 / 已截止（官方 `allow_overtime` / `expire`） */
+  allow_overtime?: boolean
+  expired?: boolean
   status?: string | number
   total_score?: number
   score?: number
