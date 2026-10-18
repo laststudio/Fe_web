@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:cap-csp": "node scripts/test-cap-csp.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.23",
@@ -21,12 +22,15 @@
     "@zip.js/zip.js": "^2.8.26",
     "cap-widget": "^0.1.57",
     "clsx": "^2.1.1",
+    "get-nonce": "1.0.1",
     "lucide-react": "^1.49.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },
   "devDependencies": {
+    "@cap.js/server": "4.0.5",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "1.62.1",
     "@types/node": "^24.12.3",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

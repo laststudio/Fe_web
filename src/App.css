@@ -2803,6 +2803,35 @@ html:has(.control-shell) {
   color: #a16207;
 }
 
+.account-captcha[data-cap-display] {
+  position: relative;
+  min-height: 58px;
+}
+
+.account-captcha[data-cap-display="checking"] cap-widget {
+  visibility: hidden;
+  display: block;
+  height: 58px;
+  overflow: hidden;
+}
+
+.account-captcha[data-cap-display="error"] cap-widget {
+  display: none;
+}
+
+.cap-display-message {
+  display: grid;
+  place-items: center;
+  min-height: 58px;
+  color: var(--la-text-secondary);
+  font-size: 13px;
+}
+
+.account-captcha[data-cap-display="checking"] .cap-display-message {
+  position: absolute;
+  inset: 0;
+}
+
 .account-captcha cap-widget,
 .fe-cap-modal-body cap-widget {
   width: 100%;

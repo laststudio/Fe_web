@@ -198,7 +198,7 @@ export function changyanLogin(
 
 export function getHomeworkList(
   accessToken: string,
-  status: '1' | '2' | '3' = '1',
+  status: '1' | '2' | '3' | '4' = '1',
   capToken?: string,
   refresh?: boolean
 ): Promise<HomeworkListResponse> {

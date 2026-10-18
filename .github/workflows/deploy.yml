@@ -57,6 +57,11 @@ jobs:
           grep -RIlF 'auth.lastudio.cc' dist >/dev/null
           grep -RIlF 'fe-web.lastudio.cc/auth/callback' dist >/dev/null
 
+      - name: Verify the real CAPTCHA dialog under production CSP
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:cap-csp
+
       - name: Package immutable release
         run: |
           release_id="gh-${GITHUB_SHA::12}-${GITHUB_RUN_ID}"
