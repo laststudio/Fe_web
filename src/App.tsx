@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { lazy, useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import './App.css'
 import SeoLandingPage from './SeoLandingPage'
@@ -32,9 +32,6 @@ import { oauthConfig } from './auth/config'
 import { refreshOAuthToken, startAuthorization } from './auth/oauth'
 import type { AuthSession } from './auth/types'
 import { transitionRoute, transitionTo } from './navigation/controller'
-import CapVerification from './CapVerification'
-import AutoCompletePage from './AutoCompletePage'
-import VoiceManager from './components/VoiceManager'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import {
   checkHomeworkCompatibility,
@@ -44,6 +41,10 @@ import {
   type AutoCompleteTaskResponse,
 } from './api/autoComplete'
 import { Badge, Button, Dialog } from './ui'
+
+const CapVerification = lazy(() => import('./CapVerification'))
+const AutoCompletePage = lazy(() => import('./AutoCompletePage'))
+const VoiceManager = lazy(() => import('./components/VoiceManager'))
 
 type Page = '/' | '/history' | '/pk' | '/settings' | '/auto-complete' | string
 
