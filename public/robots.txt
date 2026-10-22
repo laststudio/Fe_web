@@ -1,5 +1,12 @@
 User-agent: *
 Allow: /
+Disallow: /app
+Disallow: /history
+Disallow: /pk
+Disallow: /settings
+Disallow: /auto-complete
+Disallow: /homework/
+Disallow: /auth/callback
 Disallow: /changyan-callback.html
 
 Sitemap: https://fe-web.lastudio.cc/sitemap.xml

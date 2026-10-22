@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import './App.css'
+import SeoLandingPage from './SeoLandingPage'
+import { applySeo } from './seo'
 import { ApiError, getCurrentUser, setUnauthorizedHandler, type User } from './api/auth'
 import {
   changyanLogin,
@@ -133,6 +135,10 @@ export type HomeworkErrorInfo = {
 
 const pageMeta: Record<string, { title: string; caption: string }> = {
   '/': {
+    title: '当前作业',
+    caption: '获取与查看作业标准答案',
+  },
+  '/app': {
     title: '当前作业',
     caption: '获取与查看作业标准答案',
   },
@@ -1704,7 +1710,7 @@ function isAutoCompletePath(path: string): boolean {
 }
 
 function currentPage(pathname: string): Page | null {
-  if (pathname === '/' || pathname === '/history' || pathname === '/pk' || pathname === '/settings') return pathname
+  if (pathname === '/' || pathname === '/app' || pathname === '/history' || pathname === '/pk' || pathname === '/settings') return pathname
   if (isAutoCompletePath(pathname)) return pathname
   return null
 }
@@ -2013,6 +2019,10 @@ function App() {
   }, [])
 
   useEffect(() => {
+    applySeo(pathname)
+  }, [pathname])
+
+  useEffect(() => {
     const onPopState = () => {
       setUserMenuOpen(false)
       const nextPathname = window.location.pathname
@@ -2075,7 +2085,7 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!legalConsentAccepted || !page || session || authMessage || authorizationStarted.current || pathname === '/auth/callback') return
+    if (!legalConsentAccepted || !page || session || authMessage || authorizationStarted.current || pathname === '/' || pathname === '/auth/callback') return
     authorizationStarted.current = true
     void startAuthorization(page).catch((error: unknown) => {
       authorizationStarted.current = false
@@ -3011,6 +3021,10 @@ function App() {
     setLegalConsentAccepted(true)
   }
 
+  if (pathname === '/' && !session) {
+    return <SeoLandingPage />
+  }
+
   if (!legalConsentAccepted) {
     return <LegalConsentModal onAccept={acceptLegalConsent} />
   }
@@ -3343,7 +3357,7 @@ function App() {
               <section key={group.label}>
                 <small>{group.label}</small>
                 {group.items.map((item) => {
-                  const isActive = page === item.page || (item.label === '自动完成' && isAutoCompleteRoute)
+                  const isActive = page === item.page || (page === '/app' && item.page === '/') || (item.label === '自动完成' && isAutoCompleteRoute)
                   return (
                     <button
                       key={item.page}
