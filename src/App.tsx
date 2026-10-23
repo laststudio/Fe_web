@@ -5,7 +5,6 @@ import SeoLandingPage from './SeoLandingPage'
 import { applySeo } from './seo'
 import { ApiError, getCurrentUser, setUnauthorizedHandler, type User } from './api/auth'
 import {
-  changyanLogin,
   cleanAnswerText,
   formatPaperAsText,
   getHomeworkDetail,
@@ -16,7 +15,6 @@ import {
   getTaskStatus,
   startParseHomework,
   trackFeatureUsage,
-  type ChangyanCredentialPayload,
   type HomeworkItem,
   type Paper,
   type PlatformAccountInfo,
@@ -27,7 +25,6 @@ import {
 } from './api/homework'
 import AuthGate from './auth/AuthGate'
 import Callback from './auth/Callback'
-import ChangyanLoginModal from './auth/ChangyanLoginModal'
 import { oauthConfig } from './auth/config'
 import { refreshOAuthToken, startAuthorization } from './auth/oauth'
 import type { AuthSession } from './auth/types'
@@ -49,6 +46,8 @@ const VoiceManager = lazy(() => import('./components/VoiceManager'))
 type Page = '/' | '/history' | '/pk' | '/settings' | '/auto-complete' | string
 
 const logoSrc = '/fe_logo.png'
+const PERSONAL_CENTER_URL = 'https://lastudio.cc/account'
+const OFFICIAL_SITE_URL = 'https://lastudio.cc/'
 const sidebarCollapsedStorageKey = 'fe-web.sidebar-collapsed'
 const skipRiskWarningStorageKey = 'fe-web.skip-risk-warning'
 const legalConsentStorageKey = 'fe-web.legal-consent'
@@ -186,6 +185,68 @@ function Icon({ name, className = '', filled = false, style }: { name: string; c
     >
       {name}
     </span>
+  )
+}
+
+type PlatformBindingGuideProps = {
+  compact?: boolean
+  onRefresh: () => void
+}
+
+function PlatformBindingGuide({ compact = false, onRefresh }: PlatformBindingGuideProps) {
+  return (
+    <div className={`fe-binding-guide${compact ? ' is-compact' : ''}`}>
+      <div className="fe-binding-guide__intro">
+        <div className="fe-binding-guide__intro-icon">
+          <Icon name="account_circle" />
+        </div>
+        <div>
+          <strong>{compact ? '请先在个人中心完成 e听说绑定' : '先绑定 e听说账号，再同步作业'}</strong>
+          <p>Fe Web 不在当前页面直接登录，请前往 LastStudio 个人中心完成绑定。</p>
+        </div>
+      </div>
+
+      <ol className="fe-binding-guide__steps">
+        <li>
+          <span>1</span>
+          <div>
+            <strong>打开个人中心</strong>
+            <small>进入 e听说账号绑定页面。</small>
+          </div>
+        </li>
+        <li>
+          <span>2</span>
+          <div>
+            <strong>选择登录方式并完成验证</strong>
+            <small>支持手机号 + 密码或讯飞登录。</small>
+          </div>
+        </li>
+        <li>
+          <span>3</span>
+          <div>
+            <strong>返回 Fe Web 重新检测</strong>
+            <small>绑定成功后，点击下方“重新检测”即可同步作业。</small>
+          </div>
+        </li>
+      </ol>
+
+      <div className="fe-binding-guide__actions">
+        <a
+          href={PERSONAL_CENTER_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="control-primary"
+          style={{ textDecoration: 'none' }}
+        >
+          <Icon name="open_in_new" />
+          打开个人中心
+        </a>
+        <button type="button" className="control-secondary" onClick={onRefresh}>
+          <Icon name="refresh" />
+          我已完成，重新检测
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -834,7 +895,7 @@ function PaperReaderView({
           {answerParserStatus === 'membership_required' ? (
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
               <a
-                href="https://lastudio.cc/account"
+                href={PERSONAL_CENTER_URL}
                 target="_blank"
                 rel="noreferrer"
                 className="control-primary fe-reader-prompt-action"
@@ -1057,7 +1118,6 @@ function HomeworkListView({
   onManualReadList,
   onOpenHomework,
   onTriggerParse,
-  onChangyanLogin,
 }: {
   activeTab: 'current' | 'history' | 'pk'
   hasLoaded: boolean
@@ -1077,11 +1137,10 @@ function HomeworkListView({
   onManualReadList: () => void
   onOpenHomework: (hw: HomeworkItem) => void
   onTriggerParse: (hw: HomeworkItem) => void
-  onChangyanLogin?: () => void
 }) {
   const [query, setQuery] = useState('')
-  // 账号中心绑定与「讯飞登录」都算可用；后者只写入云端会话缓存，没有绑定记录。
-  const etsReady = Boolean(accountInfo?.bound || accountInfo?.session_ready)
+  // 账号中心完成的手机号绑定和讯飞登录绑定都持久化在同一绑定记录中。
+  const etsReady = Boolean(accountInfo?.bound)
 
   const pkHomeworks = useMemo<HomeworkItem[]>(() => {
     const combined = [...homeworks, ...historyHomeworks]
@@ -1186,7 +1245,7 @@ function HomeworkListView({
                 <p>{cloudModeDenyReason || '云端同步与作业拉取功能需要开通会员权限后方可使用。'}</p>
                 <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
                   <a
-                    href="https://lastudio.cc/account"
+                    href={PERSONAL_CENTER_URL}
                     target="_blank"
                     rel="noreferrer"
                     className="control-primary"
@@ -1255,7 +1314,7 @@ function HomeworkListView({
                 <p>{errInfo.message || '该功能需要开通会员权限后方可使用。'}</p>
                 <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
                   <a
-                    href="https://lastudio.cc/account"
+                    href={PERSONAL_CENTER_URL}
                     target="_blank"
                     rel="noreferrer"
                     className="control-primary"
@@ -1329,32 +1388,13 @@ function HomeworkListView({
             </div>
           )
         })()
-      ) : !(accountInfo?.bound || accountInfo?.session_ready) ? (
+      ) : !etsReady ? (
         <div className="fe-empty-state">
           <div className="fe-empty-state__icon">
             <Icon name="no_accounts" />
           </div>
           <h2>未绑定 e听说</h2>
-          <p>手机号 + 密码，或讯飞登录，二选一即可绑定。</p>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button
-              type="button"
-              className="control-ghost"
-              onClick={onChangyanLogin}
-              disabled={!onChangyanLogin}
-            >
-              讯飞登录
-            </button>
-            <a
-              href="https://lastudio.cc/account"
-              target="_blank"
-              rel="noreferrer"
-              className="control-primary"
-              style={{ textDecoration: 'none' }}
-            >
-              手机号绑定
-            </a>
-          </div>
+          <PlatformBindingGuide onRefresh={onRefresh} />
         </div>
       ) : !hasLoaded ? (
         <div className="fe-list-prompt-card">
@@ -1363,7 +1403,7 @@ function HomeworkListView({
           </div>
           <div className="fe-list-prompt-account-pill">
             <span className="admin-status-dot is-online" />
-            <span>e听说账号：{accountInfo.account_display || '已关联'}</span>
+            <span>e听说账号：{accountInfo?.account_display || '已关联'}</span>
           </div>
           <h3>
             {activeTab === 'current'
@@ -1485,8 +1525,8 @@ function SettingsPage({
   onRefreshSession: () => void
 }) {
   const [skipRisk, setSkipRisk] = useState(readStoredSkipRiskWarning)
-  // 账号中心绑定与「讯飞登录」都视为已连接 e听说。
-  const etsReady = Boolean(accountInfo?.bound || accountInfo?.session_ready)
+  // 只有账号中心的持久绑定才算已连接 e听说。
+  const etsReady = Boolean(accountInfo?.bound)
   // 后端 source：phone（手机号体系绑定）/ changyan（讯飞·畅言体系绑定）
   const etsSource = etsReady ? accountInfo?.source || '' : ''
 
@@ -1530,7 +1570,7 @@ function SettingsPage({
             </div>
           </div>
           <a
-            href="https://lastudio.cc/account"
+            href={PERSONAL_CENTER_URL}
             target="_blank"
             rel="noreferrer"
             className="control-secondary"
@@ -1556,7 +1596,7 @@ function SettingsPage({
             <span>
               {etsReady
                 ? '已在 LastStudio 账号中心完成绑定'
-                : '手机号 + 密码，或讯飞登录，二选一即可绑定'}
+                : '请前往个人中心绑定 e听说账号'}
             </span>
           </div>
           <span className={`admin-pill-badge ${etsReady ? 'is-success' : 'is-danger'}`}>
@@ -1613,30 +1653,30 @@ function SettingsPage({
           </>
         )}
 
-        <div className="admin-setting-switch-row" style={{ background: '#fafbfc' }}>
-          <div className="admin-setting-switch-info">
-            <strong>账号管理操作</strong>
-            <span>
-              {etsReady
-                ? '在账号中心更新数据或解绑；解绑后可在账号中心重新选择登录方式绑定'
-                : '两种登录方式任选其一：手机号 + 密码，或讯飞登录'}
-            </span>
+        {etsReady ? (
+          <div className="admin-setting-switch-row" style={{ background: '#fafbfc' }}>
+            <div className="admin-setting-switch-info">
+              <strong>账号管理操作</strong>
+              <span>在账号中心更新数据或解绑；解绑后可在账号中心重新选择登录方式绑定</span>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <a
+                href={PERSONAL_CENTER_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="control-secondary"
+                style={{ textDecoration: 'none' }}
+              >
+                <Icon name="open_in_new" /> 管理绑定
+              </a>
+              <button className="control-secondary" type="button" onClick={onRefreshSession}>
+                <Icon name="refresh" /> 重新检测
+              </button>
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <a
-              href="https://lastudio.cc/account"
-              target="_blank"
-              rel="noreferrer"
-              className={etsReady ? 'control-secondary' : 'control-primary'}
-              style={{ textDecoration: 'none' }}
-            >
-              <Icon name="open_in_new" /> {etsReady ? '管理绑定' : '手机号绑定'}
-            </a>
-            <button className="control-secondary" type="button" onClick={onRefreshSession}>
-              <Icon name="refresh" /> 重新检测
-            </button>
-          </div>
-        </div>
+        ) : (
+          <PlatformBindingGuide compact onRefresh={onRefreshSession} />
+        )}
       </section>
 
       {/* Preferences */}
@@ -1778,12 +1818,8 @@ function App() {
 
   // ETS100 & Homework State
   const [accountInfo, setAccountInfo] = useState<PlatformAccountInfo | null>(null)
-  // 畅言网页登录（讯飞登录）
-  const [changyanOpen, setChangyanOpen] = useState(false)
-  const [changyanBusy, setChangyanBusy] = useState(false)
-  const [changyanError, setChangyanError] = useState<string | null>(null)
-  // 账号中心绑定或「讯飞登录」任一来源，e听说都算可用。
-  const etsReady = Boolean(accountInfo?.bound || accountInfo?.session_ready)
+  // 只有账号中心的持久绑定才算可用；绑定流程统一在个人中心完成。
+  const etsReady = Boolean(accountInfo?.bound)
   const [homeworks, setHomeworks] = useState<HomeworkItem[]>([])
   const [historyHomeworks, setHistoryHomeworks] = useState<HomeworkItem[]>([])
   const [isLoadingHomeworks, setIsLoadingHomeworks] = useState(false)
@@ -2430,31 +2466,6 @@ function App() {
     if (codes.some((c) => msg.includes(c))) return true
     const keywords = ['token', '登录', '凭证', '过期', '失效', '重新登录', '未登录', 'auth']
     return keywords.some((kw) => msg.includes(kw))
-  }
-
-  /** 畅言网页登录成功后：后端兑换 e听说会话 → 刷新账号状态与作业列表。 */
-  async function handleChangyanCredential(credential: ChangyanCredentialPayload) {
-    const accessToken = session?.accessToken
-    if (!accessToken) {
-      setChangyanError('登录状态已失效，请重新登录统一账号')
-      return
-    }
-    setChangyanBusy(true)
-    setChangyanError(null)
-    try {
-      const result = await changyanLogin(accessToken, credential)
-      const account = await getPlatformAccount(accessToken)
-      setAccountInfo(account)
-      setChangyanOpen(false)
-      console.info('讯飞登录成功，e听说账号：', result.account_display)
-      // 注意：不能带 forceRefresh —— 那会清掉刚写入的畅言会话，
-      // 而未绑定账号中心的用户无法用密码重建会话。
-      await doFetchHomeworks(activeTab)
-    } catch (err) {
-      setChangyanError(err instanceof Error ? err.message : '讯飞登录失败，请重试')
-    } finally {
-      setChangyanBusy(false)
-    }
   }
 
   async function doFetchHomeworks(
@@ -3136,13 +3147,21 @@ function App() {
       {/* Floating Header Capsule */}
       <header className={`control-site-header ${headerCompact ? 'is-compact' : ''}`}>
         <div className="control-header-inner">
-          <a className="control-brand" href="/">
+          <a
+            className="control-brand"
+            href={OFFICIAL_SITE_URL}
+            target="_blank"
+            rel="noreferrer"
+            title="返回 LastStudio 官网"
+            aria-label="返回 LastStudio 官网"
+          >
             <img src={logoSrc} alt="" />
             <span>
               <strong>Fuck ets100</strong>
               <small>Fe Web · 作业工作台</small>
             </span>
           </a>
+
 
           <div className="control-header-actions">
             {softwareConfig && (softwareConfig.announcementTitle || softwareConfig.announcementMessage) && (
@@ -3245,7 +3264,7 @@ function App() {
 
                       <a
                         className="control-user-dropdown-item"
-                        href="https://lastudio.cc/account"
+                        href={PERSONAL_CENTER_URL}
                         target="_blank"
                         rel="noreferrer"
                         onClick={() => setUserMenuOpen(false)}
@@ -3578,27 +3597,11 @@ function App() {
               onManualReadList={handleManualReadList}
               onOpenHomework={handleOpenHomework}
               onTriggerParse={handleTriggerParse}
-              onChangyanLogin={() => {
-                setChangyanError(null)
-                setChangyanOpen(true)
-              }}
             />
           )}
         </section>
       </div>
 
-      {changyanOpen && (
-        <ChangyanLoginModal
-          busy={changyanBusy}
-          error={changyanError}
-          onClose={() => {
-            if (changyanBusy) return
-            setChangyanOpen(false)
-            setChangyanError(null)
-          }}
-          onCredential={handleChangyanCredential}
-        />
-      )}
     </main>
   )
 }
