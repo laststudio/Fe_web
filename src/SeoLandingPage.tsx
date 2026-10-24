@@ -15,7 +15,7 @@ export default function SeoLandingPage() {
             <a href="/app" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 999, background: '#0f172a', color: '#fff', padding: '12px 20px', textDecoration: 'none', fontWeight: 700 }}>
               进入 Fe Web 工作台
             </a>
-            <a href="https://lastudio.cc/download/fe" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 999, border: '1px solid #cbd5e1', color: '#334155', padding: '12px 20px', textDecoration: 'none', fontWeight: 700 }}>
+            <a href="https://lastudio.cc/download/fe/" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 999, border: '1px solid #cbd5e1', color: '#334155', padding: '12px 20px', textDecoration: 'none', fontWeight: 700 }}>
               查看 Fe Android 版
             </a>
           </div>
